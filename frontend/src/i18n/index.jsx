@@ -18,7 +18,7 @@ export const AI_LANGUAGE_OPTIONS = [
 const translations = {
   fr: {
     layout: {
-      appName: 'DiscordForge',
+      appName: 'DiscordForger',
       appTagline: 'Bot Manager',
       nav: {
         dashboard: 'Dashboard',
@@ -182,7 +182,7 @@ const translations = {
     },
     assistant: {
       title: 'Assistant IA',
-      welcome: "Salut ! Je suis ton assistant IA pour DiscordForge. Je peux t'aider a configurer les modules, gerer tes serveurs, emettre des avertissements et piloter ton bot.\n\nQue veux-tu faire ?",
+      welcome: "Salut ! Je suis ton assistant IA pour DiscordForger. Je peux t'aider a configurer les modules, gerer tes serveurs, emettre des avertissements et piloter ton bot.\n\nQue veux-tu faire ?",
       ready: 'assistant pret',
       notConfigured: 'IA non configuree - demande au founder de renseigner une cle API',
       placeholder: 'Demande-moi de configurer des modules, gerer des serveurs, emettre des avertissements...',
@@ -201,7 +201,7 @@ const translations = {
   },
   en: {
     layout: {
-      appName: 'DiscordForge',
+      appName: 'DiscordForger',
       appTagline: 'Bot Manager',
       nav: {
         dashboard: 'Dashboard',
@@ -365,7 +365,7 @@ const translations = {
     },
     assistant: {
       title: 'AI Assistant',
-      welcome: "Hi! I'm your AI assistant for DiscordForge. I can help you configure modules, manage servers, issue warnings, and control your bot.\n\nWhat would you like to do?",
+      welcome: "Hi! I'm your AI assistant for DiscordForger. I can help you configure modules, manage servers, issue warnings, and control your bot.\n\nWhat would you like to do?",
       ready: 'assistant ready',
       notConfigured: 'AI not configured - ask the founder to add an API key',
       placeholder: 'Ask me to configure modules, manage servers, issue warnings...',
@@ -384,7 +384,7 @@ const translations = {
   },
   es: {
     layout: {
-      appName: 'DiscordForge',
+      appName: 'DiscordForger',
       appTagline: 'Bot Manager',
       nav: {
         dashboard: 'Panel',
@@ -548,7 +548,7 @@ const translations = {
     },
     assistant: {
       title: 'Asistente IA',
-      welcome: 'Hola. Soy tu asistente IA para DiscordForge. Puedo ayudarte a configurar modulos, gestionar servidores, emitir advertencias y controlar tu bot.\n\nQue quieres hacer?',
+      welcome: 'Hola. Soy tu asistente IA para DiscordForger. Puedo ayudarte a configurar modulos, gestionar servidores, emitir advertencias y controlar tu bot.\n\nQue quieres hacer?',
       ready: 'asistente listo',
       notConfigured: 'IA no configurada - pide al founder que agregue una clave API',
       placeholder: 'Pideme configurar modulos, gestionar servidores, emitir advertencias...',
