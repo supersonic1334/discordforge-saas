@@ -318,7 +318,7 @@ function buildAssistantFallbackPrompt({ mode, commandInput, prompt, currentComma
 `
     : ''
 
-  return `Tu es un generateur de commandes DiscordForge.
+  return `Tu es un generateur de commandes DiscordForger.
 Ne fais aucune action d'administration.
 Reponds en ${language}.
 ${existingBlock}
