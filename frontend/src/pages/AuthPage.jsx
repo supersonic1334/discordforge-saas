@@ -97,7 +97,7 @@ export default function AuthPage() {
             >
               <Bot className="w-8 h-8 text-neon-cyan" />
             </motion.div>
-            <h1 className="font-display font-800 text-3xl neon-text mb-1">DiscordForge</h1>
+            <h1 className="font-display font-800 text-3xl neon-text mb-1">DiscordForger</h1>
             <p className="text-white/40 text-sm">{t('auth.tagline')}</p>
           </div>
 
