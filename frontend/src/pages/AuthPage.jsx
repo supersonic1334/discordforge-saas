@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Bot, Shield, Zap, AlertCircle } from 'lucide-react'
@@ -6,8 +6,6 @@ import toast from 'react-hot-toast'
 import SnowCanvas from '../components/SnowCanvas'
 import { useAuthStore } from '../stores'
 import { useI18n } from '../i18n'
-
-const ProtectionShowcase3D = lazy(() => import('../components/ProtectionShowcase3D'))
 
 export default function AuthPage() {
   const { t } = useI18n()
@@ -267,13 +265,6 @@ export default function AuthPage() {
           </div>
         </motion.div>
 
-        <Suspense
-          fallback={(
-            <div className="w-full rounded-[34px] border border-white/[0.08] bg-white/[0.03] min-h-[420px] md:min-h-[540px]" />
-          )}
-        >
-          <ProtectionShowcase3D />
-        </Suspense>
       </div>
     </div>
   )
