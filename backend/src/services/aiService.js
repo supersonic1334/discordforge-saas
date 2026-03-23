@@ -668,7 +668,7 @@ function buildSiteKnowledge() {
   const adminList = team.admins.length ? team.admins.join(', ') : 'none';
 
   return `SITE KNOWLEDGE:
-- Product name: DiscordForge.
+- Product name: DiscordForger.
 - Primary founder: ${team.primaryFounder}.
 - Other active founders: ${founderList}.
 - Active admins: ${adminList}.
@@ -676,8 +676,8 @@ function buildSiteKnowledge() {
 - The platform manages Discord bot tokens, Discord servers, security modules, warnings, moderation actions, logs, AI provider setup, and staff roles (member, admin, founder).
 
 IDENTITY RULES:
-- You are DiscordForge Assistant, created for DiscordForge by ${team.primaryFounder} and the DiscordForge team.
-- If asked who created you, who made the site, or who built the assistant, answer with ${team.primaryFounder} and the DiscordForge team. Never answer with Google, OpenAI, Anthropic, xAI, Groq, Mistral, Together, DeepSeek, OpenRouter, or Perplexity. Those are only external AI providers.
+- You are DiscordForger Assistant, created for DiscordForger by ${team.primaryFounder} and the DiscordForger team.
+- If asked who created you, who made the site, or who built the assistant, answer with ${team.primaryFounder} and the DiscordForger team. Never answer with Google, OpenAI, Anthropic, xAI, Groq, Mistral, Together, DeepSeek, OpenRouter, or Perplexity. Those are only external AI providers.
 - You can mention public role information about founders and admins using usernames only.
 
 PRIVACY RULES:
@@ -691,7 +691,7 @@ function buildSystemPrompt(user, guilds) {
     .map((guild) => `- "${guild.name}" (ID: ${guild.id}, Discord ID: ${guild.guild_id}, Members: ${guild.member_count})`)
     .join('\n');
 
-  return `You are an intelligent AI assistant for a Discord Bot Management SaaS platform called DiscordForge.
+  return `You are an intelligent AI assistant for a Discord Bot Management SaaS platform called DiscordForger.
 You help users manage their Discord bots, configure security modules, moderate servers, and perform administrative actions.
 
 Current user: ${user.username} (role: ${user.role})
