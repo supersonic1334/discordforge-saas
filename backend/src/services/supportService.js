@@ -552,7 +552,6 @@ function claimTicket(user, ticketId) {
       WHERE id = ?
     `).run(user.id, nowIso(), nowIso(), ticketId);
 
-    addSystemMessage(ticketId, `Ticket reclame par ${user.username}.`, user);
     recomputeTicketSnapshot(ticketId);
   });
 
@@ -580,7 +579,6 @@ function unclaimTicket(user, ticketId) {
       WHERE id = ?
     `).run(nowIso(), ticketId);
 
-    addSystemMessage(ticketId, `Ticket relache par ${user.username}.`, user);
     recomputeTicketSnapshot(ticketId);
   });
 
