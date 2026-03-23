@@ -373,7 +373,7 @@ Current command being edited:
       ? `\nExact text trigger requested: ${requestedTrigger}`
       : (prefix ? `\nPrefix requested: ${prefix}` : ''));
 
-  return `You are DiscordForge Command Builder.
+  return `You are DiscordForger Command Builder.
 You create simple custom Discord commands that work immediately in this product.
 
 Server: ${guildName}
