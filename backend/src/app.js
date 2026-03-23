@@ -29,12 +29,27 @@ const supportRoutes = require('./routes/support');
 // ── App ───────────────────────────────────────────────────────────────────────
 const app = express();
 const frontendDistDir = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
+const externalImageSources = [
+  "'self'",
+  'data:',
+  'blob:',
+  'https://cdn.discordapp.com',
+  'https://media.discordapp.net',
+  'https://lh3.googleusercontent.com',
+  'https://*.googleusercontent.com',
+];
 
 app.set('trust proxy', true);
 
 // ── Security headers ──────────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'img-src': externalImageSources,
+    },
+  },
 }));
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
