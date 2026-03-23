@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { @apply bg-surface-0 text-white; }
+  body { font-family: 'DM Sans', sans-serif; }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/[0.04] border border-white/[0.08] backdrop-blur-md rounded-2xl shadow-glass;
+  }
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300 hover:bg-white/[0.07] hover:border-white/[0.12] hover:shadow-glass-hover hover:-translate-y-0.5;
+  }
+  .btn-primary {
+    @apply relative px-6 py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-cyan-500 to-violet-500 text-white overflow-hidden transition-all duration-200 hover:scale-[1.02] hover:shadow-neon-cyan active:scale-[0.98];
+  }
+  .btn-ghost {
+    @apply px-4 py-2 rounded-xl text-sm text-white/60 hover:text-white hover:bg-white/[0.06] transition-all duration-200;
+  }
+  .btn-danger {
+    @apply px-4 py-2 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-200;
+  }
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 font-body text-sm outline-none transition-all duration-200 focus:border-neon-cyan/50 focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(0,229,255,0.1)];
+  }
+  .secret-field {
+    -webkit-text-security: disc;
+    text-security: disc;
+  }
+  .select-field {
+    @apply input-field cursor-pointer pr-11;
+    appearance: none;
+    color-scheme: dark;
+    background-color: rgba(255,255,255,0.04);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.8)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.9rem center;
+    background-repeat: no-repeat;
+    background-size: 16px;
+  }
+  .select-field option,
+  .select-field optgroup {
+    background: #14141f;
+    color: #f4f7fb;
+  }
+  .select-compact {
+    @apply rounded-lg border border-white/[0.08] bg-white/[0.04] text-white/70 font-mono text-xs outline-none cursor-pointer transition-all px-2 py-1 pr-8;
+    appearance: none;
+    color-scheme: dark;
+    background-color: rgba(255,255,255,0.04);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.7)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.55rem center;
+    background-repeat: no-repeat;
+    background-size: 14px;
+  }
+  .select-compact option,
+  .select-compact optgroup {
+    background: #14141f;
+    color: #f4f7fb;
+  }
+  .neon-text {
+    @apply text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan to-neon-violet;
+  }
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-all duration-200 cursor-pointer;
+  }
+  .sidebar-item-active {
+    @apply sidebar-item text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/20 hover:bg-neon-cyan/10;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-medium;
+  }
+  .badge-online { @apply badge bg-green-500/20 text-green-400 border border-green-500/30; }
+  .badge-offline { @apply badge bg-white/10 text-white/40 border border-white/10; }
+  .badge-error { @apply badge bg-red-500/20 text-red-400 border border-red-500/30; }
+  .badge-warning { @apply badge bg-amber-500/20 text-amber-400 border border-amber-500/30; }
+  .toggle {
+    @apply relative w-11 h-6 rounded-full transition-all duration-300 cursor-pointer;
+  }
+  .stat-card {
+    @apply glass-card p-5 flex flex-col gap-2;
+  }
+}
+
+@layer utilities {
+  .font-600 { font-weight: 600; }
+  .text-gradient-cyan { @apply text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan to-cyan-400; }
+  .text-gradient-violet { @apply text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-neon-violet; }
+  .border-gradient {
+    border-image: linear-gradient(135deg, rgba(0,229,255,0.3), rgba(176,78,255,0.3)) 1;
+  }
+  .glow-cyan { box-shadow: 0 0 30px rgba(0,229,255,0.15); }
+  .glow-violet { box-shadow: 0 0 30px rgba(176,78,255,0.15); }
+  .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
+
+/* Animated gradient border */
+.gradient-border {
+  position: relative;
+  background: rgba(255,255,255,0.04);
+  border-radius: 16px;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0,229,255,0.4), rgba(176,78,255,0.4), rgba(0,229,255,0.1));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Module toggle switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 24px;
+  transition: 0.3s;
+}
+.toggle-slider:before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 50%;
+  transition: 0.3s;
+}
+input:checked + .toggle-slider {
+  background: rgba(0,229,255,0.2);
+  border-color: rgba(0,229,255,0.5);
+}
+input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+  background: #00e5ff;
+  box-shadow: 0 0 10px rgba(0,229,255,0.6);
+}
+
+/* Shimmer loading */
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
