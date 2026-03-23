@@ -470,7 +470,7 @@ export default function ProtectionShowcase3D() {
   }, [features])
 
   return (
-    <section ref={sectionRef} className="product-showcase w-full" aria-label="Demonstration 3D de la protection DiscordForge">
+    <section ref={sectionRef} className="product-showcase w-full" aria-label="Demonstration 3D de la protection DiscordForger">
       <div className="product-showcase__sticky">
         <div className="product-showcase__copy">
           <div className="product-showcase__eyebrow" data-showcase-copy>
