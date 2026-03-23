@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import {
   BadgeHelp,
@@ -7,7 +7,6 @@ import {
   Clock3,
   LifeBuoy,
   Mail,
-  RefreshCw,
   Search,
   Send,
   Shield,
@@ -23,61 +22,60 @@ import { supportAPI } from '../services/api'
 import { useAuthStore } from '../stores'
 import { useI18n } from '../i18n'
 
+const AUTO_REFRESH_MS = 8000
+
 const TEXT = {
   fr: {
     title: 'Support',
-    userSubtitle: 'Tu envoies juste ton message, puis tu suis la reponse ici.',
-    adminTitle: 'Support admin',
-    adminSubtitle: 'File claire pour traiter les tickets sans melanger le cote client et le cote staff.',
-    routeMissing: 'Le support backend nest pas charge. Redemarre le backend pour activer la route support.',
+    titleUser: 'Besoin d aide ?',
+    titleStaff: 'Support admin',
+    userSubtitle: 'Tu laisses un message, le support te repond ici automatiquement.',
+    staffSubtitle: 'Vue support claire: file, ticket, prise en charge et reponse en direct.',
+    routeMissing: 'Le support backend n est pas charge. Redemarre le backend pour activer la route support.',
+    autoSync: 'Mise a jour auto',
+    syncHint: 'Le support se met a jour tout seul.',
     newTicket: 'Nouvelle demande',
-    newTicketHint: 'Choisis la raison, ecris ton message, le reste se gere tout seul.',
-    queue: 'File support',
-    queueHint: 'Filtres, claim, reponse et suivi complet.',
+    newTicketHint: 'Choisis une raison, ecris ton message, puis envoie.',
+    myTickets: 'Mes tickets',
+    myTicketsHint: 'Tous tes echanges restent ici.',
+    queue: 'Tickets en attente',
+    queueHint: 'Selectionne un ticket pour le traiter.',
     conversation: 'Conversation',
-    noTicket: 'Choisis un ticket pour afficher toute la conversation.',
+    noTicketUser: 'Envoie un premier message pour ouvrir ton ticket.',
+    noTicketStaff: 'Choisis un ticket dans la file support.',
     noMine: 'Aucun ticket pour le moment.',
     noQueue: 'Aucun ticket dans la file support.',
-    refresh: 'Actualiser',
-    sendTicket: 'Envoyer au support',
-    sendReply: 'Envoyer la reponse',
     message: 'Message',
     messagePlaceholder: 'Explique clairement le probleme, ce que tu faisais et ce qui bloque.',
-    replyPlaceholder: 'Reponse support...',
-    subject: 'Sujet',
+    replyPlaceholder: 'Ecris ta reponse support...',
+    sendTicket: 'Envoyer au support',
+    sendReply: 'Envoyer',
     reason: 'Raison',
     status: 'Statut',
-    claim: 'Claim',
+    claim: 'Prise en charge',
+    searchPlaceholder: 'Numero, pseudo, email ou texte',
     requester: 'Demandeur',
     contact: 'Contact',
     ticketInfo: 'Ticket',
-    handling: 'Prise en charge',
-    nobody: 'Non attribue',
+    nobody: 'Personne pour le moment',
     opened: 'Ouvert',
-    activity: 'Activite',
+    activity: 'Derniere activite',
     joined: 'Compte cree',
     lastLogin: 'Derniere connexion',
-    closedText: 'Ce ticket est ferme. Il faut le reouvrir pour repondre.',
-    claimAction: 'Reclamer',
-    unclaimAction: 'Liberer',
     closeAction: 'Fermer',
     reopenAction: 'Reouvrir',
+    claimAction: 'Prendre',
+    unclaimAction: 'Relacher',
     editAction: 'Modifier',
     cancelAction: 'Annuler',
     saveAction: 'Enregistrer',
     deleteTicket: 'Supprimer le ticket',
     deleteMessage: 'Supprimer le message',
-    search: 'Recherche',
-    searchPlaceholder: 'Numero, pseudo, email ou texte',
-    total: 'Tickets',
-    open: 'En attente',
-    claimed: 'Pris',
-    closed: 'Clotures',
-    unclaimed: 'Sans claim',
+    closedText: 'Ce ticket est ferme. Reouvre-le pour repondre.',
     created: 'Ticket envoye',
     replied: 'Reponse envoyee',
-    claimedOk: 'Ticket reclame',
-    unclaimedOk: 'Ticket libere',
+    claimedOk: 'Ticket pris en charge',
+    unclaimedOk: 'Ticket relache',
     updated: 'Ticket mis a jour',
     statusOk: 'Statut mis a jour',
     deleted: 'Ticket supprime',
@@ -85,18 +83,145 @@ const TEXT = {
     deletedText: 'Message retire par le fondateur principal.',
     confirmDeleteTicket: 'Supprimer definitivement ce ticket ?',
     confirmDeleteMessage: 'Supprimer ce message du ticket ?',
-    statuses: { all: 'Tous', open: 'En attente', claimed: 'Pris en charge', closed: 'Clos' },
-    claims: { all: 'Tous', mine: 'Par moi', unclaimed: 'Sans claim' },
-    categories: { all: 'Toutes', bug: 'Bug', report: 'Signalement', account: 'Compte', question: 'Question', other: 'Autre' },
+    previewReply: 'Reponse en cours',
+    filters: {
+      all: 'Tous',
+      open: 'En attente',
+      claimed: 'Pris',
+      closed: 'Fermes',
+      mine: 'Par moi',
+      unclaimed: 'Sans claim',
+    },
+    categories: {
+      all: 'Toutes',
+      bug: 'Bug',
+      report: 'Signalement',
+      account: 'Compte',
+      question: 'Question',
+      other: 'Autre',
+    },
     categoryHelp: {
-      bug: 'Quelque chose casse ou plante.',
-      report: 'Tu signales un abus.',
+      bug: 'Quelque chose bloque ou plante.',
+      report: 'Tu signales un abus ou un probleme.',
       account: 'Connexion, profil ou acces.',
-      question: 'Tu as besoin daide.',
+      question: 'Tu as besoin d aide.',
       other: 'Toute autre demande.',
     },
-    roles: { member: 'Utilisateur', admin: 'Admin', founder: 'Fondateur', api_provider: 'Fournisseur API', system: 'Support' },
+    roles: {
+      member: 'Utilisateur',
+      admin: 'Admin',
+      founder: 'Fondateur',
+      api_provider: 'Fournisseur API',
+      system: 'Support',
+    },
+    counts: {
+      open: 'En attente',
+      claimed: 'Pris',
+      closed: 'Fermes',
+    },
     messages: 'messages',
+    staffNote: 'Le ticket se met a jour sans bouton d actualisation.',
+    ownerNote: 'Tu peux repondre ici comme dans un chat.',
+    subject: 'Titre',
+  },
+  en: {
+    title: 'Support',
+    titleUser: 'Need help?',
+    titleStaff: 'Admin support',
+    userSubtitle: 'Leave a message and the team replies here automatically.',
+    staffSubtitle: 'Clear support view: queue, ticket handling and live replies.',
+    routeMissing: 'The support backend is not loaded. Restart the backend to enable support routes.',
+    autoSync: 'Auto sync',
+    syncHint: 'Support refreshes automatically.',
+    newTicket: 'New request',
+    newTicketHint: 'Pick a reason, write your message, then send it.',
+    myTickets: 'My tickets',
+    myTicketsHint: 'All your conversations stay here.',
+    queue: 'Support queue',
+    queueHint: 'Select a ticket to handle it.',
+    conversation: 'Conversation',
+    noTicketUser: 'Send your first message to open a ticket.',
+    noTicketStaff: 'Pick a ticket from the queue.',
+    noMine: 'No tickets yet.',
+    noQueue: 'No tickets in the support queue.',
+    message: 'Message',
+    messagePlaceholder: 'Explain clearly what happened and what is blocked.',
+    replyPlaceholder: 'Write your support reply...',
+    sendTicket: 'Send to support',
+    sendReply: 'Send',
+    reason: 'Reason',
+    status: 'Status',
+    claim: 'Handling',
+    searchPlaceholder: 'Number, username, email or text',
+    requester: 'Requester',
+    contact: 'Contact',
+    ticketInfo: 'Ticket',
+    nobody: 'Nobody yet',
+    opened: 'Opened',
+    activity: 'Last activity',
+    joined: 'Account created',
+    lastLogin: 'Last login',
+    closeAction: 'Close',
+    reopenAction: 'Reopen',
+    claimAction: 'Take',
+    unclaimAction: 'Release',
+    editAction: 'Edit',
+    cancelAction: 'Cancel',
+    saveAction: 'Save',
+    deleteTicket: 'Delete ticket',
+    deleteMessage: 'Delete message',
+    closedText: 'This ticket is closed. Reopen it to reply.',
+    created: 'Ticket sent',
+    replied: 'Reply sent',
+    claimedOk: 'Ticket claimed',
+    unclaimedOk: 'Ticket released',
+    updated: 'Ticket updated',
+    statusOk: 'Status updated',
+    deleted: 'Ticket deleted',
+    messageDeleted: 'Message deleted',
+    deletedText: 'Message removed by the primary founder.',
+    confirmDeleteTicket: 'Delete this ticket permanently?',
+    confirmDeleteMessage: 'Delete this ticket message?',
+    previewReply: 'Draft reply',
+    filters: {
+      all: 'All',
+      open: 'Open',
+      claimed: 'Claimed',
+      closed: 'Closed',
+      mine: 'Mine',
+      unclaimed: 'Unclaimed',
+    },
+    categories: {
+      all: 'All',
+      bug: 'Bug',
+      report: 'Report',
+      account: 'Account',
+      question: 'Question',
+      other: 'Other',
+    },
+    categoryHelp: {
+      bug: 'Something breaks or crashes.',
+      report: 'You want to report abuse or an issue.',
+      account: 'Login, profile or access.',
+      question: 'You need help.',
+      other: 'Any other request.',
+    },
+    roles: {
+      member: 'User',
+      admin: 'Admin',
+      founder: 'Founder',
+      api_provider: 'API provider',
+      system: 'Support',
+    },
+    counts: {
+      open: 'Open',
+      claimed: 'Claimed',
+      closed: 'Closed',
+    },
+    messages: 'messages',
+    staffNote: 'The queue updates automatically without a refresh button.',
+    ownerNote: 'You can answer here like a chat.',
+    subject: 'Title',
   },
 }
 
@@ -111,7 +236,7 @@ const CATEGORY_META = {
 const STATUS_STYLES = {
   open: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300',
   claimed: 'border-amber-500/20 bg-amber-500/10 text-amber-300',
-  closed: 'border-white/10 bg-white/[0.04] text-white/65',
+  closed: 'border-white/10 bg-white/[0.05] text-white/65',
 }
 
 function getText(locale) {
@@ -120,9 +245,18 @@ function getText(locale) {
 }
 
 function formatDate(locale, value) {
-  if (!value) return '—'
+  if (!value) return '--'
   try {
     return new Date(value).toLocaleString(locale)
+  } catch {
+    return value
+  }
+}
+
+function formatTime(locale, value) {
+  if (!value) return '--'
+  try {
+    return new Date(value).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
   } catch {
     return value
   }
@@ -133,13 +267,14 @@ function getErrorMessage(error, text) {
   return String(message).includes('/api/v1/support/') ? text.routeMissing : message
 }
 
-function renderAvatar(profile, size = 'w-11 h-11') {
+function renderAvatar(profile, size = 'h-11 w-11') {
   if (profile?.avatar_url) {
-    return <img src={profile.avatar_url} alt={profile?.username || 'User'} className={`${size} rounded-2xl object-cover border border-white/10`} />
+    return <img src={profile.avatar_url} alt={profile?.username || 'User'} className={`${size} rounded-2xl border border-white/10 object-cover`} />
   }
+
   const initials = String(profile?.username || '?').slice(0, 2).toUpperCase()
   return (
-    <div className={`${size} rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-500/20 to-violet-500/20 flex items-center justify-center text-white/85 font-mono text-xs`}>
+    <div className={`${size} flex items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-500/20 to-violet-500/20 font-mono text-xs text-white/85`}>
       {initials}
     </div>
   )
@@ -149,19 +284,30 @@ function Pill({ children, className = '' }) {
   return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-mono ${className}`}>{children}</span>
 }
 
-function CountCard({ icon: Icon, label, value, tone }) {
+function SegmentedButton({ active, children, onClick }) {
   return (
-    <div className="rounded-[26px] border border-white/[0.08] bg-white/[0.03] p-4">
-      <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${tone}`}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="mt-4 font-display text-2xl font-700 text-white">{value}</div>
-      <div className="mt-1 text-xs uppercase tracking-[0.24em] text-white/38">{label}</div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1.5 text-xs font-mono transition-all ${
+        active ? 'border-cyan-500/25 bg-cyan-500/12 text-cyan-300' : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function StatCard({ label, value, tone }) {
+  return (
+    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+      <div className={`mb-2 inline-flex rounded-full border px-2 py-1 text-[10px] font-mono ${tone}`}>{label}</div>
+      <div className="font-display text-2xl font-700 text-white">{value}</div>
     </div>
   )
 }
 
-function TicketItem({ ticket, selected, locale, text, onSelect }) {
+function TicketRow({ ticket, locale, text, selected, onSelect }) {
   const meta = CATEGORY_META[ticket.category] || CATEGORY_META.other
   const Icon = meta.icon
 
@@ -170,7 +316,7 @@ function TicketItem({ ticket, selected, locale, text, onSelect }) {
       type="button"
       onClick={() => onSelect(ticket.id)}
       className={`w-full rounded-[24px] border p-4 text-left transition-all ${
-        selected ? 'border-cyan-500/25 bg-cyan-500/10' : 'border-white/10 bg-black/20 hover:bg-white/[0.04]'
+        selected ? 'border-cyan-500/25 bg-cyan-500/10 shadow-[0_0_0_1px_rgba(34,211,238,0.08)]' : 'border-white/10 bg-black/20 hover:border-white/15 hover:bg-white/[0.04]'
       }`}
     >
       <div className="flex items-start gap-3">
@@ -178,14 +324,14 @@ function TicketItem({ ticket, selected, locale, text, onSelect }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Pill className="border-white/10 bg-white/[0.04] text-white/80">#{ticket.ticket_number}</Pill>
-            <Pill className={STATUS_STYLES[ticket.status]}>{text.statuses[ticket.status]}</Pill>
+            <Pill className={STATUS_STYLES[ticket.status]}>{text.filters[ticket.status]}</Pill>
             <Pill className={meta.tone}>
               <Icon className="mr-1.5 h-3 w-3" />
               {text.categories[ticket.category]}
             </Pill>
           </div>
-          <div className="mt-3 truncate font-display text-white font-700">{ticket.title}</div>
-          <div className="mt-1 line-clamp-2 text-sm text-white/40">{ticket.last_message_preview || '...'}</div>
+          <div className="mt-3 truncate font-display text-base font-700 text-white">{ticket.title}</div>
+          <div className="mt-1 line-clamp-2 text-sm text-white/42">{ticket.last_message_preview || '...'}</div>
           <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-mono text-white/30">
             <span>{ticket.owner?.username}</span>
             <span>{ticket.message_count} {text.messages}</span>
@@ -197,11 +343,25 @@ function TicketItem({ ticket, selected, locale, text, onSelect }) {
   )
 }
 
-function MetaCard({ title, children }) {
+function MetaPanel({ title, children }) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
-      <div className="mb-3 text-xs uppercase tracking-[0.24em] text-white/35">{title}</div>
+    <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
+      <div className="mb-3 text-[11px] uppercase tracking-[0.24em] text-white/32">{title}</div>
       {children}
+    </div>
+  )
+}
+
+function EmptyState({ icon: Icon, title, body }) {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center px-6">
+      <div className="max-w-sm text-center">
+        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[28px] border border-white/10 bg-white/[0.04] text-white/60">
+          <Icon className="h-8 w-8" />
+        </div>
+        <div className="font-display text-2xl font-700 text-white">{title}</div>
+        <p className="mt-3 text-white/45">{body}</p>
+      </div>
     </div>
   )
 }
@@ -210,37 +370,50 @@ export default function SupportPage() {
   const { locale } = useI18n()
   const text = getText(locale)
   const { user } = useAuthStore()
-  const isStaff = ['admin', 'founder'].includes(user?.role)
+  const isStaff = ['admin', 'founder'].includes(user?.role) || !!user?.is_primary_founder
   const isPrimaryFounder = !!user?.is_primary_founder
 
   const [tickets, setTickets] = useState([])
-  const [counts, setCounts] = useState({ total: 0, open: 0, claimed: 0, unclaimed: 0, closed: 0 })
+  const [counts, setCounts] = useState({ total: 0, open: 0, claimed: 0, closed: 0, unclaimed: 0 })
   const [selectedTicketId, setSelectedTicketId] = useState(null)
   const [detail, setDetail] = useState(null)
-  const [filters, setFilters] = useState({ status: 'all', category: 'all', claim: 'all', q: '' })
-  const [newTicket, setNewTicket] = useState({ category: 'bug', title: '', message: '' })
-  const [editForm, setEditForm] = useState({ title: '', category: 'bug', status: 'open' })
   const [reply, setReply] = useState('')
+  const [newTicket, setNewTicket] = useState({ category: 'bug', message: '' })
+  const [editForm, setEditForm] = useState({ title: '', category: 'bug', status: 'open' })
+  const [filters, setFilters] = useState({ status: 'all', claim: 'all', category: 'all', q: '' })
   const [loadingList, setLoadingList] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [creatingTicket, setCreatingTicket] = useState(false)
   const [sendingReply, setSendingReply] = useState(false)
   const [editingTicket, setEditingTicket] = useState(false)
   const [busyAction, setBusyAction] = useState('')
+  const [lastSyncAt, setLastSyncAt] = useState(null)
+
+  const selectedRef = useRef(null)
+  const queryRef = useRef(null)
+  const messagesRef = useRef(null)
 
   const query = useMemo(() => ({
     view: isStaff ? 'staff' : 'mine',
     status: filters.status,
-    category: filters.category,
+    category: isStaff ? filters.category : 'all',
     claim: isStaff ? filters.claim : 'all',
-    q: filters.q,
+    q: isStaff ? filters.q : '',
     page: 1,
     limit: 50,
   }), [filters.category, filters.claim, filters.q, filters.status, isStaff])
 
   useEffect(() => {
-    loadTickets()
-  }, [query.view, query.status, query.category, query.claim, query.q])
+    selectedRef.current = selectedTicketId
+  }, [selectedTicketId])
+
+  useEffect(() => {
+    queryRef.current = query
+  }, [query])
+
+  useEffect(() => {
+    loadTickets({ preferredId: selectedRef.current })
+  }, [query])
 
   useEffect(() => {
     if (!selectedTicketId) {
@@ -250,36 +423,61 @@ export default function SupportPage() {
     loadDetail(selectedTicketId)
   }, [selectedTicketId])
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.hidden) return
+      const currentSelected = selectedRef.current
+      loadTickets({ preferredId: currentSelected, silent: true })
+      if (currentSelected) {
+        loadDetail(currentSelected, { silent: true })
+      }
+    }, AUTO_REFRESH_MS)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  useEffect(() => {
+    if (!messagesRef.current) return
+    messagesRef.current.scrollTop = messagesRef.current.scrollHeight
+  }, [detail?.ticket?.id, detail?.messages?.length])
+
   const notifyError = (error, id = 'support-error') => {
     toast.error(getErrorMessage(error, text), { id })
   }
 
-  async function loadTickets(preferredId = null) {
-    setLoadingList(true)
+  async function loadTickets(options = {}) {
+    const { preferredId = null, silent = false } = options
+    if (!silent) setLoadingList(true)
+
     try {
-      const response = await supportAPI.listTickets(query)
+      const response = await supportAPI.listTickets(queryRef.current || query)
       const nextTickets = response.data.tickets || []
+      const nextCounts = response.data.counts || { total: 0, open: 0, claimed: 0, closed: 0, unclaimed: 0 }
+      const targetId = preferredId || selectedRef.current
+
       setTickets(nextTickets)
-      setCounts(response.data.counts || { total: 0, open: 0, claimed: 0, unclaimed: 0, closed: 0 })
-      const targetId = preferredId || selectedTicketId
+      setCounts(nextCounts)
+
       if (targetId && nextTickets.some((ticket) => ticket.id === targetId)) {
         setSelectedTicketId(targetId)
       } else {
-        setSelectedTicketId(nextTickets[0]?.id || null)
+        const nextSelected = nextTickets[0]?.id || null
+        setSelectedTicketId(nextSelected)
+        if (!nextSelected) setDetail(null)
       }
+
+      setLastSyncAt(new Date().toISOString())
     } catch (error) {
-      setTickets([])
-      setCounts({ total: 0, open: 0, claimed: 0, unclaimed: 0, closed: 0 })
-      setSelectedTicketId(null)
-      setDetail(null)
-      notifyError(error, 'support-load')
+      if (!silent) notifyError(error, 'support-load')
     } finally {
-      setLoadingList(false)
+      if (!silent) setLoadingList(false)
     }
   }
 
-  async function loadDetail(ticketId) {
-    setLoadingDetail(true)
+  async function loadDetail(ticketId, options = {}) {
+    const { silent = false } = options
+    if (!silent) setLoadingDetail(true)
+
     try {
       const response = await supportAPI.getTicket(ticketId)
       setDetail(response.data)
@@ -288,25 +486,29 @@ export default function SupportPage() {
         category: response.data.ticket?.category || 'bug',
         status: response.data.ticket?.status || 'open',
       })
+      setLastSyncAt(new Date().toISOString())
     } catch (error) {
-      setDetail(null)
-      notifyError(error, 'support-detail')
+      if (!silent) {
+        setDetail(null)
+        notifyError(error, 'support-detail')
+      }
     } finally {
-      setLoadingDetail(false)
+      if (!silent) setLoadingDetail(false)
     }
   }
 
   async function handleCreate(event) {
     event.preventDefault()
     if (!newTicket.message.trim()) return
+
     setCreatingTicket(true)
     try {
       const response = await supportAPI.createTicket(newTicket)
-      setNewTicket((state) => ({ ...state, title: '', message: '' }))
+      setNewTicket((state) => ({ ...state, message: '' }))
       setSelectedTicketId(response.data.ticket?.id || null)
       setDetail({ ticket: response.data.ticket, messages: response.data.messages })
       toast.success(text.created)
-      await loadTickets(response.data.ticket?.id || null)
+      await loadTickets({ preferredId: response.data.ticket?.id || null })
     } catch (error) {
       notifyError(error, 'support-create')
     } finally {
@@ -317,13 +519,14 @@ export default function SupportPage() {
   async function handleReply(event) {
     event.preventDefault()
     if (!selectedTicketId || !reply.trim()) return
+
     setSendingReply(true)
     try {
       const response = await supportAPI.sendMessage(selectedTicketId, { message: reply.trim() })
       setReply('')
       setDetail({ ticket: response.data.ticket, messages: response.data.messages })
       toast.success(text.replied)
-      await loadTickets(selectedTicketId)
+      await loadTickets({ preferredId: selectedTicketId })
     } catch (error) {
       notifyError(error, 'support-reply')
     } finally {
@@ -331,9 +534,10 @@ export default function SupportPage() {
     }
   }
 
-  async function runAction(key, request, successMessage, onSuccess) {
+  async function runAction(key, request, successMessage, after) {
     if (!selectedTicketId) return
     setBusyAction(key)
+
     try {
       const response = await request()
       if (response?.data?.ticket) {
@@ -345,8 +549,8 @@ export default function SupportPage() {
         })
       }
       if (successMessage) toast.success(successMessage)
-      if (onSuccess) onSuccess()
-      await loadTickets(selectedTicketId)
+      if (after) after(response)
+      await loadTickets({ preferredId: selectedTicketId })
     } catch (error) {
       notifyError(error, `support-${key}`)
     } finally {
@@ -356,6 +560,7 @@ export default function SupportPage() {
 
   async function handleDeleteTicket() {
     if (!selectedTicketId || !window.confirm(text.confirmDeleteTicket)) return
+
     setBusyAction('delete-ticket')
     try {
       await supportAPI.deleteTicket(selectedTicketId)
@@ -372,12 +577,13 @@ export default function SupportPage() {
 
   async function handleDeleteMessage(messageId) {
     if (!window.confirm(text.confirmDeleteMessage)) return
+
     setBusyAction(`delete-message-${messageId}`)
     try {
       const response = await supportAPI.deleteMessage(messageId)
       setDetail({ ticket: response.data.ticket, messages: response.data.messages })
       toast.success(text.messageDeleted)
-      await loadTickets(selectedTicketId)
+      await loadTickets({ preferredId: selectedTicketId })
     } catch (error) {
       notifyError(error, `support-delete-message-${messageId}`)
     } finally {
@@ -388,18 +594,93 @@ export default function SupportPage() {
   const selectedTicket = detail?.ticket || null
   const messages = detail?.messages || []
 
+  const renderActions = () => {
+    if (!selectedTicket) return null
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {selectedTicket.permissions?.can_claim && !selectedTicket.claimer?.id && (
+          <button
+            type="button"
+            disabled={busyAction === 'claim'}
+            onClick={() => runAction('claim', () => supportAPI.claimTicket(selectedTicket.id), text.claimedOk)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-300 disabled:opacity-60"
+          >
+            <UserRoundPlus className="h-4 w-4" />
+            {text.claimAction}
+          </button>
+        )}
+
+        {selectedTicket.permissions?.can_unclaim && selectedTicket.claimer?.id && (
+          <button
+            type="button"
+            disabled={busyAction === 'unclaim'}
+            onClick={() => runAction('unclaim', () => supportAPI.unclaimTicket(selectedTicket.id), text.unclaimedOk)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-white/75 disabled:opacity-60"
+          >
+            <UserRoundCheck className="h-4 w-4" />
+            {text.unclaimAction}
+          </button>
+        )}
+
+        {selectedTicket.permissions?.can_close && (
+          <button
+            type="button"
+            disabled={busyAction === 'close'}
+            onClick={() => runAction('close', () => supportAPI.setStatus(selectedTicket.id, { status: 'closed' }), text.statusOk)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-300 disabled:opacity-60"
+          >
+            <XCircle className="h-4 w-4" />
+            {text.closeAction}
+          </button>
+        )}
+
+        {selectedTicket.permissions?.can_reopen && (
+          <button
+            type="button"
+            disabled={busyAction === 'reopen'}
+            onClick={() => runAction('reopen', () => supportAPI.setStatus(selectedTicket.id, { status: 'open' }), text.statusOk)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-emerald-300 disabled:opacity-60"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {text.reopenAction}
+          </button>
+        )}
+
+        {selectedTicket.permissions?.can_edit && (
+          <button
+            type="button"
+            onClick={() => setEditingTicket((state) => !state)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-violet-300"
+          >
+            <Shield className="h-4 w-4" />
+            {editingTicket ? text.cancelAction : text.editAction}
+          </button>
+        )}
+
+        {selectedTicket.permissions?.can_delete && (
+          <button
+            type="button"
+            disabled={busyAction === 'delete-ticket'}
+            onClick={handleDeleteTicket}
+            className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-300 disabled:opacity-60"
+          >
+            <Trash2 className="h-4 w-4" />
+            {text.deleteTicket}
+          </button>
+        )}
+      </div>
+    )
+  }
+
   const renderConversation = () => {
     if (!selectedTicket) {
       return (
-        <div className="flex min-h-[320px] items-center justify-center px-6">
-          <div className="text-center">
-            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[28px] border border-white/10 bg-white/[0.04] text-white/60">
-              <Ticket className="h-8 w-8" />
-            </div>
-            <div className="font-display text-2xl font-700 text-white">{text.conversation}</div>
-            <p className="mt-3 text-white/45">{text.noTicket}</p>
-          </div>
-        </div>
+        <EmptyState
+          icon={Ticket}
+          title={text.conversation}
+          body={isStaff ? text.noTicketStaff : text.noTicketUser}
+        />
       )
     }
 
@@ -410,99 +691,78 @@ export default function SupportPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <Pill className="border-white/10 bg-white/[0.04] text-white/80">#{selectedTicket.ticket_number}</Pill>
-                <Pill className={STATUS_STYLES[selectedTicket.status]}>{text.statuses[selectedTicket.status]}</Pill>
+                <Pill className={STATUS_STYLES[selectedTicket.status]}>{text.filters[selectedTicket.status]}</Pill>
                 <Pill className={CATEGORY_META[selectedTicket.category]?.tone || CATEGORY_META.other.tone}>{text.categories[selectedTicket.category]}</Pill>
               </div>
               <h2 className="mt-3 font-display text-2xl font-700 text-white">{selectedTicket.title}</h2>
-              <div className="mt-3 flex flex-wrap gap-4 text-sm text-white/40">
+              <div className="mt-3 flex flex-wrap gap-4 text-sm text-white/42">
                 <span>{text.opened}: {formatDate(locale, selectedTicket.created_at)}</span>
                 <span>{text.activity}: {formatDate(locale, selectedTicket.last_message_at)}</span>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => loadDetail(selectedTicket.id)} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-white/70 hover:bg-white/[0.07] hover:text-white">
-                <RefreshCw className={`h-4 w-4 ${loadingDetail ? 'animate-spin' : ''}`} />
-                {text.refresh}
-              </button>
-              {selectedTicket.permissions?.can_claim && !selectedTicket.claimer?.id && (
-                <button type="button" disabled={busyAction === 'claim'} onClick={() => runAction('claim', () => supportAPI.claimTicket(selectedTicket.id), text.claimedOk)} className="inline-flex items-center gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-300 disabled:opacity-60">
-                  <UserRoundPlus className="h-4 w-4" />
-                  {text.claimAction}
-                </button>
-              )}
-              {selectedTicket.permissions?.can_unclaim && selectedTicket.claimer?.id && (
-                <button type="button" disabled={busyAction === 'unclaim'} onClick={() => runAction('unclaim', () => supportAPI.unclaimTicket(selectedTicket.id), text.unclaimedOk)} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-white/70 disabled:opacity-60">
-                  <UserRoundCheck className="h-4 w-4" />
-                  {text.unclaimAction}
-                </button>
-              )}
-              {selectedTicket.permissions?.can_close && (
-                <button type="button" disabled={busyAction === 'close'} onClick={() => runAction('close', () => supportAPI.setStatus(selectedTicket.id, { status: 'closed' }), text.statusOk)} className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-300 disabled:opacity-60">
-                  <XCircle className="h-4 w-4" />
-                  {text.closeAction}
-                </button>
-              )}
-              {selectedTicket.permissions?.can_reopen && (
-                <button type="button" disabled={busyAction === 'reopen'} onClick={() => runAction('reopen', () => supportAPI.setStatus(selectedTicket.id, { status: 'open' }), text.statusOk)} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-emerald-300 disabled:opacity-60">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {text.reopenAction}
-                </button>
-              )}
-              {selectedTicket.permissions?.can_edit && (
-                <button type="button" onClick={() => setEditingTicket((state) => !state)} className="inline-flex items-center gap-2 rounded-2xl border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-violet-300">
-                  <Shield className="h-4 w-4" />
-                  {editingTicket ? text.cancelAction : text.editAction}
-                </button>
-              )}
-              {selectedTicket.permissions?.can_delete && (
-                <button type="button" disabled={busyAction === 'delete-ticket'} onClick={handleDeleteTicket} className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-300 disabled:opacity-60">
-                  <Trash2 className="h-4 w-4" />
-                  {text.deleteTicket}
-                </button>
-              )}
-            </div>
+            {renderActions()}
           </div>
 
-          {isStaff && (
-            <div className="mt-5 grid gap-4 xl:grid-cols-4">
-              <MetaCard title={text.requester}>
-                <div className="flex items-center gap-3">
-                  {renderAvatar(selectedTicket.owner)}
-                  <div className="min-w-0">
-                    <div className="truncate font-display text-white font-700">{selectedTicket.owner?.username}</div>
-                    <div className="text-sm text-white/40">{text.roles[selectedTicket.owner?.role] || selectedTicket.owner?.role}</div>
+          <div className={`mt-5 grid gap-3 ${isStaff ? 'xl:grid-cols-3' : 'md:grid-cols-2'}`}>
+            <MetaPanel title={text.ticketInfo}>
+              <div className="space-y-2 text-sm text-white/75">
+                <div>{text.reason}: <span className="text-white">{text.categories[selectedTicket.category]}</span></div>
+                <div>{text.status}: <span className="text-white">{text.filters[selectedTicket.status]}</span></div>
+                <div>{text.activity}: <span className="text-white">{formatTime(locale, selectedTicket.last_message_at)}</span></div>
+              </div>
+            </MetaPanel>
+
+            {isStaff ? (
+              <>
+                <MetaPanel title={text.requester}>
+                  <div className="flex items-center gap-3">
+                    {renderAvatar(selectedTicket.owner)}
+                    <div className="min-w-0">
+                      <div className="truncate font-display text-white font-700">{selectedTicket.owner?.username}</div>
+                      <div className="text-sm text-white/42">{text.roles[selectedTicket.owner?.role] || selectedTicket.owner?.role}</div>
+                      <div className="mt-1 text-xs text-white/30">ID: {selectedTicket.owner?.id || '--'}</div>
+                    </div>
                   </div>
-                </div>
-              </MetaCard>
-              <MetaCard title={text.contact}>
-                <div className="space-y-2 text-sm text-white/75">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-cyan-300" />
-                    <span className="break-all">{selectedTicket.owner?.email || '—'}</span>
+                </MetaPanel>
+
+                <MetaPanel title={text.contact}>
+                  <div className="space-y-2 text-sm text-white/75">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-cyan-300" />
+                      <span className="break-all">{selectedTicket.owner?.email || '--'}</span>
+                    </div>
+                    <div className="text-white/45">{text.joined}: {formatDate(locale, selectedTicket.owner?.joined_at)}</div>
+                    <div className="text-white/45">{text.lastLogin}: {formatDate(locale, selectedTicket.owner?.last_login_at)}</div>
                   </div>
-                  <div className="text-white/45">{text.joined}: {formatDate(locale, selectedTicket.owner?.joined_at)}</div>
-                  <div className="text-white/45">{text.lastLogin}: {formatDate(locale, selectedTicket.owner?.last_login_at)}</div>
-                </div>
-              </MetaCard>
-              <MetaCard title={text.ticketInfo}>
-                <div className="space-y-2 text-sm text-white/75">
-                  <div>{text.reason}: <span className="text-white">{text.categories[selectedTicket.category]}</span></div>
-                  <div>{text.status}: <span className="text-white">{text.statuses[selectedTicket.status]}</span></div>
-                  <div>{text.opened}: <span className="text-white">{formatDate(locale, selectedTicket.created_at)}</span></div>
-                </div>
-              </MetaCard>
-              <MetaCard title={text.handling}>
+                </MetaPanel>
+              </>
+            ) : (
+              <MetaPanel title={text.claim}>
                 {selectedTicket.claimer ? (
                   <div className="flex items-center gap-3">
                     {renderAvatar(selectedTicket.claimer)}
                     <div className="min-w-0">
                       <div className="truncate font-display text-white font-700">{selectedTicket.claimer.username}</div>
-                      <div className="text-sm text-white/40">{text.roles[selectedTicket.claimer.role] || selectedTicket.claimer.role}</div>
+                      <div className="text-sm text-white/42">{text.roles[selectedTicket.claimer.role] || selectedTicket.claimer.role}</div>
                     </div>
                   </div>
-                ) : <div className="text-white/45">{text.nobody}</div>}
-              </MetaCard>
+                ) : (
+                  <div className="text-sm text-white/45">{text.nobody}</div>
+                )}
+              </MetaPanel>
+            )}
+          </div>
+
+          {isStaff && (
+            <div className="mt-4 rounded-[22px] border border-cyan-500/15 bg-cyan-500/[0.06] px-4 py-3 text-sm text-cyan-100/90">
+              {text.staffNote}
+            </div>
+          )}
+
+          {!isStaff && (
+            <div className="mt-4 rounded-[22px] border border-violet-500/15 bg-violet-500/[0.08] px-4 py-3 text-sm text-violet-100/90">
+              {text.ownerNote}
             </div>
           )}
 
@@ -510,28 +770,54 @@ export default function SupportPage() {
             <div className="mt-5 rounded-[24px] border border-violet-500/20 bg-violet-500/10 p-4">
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
-                  <label className="text-xs uppercase tracking-[0.24em] text-white/40">{text.subject}</label>
-                  <input value={editForm.title} onChange={(event) => setEditForm((state) => ({ ...state, title: event.target.value }))} className="input-field mt-2" />
+                  <label className="text-[11px] uppercase tracking-[0.24em] text-white/35">{text.subject}</label>
+                  <input
+                    value={editForm.title}
+                    onChange={(event) => setEditForm((state) => ({ ...state, title: event.target.value }))}
+                    className="input-field mt-2"
+                  />
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-[0.24em] text-white/40">{text.reason}</label>
-                  <select value={editForm.category} onChange={(event) => setEditForm((state) => ({ ...state, category: event.target.value }))} className="select-field mt-2">
-                    {['bug', 'report', 'account', 'question', 'other'].map((category) => <option key={category} value={category}>{text.categories[category]}</option>)}
+                  <label className="text-[11px] uppercase tracking-[0.24em] text-white/35">{text.reason}</label>
+                  <select
+                    value={editForm.category}
+                    onChange={(event) => setEditForm((state) => ({ ...state, category: event.target.value }))}
+                    className="select-field mt-2"
+                  >
+                    {['bug', 'report', 'account', 'question', 'other'].map((category) => (
+                      <option key={category} value={category}>{text.categories[category]}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-[0.24em] text-white/40">{text.status}</label>
-                  <select value={editForm.status} onChange={(event) => setEditForm((state) => ({ ...state, status: event.target.value }))} className="select-field mt-2">
-                    {['open', 'claimed', 'closed'].map((status) => <option key={status} value={status}>{text.statuses[status]}</option>)}
+                  <label className="text-[11px] uppercase tracking-[0.24em] text-white/35">{text.status}</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(event) => setEditForm((state) => ({ ...state, status: event.target.value }))}
+                    className="select-field mt-2"
+                  >
+                    {['open', 'claimed', 'closed'].map((status) => (
+                      <option key={status} value={status}>{text.filters[status]}</option>
+                    ))}
                   </select>
                 </div>
               </div>
+
               <div className="mt-4 flex flex-wrap gap-2">
-                <button type="button" disabled={busyAction === 'edit'} onClick={() => runAction('edit', () => supportAPI.updateTicket(selectedTicket.id, editForm), text.updated, () => setEditingTicket(false))} className="inline-flex items-center gap-2 rounded-2xl border border-violet-500/20 bg-violet-500/15 px-4 py-3 text-violet-200 disabled:opacity-60">
+                <button
+                  type="button"
+                  disabled={busyAction === 'edit'}
+                  onClick={() => runAction('edit', () => supportAPI.updateTicket(selectedTicket.id, editForm), text.updated, () => setEditingTicket(false))}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-violet-500/20 bg-violet-500/15 px-4 py-3 text-violet-200 disabled:opacity-60"
+                >
                   <Shield className="h-4 w-4" />
                   {text.saveAction}
                 </button>
-                <button type="button" onClick={() => setEditingTicket(false)} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white/65 hover:bg-white/[0.07] hover:text-white">
+                <button
+                  type="button"
+                  onClick={() => setEditingTicket(false)}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white/65 hover:bg-white/[0.07] hover:text-white"
+                >
                   {text.cancelAction}
                 </button>
               </div>
@@ -539,28 +825,52 @@ export default function SupportPage() {
           )}
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5 scrollbar-none">
+        <div ref={messagesRef} className="flex-1 space-y-4 overflow-y-auto px-6 py-5 scrollbar-none">
           {messages.map((message) => {
             if (message.kind === 'system') {
-              return <div key={message.id} className="flex justify-center"><div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">{message.body}</div></div>
+              const normalizedBody = String(message.body || '').toLowerCase()
+              if (
+                normalizedBody.includes('ticket reclame par')
+                || normalizedBody.includes('ticket relache par')
+                || normalizedBody.includes('ticket claimed by')
+                || normalizedBody.includes('ticket released by')
+              ) {
+                return null
+              }
+
+              return (
+                <div key={message.id} className="flex justify-center">
+                  <div className="rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-xs text-white/55">
+                    {message.body}
+                  </div>
+                </div>
+              )
             }
+
             const own = message.author?.id && message.author.id === user?.id
             const bubbleClass = own ? 'border-cyan-500/20 bg-cyan-500/10' : 'border-white/10 bg-white/[0.03]'
+
             return (
               <div key={message.id} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[88%] rounded-[28px] border ${bubbleClass} px-4 py-4`}>
+                <div className={`max-w-[90%] rounded-[28px] border ${bubbleClass} px-4 py-4`}>
                   <div className="flex items-start gap-3">
-                    {renderAvatar(message.author)}
+                    {renderAvatar(message.author, 'h-10 w-10')}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-display text-white font-700">{message.author?.username}</span>
                         <Pill className="border-white/10 bg-black/20 text-white/65">{text.roles[message.author?.role] || message.author?.role}</Pill>
                         <span className="text-[11px] font-mono text-white/30">{formatDate(locale, message.created_at)}</span>
                       </div>
-                      <div className="mt-3 whitespace-pre-wrap break-words text-white/85">{message.is_deleted ? text.deletedText : message.body}</div>
+                      <div className="mt-3 whitespace-pre-wrap break-words text-white/88">{message.is_deleted ? text.deletedText : message.body}</div>
                     </div>
+
                     {selectedTicket.permissions?.can_delete_messages && !message.is_deleted && (
-                      <button type="button" disabled={busyAction === `delete-message-${message.id}`} onClick={() => handleDeleteMessage(message.id)} className="text-white/30 hover:text-red-300 disabled:opacity-60">
+                      <button
+                        type="button"
+                        disabled={busyAction === `delete-message-${message.id}`}
+                        onClick={() => handleDeleteMessage(message.id)}
+                        className="text-white/30 hover:text-red-300 disabled:opacity-60"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     )}
@@ -574,15 +884,29 @@ export default function SupportPage() {
         <div className="border-t border-white/[0.08] px-6 py-5">
           {selectedTicket.permissions?.can_reply ? (
             <form onSubmit={handleReply} className="space-y-3">
-              <textarea value={reply} onChange={(event) => setReply(event.target.value)} className="input-field min-h-[130px] resize-none" placeholder={text.replyPlaceholder} />
-              <div className="flex justify-end">
-                <button type="submit" disabled={sendingReply || !reply.trim()} className="inline-flex items-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-cyan-300 disabled:opacity-60">
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-3">
+                <textarea
+                  value={reply}
+                  onChange={(event) => setReply(event.target.value)}
+                  className="input-field min-h-[120px] resize-none border-0 bg-transparent shadow-none"
+                  placeholder={text.replyPlaceholder}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm text-white/35">{reply.trim() ? text.previewReply : text.syncHint}</div>
+                <button
+                  type="submit"
+                  disabled={sendingReply || !reply.trim()}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-cyan-300 disabled:opacity-60"
+                >
                   <Send className="h-4 w-4" />
                   {text.sendReply}
                 </button>
               </div>
             </form>
-          ) : <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-4 text-white/50">{text.closedText}</div>}
+          ) : (
+            <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-4 text-white/50">{text.closedText}</div>
+          )}
         </div>
       </>
     )
@@ -591,34 +915,40 @@ export default function SupportPage() {
   return (
     <div className="relative min-h-full px-4 py-8 md:px-8 md:py-10">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className={`mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-mono ${
               isStaff ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300' : 'border-violet-500/20 bg-violet-500/10 text-violet-200'
             }`}>
               <LifeBuoy className="h-3.5 w-3.5" />
-              {isStaff ? text.adminTitle : text.title}
+              {isStaff ? text.titleStaff : text.title}
             </div>
-            <h1 className="font-display text-3xl font-700 text-white md:text-4xl">{isStaff ? text.adminTitle : text.title}</h1>
-            <p className="mt-2 max-w-2xl text-white/45">{isStaff ? text.adminSubtitle : text.userSubtitle}</p>
+            <h1 className="font-display text-3xl font-700 text-white md:text-4xl">{isStaff ? text.titleStaff : text.titleUser}</h1>
+            <p className="mt-2 max-w-3xl text-white/45">{isStaff ? text.staffSubtitle : text.userSubtitle}</p>
           </div>
-          <button type="button" onClick={() => loadTickets(selectedTicketId)} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white/80 hover:bg-white/[0.07]">
-            <RefreshCw className={`h-4 w-4 ${loadingList ? 'animate-spin' : ''}`} />
-            {text.refresh}
-          </button>
+
+          <div className="flex flex-wrap gap-3">
+            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+              <div className="flex items-center gap-2 text-cyan-300">
+                <Clock3 className={`h-4 w-4 ${loadingList || loadingDetail ? 'animate-spin' : ''}`} />
+                <span className="text-xs font-mono uppercase tracking-[0.24em]">{text.autoSync}</span>
+              </div>
+              <div className="mt-2 text-sm text-white/45">
+                {lastSyncAt ? `${text.syncHint} ${formatTime(locale, lastSyncAt)}` : text.syncHint}
+              </div>
+            </div>
+
+            {isStaff && (
+              <>
+                <StatCard label={text.counts.open} value={counts.open || 0} tone="border-cyan-500/20 bg-cyan-500/10 text-cyan-300" />
+                <StatCard label={text.counts.claimed} value={counts.claimed || 0} tone="border-amber-500/20 bg-amber-500/10 text-amber-300" />
+                <StatCard label={text.counts.closed} value={counts.closed || 0} tone="border-white/10 bg-white/[0.04] text-white/70" />
+              </>
+            )}
+          </div>
         </div>
 
-        {isStaff && (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <CountCard icon={Ticket} label={text.total} value={counts.total || 0} tone="border-white/10 bg-white/[0.04] text-white/70" />
-            <CountCard icon={Clock3} label={text.open} value={counts.open || 0} tone="border-cyan-500/20 bg-cyan-500/10 text-cyan-300" />
-            <CountCard icon={UserRoundCheck} label={text.claimed} value={counts.claimed || 0} tone="border-amber-500/20 bg-amber-500/10 text-amber-300" />
-            <CountCard icon={Shield} label={text.unclaimed} value={counts.unclaimed || 0} tone="border-violet-500/20 bg-violet-500/10 text-violet-300" />
-            <CountCard icon={CheckCircle2} label={text.closed} value={counts.closed || 0} tone="border-emerald-500/20 bg-emerald-500/10 text-emerald-300" />
-          </div>
-        )}
-
-        <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-6">
             {!isStaff && (
               <form onSubmit={handleCreate} className="rounded-[30px] border border-white/[0.08] bg-white/[0.03] p-5">
@@ -626,13 +956,22 @@ export default function SupportPage() {
                   <h2 className="font-display text-xl font-700 text-white">{text.newTicket}</h2>
                   <p className="mt-1 text-sm text-white/45">{text.newTicketHint}</p>
                 </div>
+
                 <div className="grid gap-3">
                   {['bug', 'report', 'account', 'question', 'other'].map((category) => {
                     const meta = CATEGORY_META[category]
                     const Icon = meta.icon
                     const active = newTicket.category === category
+
                     return (
-                      <button key={category} type="button" onClick={() => setNewTicket((state) => ({ ...state, category }))} className={`rounded-[24px] border p-4 text-left transition-all ${active ? meta.tone : 'border-white/10 bg-black/20 text-white/65 hover:bg-white/[0.04] hover:text-white'}`}>
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => setNewTicket((state) => ({ ...state, category }))}
+                        className={`rounded-[22px] border p-4 text-left transition-all ${
+                          active ? meta.tone : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/[0.04] hover:text-white'
+                        }`}
+                      >
                         <div className="flex items-center gap-3">
                           <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${active ? meta.tone : 'border-white/10 bg-white/[0.04]'}`}>
                             <Icon className="h-4 w-4" />
@@ -646,11 +985,22 @@ export default function SupportPage() {
                     )
                   })}
                 </div>
+
                 <div className="mt-5">
-                  <label className="text-xs uppercase tracking-[0.24em] text-white/40">{text.message}</label>
-                  <textarea value={newTicket.message} onChange={(event) => setNewTicket((state) => ({ ...state, message: event.target.value }))} className="input-field mt-2 min-h-[190px] resize-none" placeholder={text.messagePlaceholder} />
+                  <label className="text-[11px] uppercase tracking-[0.24em] text-white/35">{text.message}</label>
+                  <textarea
+                    value={newTicket.message}
+                    onChange={(event) => setNewTicket((state) => ({ ...state, message: event.target.value }))}
+                    className="input-field mt-2 min-h-[180px] resize-none"
+                    placeholder={text.messagePlaceholder}
+                  />
                 </div>
-                <button type="submit" disabled={creatingTicket || !newTicket.message.trim()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-cyan-300 disabled:opacity-60">
+
+                <button
+                  type="submit"
+                  disabled={creatingTicket || !newTicket.message.trim()}
+                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-cyan-300 disabled:opacity-60"
+                >
                   <Send className="h-4 w-4" />
                   {text.sendTicket}
                 </button>
@@ -659,50 +1009,83 @@ export default function SupportPage() {
 
             <div className="rounded-[30px] border border-white/[0.08] bg-white/[0.03] p-5">
               <div className="mb-4">
-                <h2 className="font-display text-xl font-700 text-white">{isStaff ? text.queue : text.title}</h2>
-                <p className="mt-1 text-sm text-white/45">{isStaff ? text.queueHint : text.userSubtitle}</p>
+                <h2 className="font-display text-xl font-700 text-white">{isStaff ? text.queue : text.myTickets}</h2>
+                <p className="mt-1 text-sm text-white/45">{isStaff ? text.queueHint : text.myTicketsHint}</p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-                <div>
-                  <label className="text-xs uppercase tracking-[0.24em] text-white/40">{text.status}</label>
-                  <select value={filters.status} onChange={(event) => setFilters((state) => ({ ...state, status: event.target.value }))} className="select-field mt-2">
-                    {['all', 'open', 'claimed', 'closed'].map((status) => <option key={status} value={status}>{text.statuses[status]}</option>)}
-                  </select>
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {['all', 'open', 'claimed', 'closed'].map((status) => (
+                    <SegmentedButton
+                      key={status}
+                      active={filters.status === status}
+                      onClick={() => setFilters((state) => ({ ...state, status }))}
+                    >
+                      {text.filters[status]}
+                    </SegmentedButton>
+                  ))}
                 </div>
-                <div>
-                  <label className="text-xs uppercase tracking-[0.24em] text-white/40">{text.reason}</label>
-                  <select value={filters.category} onChange={(event) => setFilters((state) => ({ ...state, category: event.target.value }))} className="select-field mt-2">
-                    {['all', 'bug', 'report', 'account', 'question', 'other'].map((category) => <option key={category} value={category}>{text.categories[category]}</option>)}
-                  </select>
-                </div>
+
                 {isStaff && (
-                  <div>
-                    <label className="text-xs uppercase tracking-[0.24em] text-white/40">{text.claim}</label>
-                    <select value={filters.claim} onChange={(event) => setFilters((state) => ({ ...state, claim: event.target.value }))} className="select-field mt-2">
-                      {['all', 'mine', 'unclaimed'].map((claim) => <option key={claim} value={claim}>{text.claims[claim]}</option>)}
-                    </select>
-                  </div>
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {['all', 'mine', 'unclaimed'].map((claim) => (
+                        <SegmentedButton
+                          key={claim}
+                          active={filters.claim === claim}
+                          onClick={() => setFilters((state) => ({ ...state, claim }))}
+                        >
+                          {text.filters[claim]}
+                        </SegmentedButton>
+                      ))}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px]">
+                      <div className="relative">
+                        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+                        <input
+                          value={filters.q}
+                          onChange={(event) => setFilters((state) => ({ ...state, q: event.target.value }))}
+                          className="input-field !pl-11"
+                          placeholder={text.searchPlaceholder}
+                        />
+                      </div>
+                      <select
+                        value={filters.category}
+                        onChange={(event) => setFilters((state) => ({ ...state, category: event.target.value }))}
+                        className="select-field"
+                      >
+                        {['all', 'bug', 'report', 'account', 'question', 'other'].map((category) => (
+                          <option key={category} value={category}>{text.categories[category]}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
                 )}
-                <div>
-                  <label className="text-xs uppercase tracking-[0.24em] text-white/40">{text.search}</label>
-                  <div className="relative mt-2">
-                    <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-                    <input value={filters.q} onChange={(event) => setFilters((state) => ({ ...state, q: event.target.value }))} className="input-field !pl-11" placeholder={text.searchPlaceholder} />
-                  </div>
-                </div>
               </div>
 
               <div className="mt-5 max-h-[760px] space-y-3 overflow-y-auto pr-1 scrollbar-none">
-                {tickets.length === 0 && <div className="rounded-[24px] border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center text-white/45">{isStaff ? text.noQueue : text.noMine}</div>}
+                {tickets.length === 0 && (
+                  <div className="rounded-[24px] border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center text-white/45">
+                    {isStaff ? text.noQueue : text.noMine}
+                  </div>
+                )}
+
                 {tickets.map((ticket) => (
-                  <TicketItem key={ticket.id} ticket={ticket} selected={ticket.id === selectedTicketId} locale={locale} text={text} onSelect={setSelectedTicketId} />
+                  <TicketRow
+                    key={ticket.id}
+                    ticket={ticket}
+                    locale={locale}
+                    text={text}
+                    selected={ticket.id === selectedTicketId}
+                    onSelect={setSelectedTicketId}
+                  />
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="flex min-h-[840px] flex-col overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.03]">
+          <div className="flex min-h-[860px] flex-col overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.03]">
             {renderConversation()}
           </div>
         </div>
