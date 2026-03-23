@@ -8,6 +8,7 @@ backend/data/*.db-shm
 backend/data/*.db-wal
 backend/public-*.log
 logs
+*.log
 .git
 .DS_Store
 Thumbs.db
