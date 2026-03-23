@@ -11,13 +11,13 @@ const RULE_KEYS = {
 };
 
 const RULE_NAMES = {
-  [RULE_KEYS.ANTI_INVITE]: 'DiscordForge • Anti-invitation',
-  [RULE_KEYS.ANTI_MASS_MENTION]: 'DiscordForge • Anti-mention',
-  [RULE_KEYS.AUTO_MOD_PRESET]: 'DiscordForge • AutoMod standard',
-  [RULE_KEYS.AUTO_MOD_CUSTOM]: 'DiscordForge • AutoMod personnalise',
+  [RULE_KEYS.ANTI_INVITE]: 'DiscordForger • Anti-invitation',
+  [RULE_KEYS.ANTI_MASS_MENTION]: 'DiscordForger • Anti-mention',
+  [RULE_KEYS.AUTO_MOD_PRESET]: 'DiscordForger • AutoMod standard',
+  [RULE_KEYS.AUTO_MOD_CUSTOM]: 'DiscordForger • AutoMod personnalise',
 };
 
-const AUTO_MOD_PREFIX = 'DiscordForge • ';
+const AUTO_MOD_PREFIX = 'DiscordForger • ';
 const TRIGGER_TYPES = {
   KEYWORD: 1,
   KEYWORD_PRESET: 4,
@@ -202,7 +202,7 @@ async function syncNativeAutoModRules(token, discordGuildId, configs) {
     if (!descriptor.enabled || !descriptor.payload) {
       if (existingRule) {
         try {
-          await discordService.deleteAutoModerationRule(token, discordGuildId, existingRule.id, `DiscordForge sync ${ruleName}`);
+          await discordService.deleteAutoModerationRule(token, discordGuildId, existingRule.id, `DiscordForger sync ${ruleName}`);
         } catch (error) {
           logger.warn(`AutoMod delete failed for ${ruleName} on guild ${discordGuildId}: ${error.message}`);
         }
@@ -212,9 +212,9 @@ async function syncNativeAutoModRules(token, discordGuildId, configs) {
 
     try {
       if (existingRule) {
-        await discordService.modifyAutoModerationRule(token, discordGuildId, existingRule.id, descriptor.payload, `DiscordForge sync ${ruleName}`);
+        await discordService.modifyAutoModerationRule(token, discordGuildId, existingRule.id, descriptor.payload, `DiscordForger sync ${ruleName}`);
       } else {
-        await discordService.createAutoModerationRule(token, discordGuildId, descriptor.payload, `DiscordForge sync ${ruleName}`);
+        await discordService.createAutoModerationRule(token, discordGuildId, descriptor.payload, `DiscordForger sync ${ruleName}`);
       }
     } catch (error) {
       logger.warn(`AutoMod upsert failed for ${ruleName} on guild ${discordGuildId}: ${error.message}`);
@@ -224,7 +224,7 @@ async function syncNativeAutoModRules(token, discordGuildId, configs) {
   for (const rule of existingManaged.values()) {
     if (desiredNames.has(rule.name)) continue;
     try {
-      await discordService.deleteAutoModerationRule(token, discordGuildId, rule.id, `DiscordForge cleanup ${rule.name}`);
+      await discordService.deleteAutoModerationRule(token, discordGuildId, rule.id, `DiscordForger cleanup ${rule.name}`);
     } catch (error) {
       logger.warn(`AutoMod cleanup failed for ${rule.name} on guild ${discordGuildId}: ${error.message}`);
     }
