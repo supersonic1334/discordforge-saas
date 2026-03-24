@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { providerAPI } from '../services/api'
 import { useI18n } from '../i18n'
 import KeyDeleteConfirmDialog from '../components/KeyDeleteConfirmDialog'
+import ProviderQuickLinks from '../components/ProviderQuickLinks'
 
 const UI = {
   fr: {
@@ -17,6 +18,10 @@ const UI = {
     applyingModel: 'Mise à jour...',
     apiKey: 'Clé API',
     apiKeyHelp: 'Ta clé est stockée, vérifiée, puis reliée au modèle que tu choisis.',
+    quickAccessTitle: 'Acces rapide',
+    quickAccessHelp: 'Ouvre directement la page officielle pour creer ou copier la cle API de ce fournisseur.',
+    quickAccessKey: 'Ouvrir la page API',
+    quickAccessDocs: 'Voir les modeles',
     save: 'Enregistrer la clé',
     saving: 'Enregistrement...',
     refresh: 'Vérifier',
@@ -59,6 +64,10 @@ const UI = {
     applyingModel: 'Updating...',
     apiKey: 'API key',
     apiKeyHelp: 'Your key is stored, checked, then linked to the model you choose.',
+    quickAccessTitle: 'Quick access',
+    quickAccessHelp: 'Open the official page directly to create or copy this provider API key.',
+    quickAccessKey: 'Open API page',
+    quickAccessDocs: 'View models',
     save: 'Save key',
     saving: 'Saving...',
     refresh: 'Refresh',
@@ -101,6 +110,10 @@ const UI = {
     applyingModel: 'Actualizando...',
     apiKey: 'Clave API',
     apiKeyHelp: 'Tu clave se guarda, se verifica y queda vinculada al modelo que eliges.',
+    quickAccessTitle: 'Acceso rapido',
+    quickAccessHelp: 'Abre directamente la pagina oficial para crear o copiar la clave API de este proveedor.',
+    quickAccessKey: 'Abrir pagina API',
+    quickAccessDocs: 'Ver modelos',
     save: 'Guardar clave',
     saving: 'Guardando...',
     refresh: 'Verificar',
@@ -309,6 +322,14 @@ export default function ProviderPanel() {
           </select>
           {selectedProvider?.description ? <p className="text-xs text-white/35 mt-1">{selectedProvider.description}</p> : null}
         </div>
+
+        <ProviderQuickLinks
+          provider={selectedProvider}
+          title={ui.quickAccessTitle}
+          description={ui.quickAccessHelp}
+          keyLabel={ui.quickAccessKey}
+          docsLabel={ui.quickAccessDocs}
+        />
 
         <div>
           <label className="text-xs font-mono text-white/40 mb-1.5 block">{ui.model}</label>
