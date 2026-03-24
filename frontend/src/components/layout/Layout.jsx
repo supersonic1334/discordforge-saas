@@ -79,7 +79,6 @@ export default function Layout() {
     { icon: MessageSquare, label: t('layout.nav.moderation'), path: '/dashboard/moderation', needsGuild: true },
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
-    { icon: Star, label: t('layout.nav.reviews', 'Avis'), path: '/dashboard/reviews' },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]
 
@@ -317,6 +316,25 @@ export default function Layout() {
       </nav>
 
       <div className="p-3 border-t border-white/[0.06] space-y-1">
+        <Link
+          to="/dashboard/reviews"
+          onClick={() => setMobileOpen(false)}
+          className={`group relative overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+            isActive('/dashboard/reviews')
+              ? 'bg-gradient-to-r from-amber-500/16 via-yellow-400/10 to-amber-500/16 border border-amber-400/25 text-amber-200 shadow-[0_0_30px_rgba(250,204,21,0.18)]'
+              : 'text-white/55 border border-amber-500/10 hover:text-amber-200 hover:border-amber-400/18 hover:bg-gradient-to-r hover:from-amber-500/10 hover:via-yellow-400/6 hover:to-amber-500/10 hover:shadow-[0_0_24px_rgba(250,204,21,0.12)]'
+          } ${collapsed ? 'justify-center' : ''}`}
+        >
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-[radial-gradient(circle_at_left,rgba(250,204,21,0.14),transparent_58%)]" />
+          <Star className="relative z-10 w-4 h-4 shrink-0 text-amber-300 fill-amber-300/40 group-hover:fill-amber-300/60 transition-all duration-200 group-hover:scale-105" />
+          {!collapsed && (
+            <>
+              <span className="relative z-10 font-medium">{t('layout.nav.reviews', 'Avis')}</span>
+              {isActive('/dashboard/reviews') && <div className="relative z-10 ml-auto w-1.5 h-1.5 rounded-full bg-amber-300" />}
+            </>
+          )}
+        </Link>
+
         <Link
           to="/dashboard/support"
           onClick={() => setMobileOpen(false)}
