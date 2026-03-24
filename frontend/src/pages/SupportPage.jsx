@@ -32,8 +32,6 @@ const TEXT = {
     userSubtitle: 'Tu laisses un message, le support te repond ici automatiquement.',
     staffSubtitle: 'Vue support claire: file, ticket, prise en charge et reponse en direct.',
     routeMissing: 'Le support backend n est pas charge. Redemarre le backend pour activer la route support.',
-    autoSync: 'Mise a jour auto',
-    syncHint: 'Le support se met a jour tout seul.',
     newTicket: 'Nouvelle demande',
     newTicketHint: 'Choisis une raison, ecris ton message, puis envoie.',
     myTickets: 'Mes tickets',
@@ -122,8 +120,6 @@ const TEXT = {
       closed: 'Fermes',
     },
     messages: 'messages',
-    staffNote: 'Le ticket se met a jour sans bouton d actualisation.',
-    ownerNote: 'Tu peux repondre ici comme dans un chat.',
     subject: 'Titre',
   },
   en: {
@@ -133,8 +129,6 @@ const TEXT = {
     userSubtitle: 'Leave a message and the team replies here automatically.',
     staffSubtitle: 'Clear support view: queue, ticket handling and live replies.',
     routeMissing: 'The support backend is not loaded. Restart the backend to enable support routes.',
-    autoSync: 'Auto sync',
-    syncHint: 'Support refreshes automatically.',
     newTicket: 'New request',
     newTicketHint: 'Pick a reason, write your message, then send it.',
     myTickets: 'My tickets',
@@ -223,8 +217,6 @@ const TEXT = {
       closed: 'Closed',
     },
     messages: 'messages',
-    staffNote: 'The queue updates automatically without a refresh button.',
-    ownerNote: 'You can answer here like a chat.',
     subject: 'Title',
   },
 }
@@ -399,8 +391,6 @@ export default function SupportPage() {
   const [sendingReply, setSendingReply] = useState(false)
   const [editingTicket, setEditingTicket] = useState(false)
   const [busyAction, setBusyAction] = useState('')
-  const [lastSyncAt, setLastSyncAt] = useState(null)
-
   const selectedRef = useRef(null)
   const queryRef = useRef(null)
   const messagesRef = useRef(null)
@@ -477,8 +467,6 @@ export default function SupportPage() {
         setSelectedTicketId(nextSelected)
         if (!nextSelected) setDetail(null)
       }
-
-      setLastSyncAt(new Date().toISOString())
     } catch (error) {
       if (!silent) notifyError(error, 'support-load')
     } finally {
@@ -498,7 +486,6 @@ export default function SupportPage() {
         category: response.data.ticket?.category || 'bug',
         status: response.data.ticket?.status || 'open',
       })
-      setLastSyncAt(new Date().toISOString())
     } catch (error) {
       if (!silent) {
         setDetail(null)
@@ -770,18 +757,6 @@ export default function SupportPage() {
             ) : null}
           </div>
 
-          {isStaff && (
-            <div className="mt-4 rounded-[22px] border border-cyan-500/15 bg-cyan-500/[0.06] px-4 py-3 text-sm text-cyan-100/90">
-              {text.staffNote}
-            </div>
-          )}
-
-          {!isStaff && (
-            <div className="mt-4 rounded-[22px] border border-violet-500/15 bg-violet-500/[0.08] px-4 py-3 text-sm text-violet-100/90">
-              {text.ownerNote}
-            </div>
-          )}
-
           {editingTicket && isPrimaryFounder && (
             <div className="mt-5 rounded-[24px] border border-violet-500/20 bg-violet-500/10 p-4">
               <div className="grid gap-4 md:grid-cols-3">
@@ -909,7 +884,7 @@ export default function SupportPage() {
                 />
               </div>
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm text-white/35">{reply.trim() ? text.previewReply : text.syncHint}</div>
+                <div className="text-sm text-white/35">{reply.trim() ? text.previewReply : ''}</div>
                 <button
                   type="submit"
                   disabled={sendingReply || !reply.trim()}
@@ -943,25 +918,13 @@ export default function SupportPage() {
             <p className="mt-2 max-w-3xl text-white/45">{isStaff ? text.staffSubtitle : text.userSubtitle}</p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
-              <div className="flex items-center gap-2 text-cyan-300">
-                <Clock3 className={`h-4 w-4 ${loadingList || loadingDetail ? 'animate-spin' : ''}`} />
-                <span className="text-xs font-mono uppercase tracking-[0.24em]">{text.autoSync}</span>
-              </div>
-              <div className="mt-2 text-sm text-white/45">
-                {lastSyncAt ? `${text.syncHint} ${formatTime(locale, lastSyncAt)}` : text.syncHint}
-              </div>
+          {isStaff && (
+            <div className="flex flex-wrap gap-3">
+              <StatCard label={text.counts.open} value={counts.open || 0} tone="border-cyan-500/20 bg-cyan-500/10 text-cyan-300" />
+              <StatCard label={text.counts.claimed} value={counts.claimed || 0} tone="border-amber-500/20 bg-amber-500/10 text-amber-300" />
+              <StatCard label={text.counts.closed} value={counts.closed || 0} tone="border-white/10 bg-white/[0.04] text-white/70" />
             </div>
-
-            {isStaff && (
-              <>
-                <StatCard label={text.counts.open} value={counts.open || 0} tone="border-cyan-500/20 bg-cyan-500/10 text-cyan-300" />
-                <StatCard label={text.counts.claimed} value={counts.claimed || 0} tone="border-amber-500/20 bg-amber-500/10 text-amber-300" />
-                <StatCard label={text.counts.closed} value={counts.closed || 0} tone="border-white/10 bg-white/[0.04] text-white/70" />
-              </>
-            )}
-          </div>
+          )}
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
