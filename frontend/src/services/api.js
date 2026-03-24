@@ -120,6 +120,7 @@ export const adminAPI = {
   getAIRecommendation: (params) => api.get('/admin/ai/recommendation', { params }),
   setAI:      (data)     => api.put('/admin/ai', data),
   refreshProviderKey: (keyId) => api.post(`/admin/ai/provider-keys/${keyId}/refresh`),
+  updateProviderKeyModel: (keyId, model) => api.patch(`/admin/ai/provider-keys/${keyId}/model`, { model }),
   getProviderKeySecret: (keyId) => api.get(`/admin/ai/provider-keys/${keyId}/secret`),
   deleteProviderKey: (keyId) => api.delete(`/admin/ai/provider-keys/${keyId}`),
   system:     ()         => api.get('/admin/system'),
@@ -131,6 +132,7 @@ export const providerAPI = {
   getAI: () => api.get('/provider/ai'),
   saveKey: (data) => api.put('/provider/ai', data),
   refreshKey: (keyId) => api.post(`/provider/ai/${keyId}/refresh`),
+  updateModel: (keyId, model) => api.patch(`/provider/ai/${keyId}/model`, { model }),
   deleteKey: (keyId) => api.delete(`/provider/ai/${keyId}`),
 }
 
