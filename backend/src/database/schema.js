@@ -275,6 +275,7 @@ const SCHEMA = [
     status            TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','claimed','closed')),
     claimed_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     claimed_at        TEXT,
+    claimed_once_at   TEXT,
     closed_at         TEXT,
     closed_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     message_count     INTEGER NOT NULL DEFAULT 0,
