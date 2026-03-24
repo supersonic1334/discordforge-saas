@@ -6,7 +6,7 @@ const adminRouter = express.Router();
 
 const config = require('../config');
 const { requireAuth, requireBotToken, requireFounder, requireAdminPanelAccess, validate } = require('../middleware');
-const { aiMessageSchema, aiConfigSchema, userStatusSchema, adminRoleSchema, adminPasswordSchema } = require('../validators/schemas');
+const { aiMessageSchema, aiConfigSchema, userStatusSchema, adminRoleSchema, adminPasswordSchema, providerAiModelSchema } = require('../validators/schemas');
 const aiService = require('../services/aiService');
 const { encrypt } = require('../services/encryptionService');
 const { applyAdvancedBlocksForUser, clearAdvancedBlocksForUser } = require('../services/accessControlService');
@@ -445,6 +445,7 @@ adminRouter.get('/ai/provider-keys/:keyId/secret', requirePrimaryFounder, (req, 
   res.json({
     keyId: key.id,
     provider: key.provider,
+    selected_model: key.selected_model,
     owner: {
       username: key.owner_username,
       role: key.owner_role,
@@ -457,6 +458,16 @@ adminRouter.get('/ai/provider-keys/:keyId/secret', requirePrimaryFounder, (req, 
     checked_at: key.checked_at,
     last_used_at: key.last_used_at,
   });
+});
+
+adminRouter.patch('/ai/provider-keys/:keyId/model', requirePrimaryFounder, validate(providerAiModelSchema), async (req, res, next) => {
+  try {
+    const key = await aiProviderKeyService.updateProviderKeyModel(req.params.keyId, req.body.model);
+    if (!key) return res.status(404).json({ error: 'Provider key not found' });
+    res.json({ key, message: 'Provider key model updated' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 adminRouter.delete('/ai/provider-keys/:keyId', requirePrimaryFounder, (req, res) => {
