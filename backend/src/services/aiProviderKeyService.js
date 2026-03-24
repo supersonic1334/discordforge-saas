@@ -35,13 +35,29 @@ function buildStatusOrderSql() {
   END`;
 }
 
+function resolveProviderModel(provider, selectedModel) {
+  const normalizedProvider = normalizeProvider(provider);
+  const catalogEntry = getProviderCatalog(normalizedProvider);
+  if (!catalogEntry) return '';
+
+  const requestedModel = String(selectedModel || '').trim();
+  if (requestedModel && catalogEntry.models.some((model) => model.id === requestedModel)) {
+    return resolveConfiguredModel(normalizedProvider, requestedModel);
+  }
+
+  return resolveConfiguredModel(normalizedProvider, catalogEntry.defaultModel || getDefaultModel(normalizedProvider));
+}
+
 function mapProviderKeyRow(row, selectedKeyId = null) {
   if (!row) return null;
+
+  const selectedModel = resolveProviderModel(row.provider, row.selected_model);
 
   return {
     id: row.id,
     user_id: row.user_id,
     provider: row.provider,
+    selected_model: selectedModel,
     status: normalizeStatus(row.status),
     status_reason: row.status_reason || '',
     is_enabled: !!row.is_enabled,
@@ -186,14 +202,14 @@ async function probeOpenAICompatibleKey(provider, apiKey, model) {
   return classifyProviderError(response.status, rawMessage);
 }
 
-async function validateProviderKey(provider, apiKey) {
+async function validateProviderKey(provider, apiKey, selectedModel = null) {
   const normalizedProvider = normalizeProvider(provider);
   const catalogEntry = getProviderCatalog(normalizedProvider);
   if (!catalogEntry) {
     return { status: 'invalid', reason: 'Unknown provider.' };
   }
 
-  const model = resolveConfiguredModel(normalizedProvider, getDefaultModel(normalizedProvider));
+  const model = resolveProviderModel(normalizedProvider, selectedModel);
 
   try {
     if (catalogEntry.apiStyle === 'anthropic') {
@@ -295,7 +311,7 @@ function getConfiguredProviderKey(aiConfigRow) {
     `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url, u.email AS owner_email
      FROM ai_provider_keys k
      JOIN users u ON u.id = k.user_id
-     WHERE k.provider = ? AND k.is_enabled = 1
+     WHERE k.provider = ? AND k.is_enabled = 1 AND k.status IN ('valid','unknown')
      ORDER BY CASE k.status
        WHEN 'valid' THEN 0
        WHEN 'unknown' THEN 1
@@ -311,9 +327,10 @@ function getConfiguredProviderKey(aiConfigRow) {
   return null;
 }
 
-async function saveProviderKey(userId, { provider, apiKey }) {
+async function saveProviderKey(userId, { provider, apiKey, selectedModel }) {
   const normalizedProvider = normalizeProvider(provider);
-  const probe = await validateProviderKey(normalizedProvider, apiKey);
+  const resolvedModel = resolveProviderModel(normalizedProvider, selectedModel);
+  const probe = await validateProviderKey(normalizedProvider, apiKey, resolvedModel);
   const existing = db.raw(
     'SELECT * FROM ai_provider_keys WHERE user_id = ? AND provider = ? LIMIT 1',
     [userId, normalizedProvider]
@@ -323,6 +340,7 @@ async function saveProviderKey(userId, { provider, apiKey }) {
     provider: normalizedProvider,
     encrypted_api_key: encrypt(apiKey),
     key_hash: hash(apiKey),
+    selected_model: resolvedModel,
     status: probe.status,
     status_reason: probe.reason,
     is_enabled: 1,
@@ -351,7 +369,7 @@ async function saveProviderKey(userId, { provider, apiKey }) {
         id, provider, encrypted_api_key, active_provider_key_id, model, max_tokens, temperature,
         user_quota_tokens, site_quota_tokens, quota_window_hours, auto_mode, enabled, updated_at
       ) VALUES ('singleton', ?, NULL, ?, ?, 1024, 0.7, 4000, 20000, 5, 1, 1, ?)
-    `).run(normalizedProvider, keyId, resolveConfiguredModel(normalizedProvider, getDefaultModel(normalizedProvider)), now);
+    `).run(normalizedProvider, keyId, resolvedModel, now);
   } else if (
     normalizeProvider(aiConfig.provider) === normalizedProvider
     && (!aiConfig.active_provider_key_id || aiConfig.active_provider_key_id === existing?.id)
@@ -370,9 +388,27 @@ async function refreshProviderKeyStatus(id) {
   const row = db.findOne('ai_provider_keys', { id });
   if (!row) return null;
 
-  const probe = await validateProviderKey(row.provider, decrypt(row.encrypted_api_key));
+  const probe = await validateProviderKey(row.provider, decrypt(row.encrypted_api_key), row.selected_model);
   const now = new Date().toISOString();
   db.update('ai_provider_keys', {
+    status: probe.status,
+    status_reason: probe.reason,
+    checked_at: now,
+  }, { id });
+
+  return getProviderKeyById(id);
+}
+
+async function updateProviderKeyModel(id, selectedModel) {
+  const row = db.findOne('ai_provider_keys', { id });
+  if (!row) return null;
+
+  const resolvedModel = resolveProviderModel(row.provider, selectedModel);
+  const probe = await validateProviderKey(row.provider, decrypt(row.encrypted_api_key), resolvedModel);
+  const now = new Date().toISOString();
+
+  db.update('ai_provider_keys', {
+    selected_model: resolvedModel,
     status: probe.status,
     status_reason: probe.reason,
     checked_at: now,
@@ -427,6 +463,7 @@ module.exports = {
   getConfiguredProviderKey,
   saveProviderKey,
   refreshProviderKeyStatus,
+  updateProviderKeyModel,
   markProviderKeyStatus,
   markProviderKeyUsed,
   deleteProviderKey,
