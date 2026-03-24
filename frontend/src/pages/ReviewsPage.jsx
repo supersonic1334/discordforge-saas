@@ -370,7 +370,7 @@ export default function ReviewsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [overview, setOverview] = useState({ stats: { average_rating: 0, total_reviews: 0 }, reviews: [], my_review: null })
-  const [ratingHalf, setRatingHalf] = useState(9)
+  const [ratingHalf, setRatingHalf] = useState(10)
   const [message, setMessage] = useState('')
   const [draftDirty, setDraftDirty] = useState(false)
 
