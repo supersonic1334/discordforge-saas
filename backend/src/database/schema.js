@@ -242,6 +242,7 @@ const SCHEMA = [
     provider          TEXT NOT NULL CHECK(provider IN ('anthropic','openai','gemini','xai','groq','mistral','together','deepseek','openrouter','perplexity')),
     encrypted_api_key TEXT NOT NULL,
     key_hash          TEXT NOT NULL,
+    selected_model    TEXT,
     status            TEXT NOT NULL DEFAULT 'unknown' CHECK(status IN ('unknown','valid','quota_exhausted','invalid')),
     status_reason     TEXT,
     is_enabled        INTEGER NOT NULL DEFAULT 1,
