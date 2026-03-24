@@ -174,6 +174,11 @@ const aiConfigSchema = z.object({
 const providerAiKeySchema = z.object({
   provider: z.enum(AI_PROVIDER_IDS),
   api_key: z.string().trim().min(10).max(500),
+  model: z.string().trim().min(1).max(120),
+});
+
+const providerAiModelSchema = z.object({
+  model: z.string().trim().min(1).max(120),
 });
 
 const userStatusSchema = z.object({
@@ -272,6 +277,7 @@ module.exports = {
   aiMessageSchema,
   aiConfigSchema,
   providerAiKeySchema,
+  providerAiModelSchema,
   userStatusSchema,
   adminRoleSchema,
   adminPasswordSchema,
