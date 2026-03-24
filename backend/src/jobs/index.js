@@ -93,14 +93,15 @@ const botWatchdogJob = cron.schedule('*/5 * * * *', async () => {
 }, { scheduled: false });
 
 /**
- * Delete support tickets that stayed closed for 10 minutes.
+ * Delete support tickets that stayed closed for 10 minutes,
+ * and open tickets that were never claimed after 24 hours.
  * Runs every minute.
  */
 const supportTicketCleanupJob = cron.schedule('* * * * *', () => {
   try {
-    const deleted = supportService.purgeExpiredClosedTickets();
+    const deleted = supportService.purgeExpiredTickets();
     if (deleted > 0) {
-      logger.info(`Support cleanup: deleted ${deleted} closed tickets`);
+      logger.info(`Support cleanup: deleted ${deleted} expired tickets`);
     }
   } catch (err) {
     logger.error(`Support cleanup job failed: ${err.message}`);
