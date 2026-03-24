@@ -88,6 +88,26 @@ export default function AdminPanel() {
   const [showPrivateEmail, setShowPrivateEmail] = useState(false)
   const [loadingPrivateEmail, setLoadingPrivateEmail] = useState(false)
 
+  const syncProviderKeys = async ({ silent = true } = {}) => {
+    if (!canManageProviderPool) return
+
+    try {
+      const res = await adminAPI.getAI()
+      setCatalog((prev) => prev.length ? prev : (res.data.catalog || []))
+      setAiCfg((prev) => ({
+        ...prev,
+        provider_keys: res.data.provider_keys || [],
+        active_provider_key_id: res.data.active_provider_key_id || '',
+        provider_key_source: res.data.provider_key_source || prev.provider_key_source,
+        provider_key_owner: res.data.provider_key_owner || prev.provider_key_owner,
+      }))
+    } catch (error) {
+      if (!silent) {
+        toast.error(getErrorMessage(error))
+      }
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     const loadSystemInfo = () => {
@@ -160,6 +180,19 @@ export default function AdminPanel() {
       setTab('ai')
     }
   }, [canManageUsers, canManageProviderPool, tab])
+
+  useEffect(() => {
+    if (!canManageProviderPool) return undefined
+
+    syncProviderKeys({ silent: true })
+    const intervalId = window.setInterval(() => {
+      syncProviderKeys({ silent: true })
+    }, 8000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [canManageProviderPool, tab])
 
   const selectedProvider = useMemo(
     () => catalog.find((provider) => provider.id === aiCfg.provider) || null,
