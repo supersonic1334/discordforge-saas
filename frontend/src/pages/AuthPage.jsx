@@ -203,24 +203,11 @@ export default function AuthPage() {
               <motion.div
                 aria-hidden="true"
                 animate={{
-                  scale: [1, 1.06, 0.98, 1],
-                  opacity: [0.18, 0.34, 0.2, 0.18],
+                  scale: [1, 1.05, 0.99, 1],
+                  opacity: [0.14, 0.24, 0.16, 0.14],
                 }}
                 transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute inset-x-[14%] top-[10%] h-[70%] rounded-full bg-[radial-gradient(circle,rgba(78,205,255,0.28),rgba(176,78,255,0.12)_55%,transparent_76%)] blur-3xl"
-              />
-
-              <motion.div
-                aria-hidden="true"
-                animate={{
-                  rotate: [0, 180, 360],
-                  scale: [1, 1.04, 1],
-                }}
-                transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
-                className="absolute left-1/2 top-1/2 h-[76%] w-[76%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10"
-                style={{
-                  boxShadow: '0 0 30px rgba(84,165,255,0.14), inset 0 0 24px rgba(255,166,92,0.08)',
-                }}
+                className="absolute inset-x-[18%] top-[12%] h-[62%] rounded-full bg-[radial-gradient(circle,rgba(78,205,255,0.22),rgba(176,78,255,0.08)_58%,transparent_78%)] blur-3xl"
               />
 
               <motion.div
@@ -251,13 +238,11 @@ export default function AuthPage() {
               <motion.div
                 aria-hidden="true"
                 animate={{
-                  x: [0, 10, -6, 0],
-                  y: [0, -8, 4, 0],
-                  opacity: [0.42, 0.9, 0.48, 0.42],
-                  scale: [0.92, 1.08, 0.96, 0.92],
+                  opacity: [0.12, 0.2, 0.12],
+                  scale: [0.98, 1.02, 0.98],
                 }}
-                transition={{ duration: 4.6, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute right-[12%] top-[12%] z-20 h-6 w-6 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.95),rgba(255,181,92,0.86)_34%,rgba(255,181,92,0.16)_66%,transparent_76%)] blur-[1px]"
+                transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute inset-x-[24%] bottom-[18%] h-10 rounded-full bg-[radial-gradient(circle,rgba(88,129,255,0.24),transparent_72%)] blur-2xl"
               />
             </motion.div>
             <p className="text-white/40 text-sm">{t('auth.tagline')}</p>
