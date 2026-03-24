@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Crown, Users, Bot, Activity, Ban, ShieldCheck, Settings2, ChevronDown, ChevronUp, Trash2, KeyRound, RefreshCw, Eye, EyeOff, Copy, Check } from 'lucide-react'
+import { Crown, Users, Bot, Activity, Ban, ShieldCheck, Settings2, ChevronDown, ChevronUp, Trash2, KeyRound, RefreshCw, Eye, EyeOff, Copy, Check, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminAPI, authAPI } from '../services/api'
 import { useI18n } from '../i18n'
 import { useAuthStore } from '../stores'
+import KeyDeleteConfirmDialog from '../components/KeyDeleteConfirmDialog'
 
 const DEFAULT_AI_CFG = {
   provider: 'anthropic',
@@ -74,10 +75,13 @@ export default function AdminPanel() {
   const [saving, setSaving] = useState(false)
   const [updatingUserId, setUpdatingUserId] = useState(null)
   const [refreshingProviderKeyId, setRefreshingProviderKeyId] = useState(null)
+  const [updatingProviderKeyModelId, setUpdatingProviderKeyModelId] = useState(null)
   const [deletingProviderKeyId, setDeletingProviderKeyId] = useState(null)
   const [loadingProviderKeySecretId, setLoadingProviderKeySecretId] = useState(null)
   const [revealedProviderKeys, setRevealedProviderKeys] = useState({})
+  const [providerKeyModelDrafts, setProviderKeyModelDrafts] = useState({})
   const [copiedProviderKeyId, setCopiedProviderKeyId] = useState(null)
+  const [providerKeyDeleteDialog, setProviderKeyDeleteDialog] = useState(null)
   const [openAdvancedUserId, setOpenAdvancedUserId] = useState(null)
   const [privateEmail, setPrivateEmail] = useState('')
   const [showPrivateEmail, setShowPrivateEmail] = useState(false)
@@ -212,6 +216,10 @@ export default function AdminPanel() {
     () => (aiCfg.provider_keys || []).filter((entry) => entry.provider === aiCfg.provider),
     [aiCfg.provider_keys, aiCfg.provider]
   )
+  const usableProviderPool = useMemo(
+    () => providerPool.filter((entry) => entry.status === 'valid' || entry.status === 'unknown'),
+    [providerPool]
+  )
   const providerLabelById = useMemo(
     () => Object.fromEntries((catalog || []).map((provider) => [provider.id, provider.label])),
     [catalog]
@@ -272,6 +280,15 @@ export default function AdminPanel() {
     () => (aiCfg.provider_keys || []).filter((entry) => entry.status !== 'valid'),
     [aiCfg.provider_keys]
   )
+
+  useEffect(() => {
+    const nextDrafts = {}
+    for (const entry of aiCfg.provider_keys || []) {
+      const providerCatalog = catalog.find((item) => item.id === entry.provider)
+      nextDrafts[entry.id] = entry.selected_model || providerCatalog?.defaultModel || providerCatalog?.models?.[0]?.id || ''
+    }
+    setProviderKeyModelDrafts(nextDrafts)
+  }, [aiCfg.provider_keys, catalog])
 
   const handleProviderChange = (providerId) => {
     const provider = catalog.find((entry) => entry.id === providerId)
@@ -350,11 +367,36 @@ export default function AdminPanel() {
           entry.id === keyId ? nextKey : entry
         )),
       }))
+      setProviderKeyModelDrafts((prev) => ({ ...prev, [keyId]: nextKey.selected_model }))
       toast.success(t('admin.providerKeyRefreshed', 'Statut fournisseur actualise'))
     } catch (e) {
       toast.error(getErrorMessage(e))
     }
     setRefreshingProviderKeyId(null)
+  }
+
+  const updateProviderKeyModel = async (entry) => {
+    if (!entry?.id || !canManageProviderPool) return
+
+    const nextModel = providerKeyModelDrafts[entry.id]
+    if (!nextModel) return
+
+    setUpdatingProviderKeyModelId(entry.id)
+    try {
+      const res = await adminAPI.updateProviderKeyModel(entry.id, nextModel)
+      const nextKey = res.data.key
+      setAiCfg((prev) => ({
+        ...prev,
+        provider_keys: (prev.provider_keys || []).map((item) => (
+          item.id === entry.id ? nextKey : item
+        )),
+      }))
+      setProviderKeyModelDrafts((prev) => ({ ...prev, [entry.id]: nextKey.selected_model }))
+      toast.success(t('admin.providerKeyModelSaved', 'Modele fournisseur mis a jour'))
+    } catch (e) {
+      toast.error(getErrorMessage(e))
+    }
+    setUpdatingProviderKeyModelId(null)
   }
 
   const toggleProviderKeySecret = async (entry) => {
@@ -411,7 +453,6 @@ export default function AdminPanel() {
 
   const deleteProviderKey = async (entry) => {
     if (!entry?.id || !canManageProviderPool) return
-    if (!window.confirm(t('admin.providerKeyDeleteConfirm', 'Supprimer cette cl\u00e9 fournisseur pour tout le monde ?'))) return
 
     setDeletingProviderKeyId(entry.id)
     try {
@@ -426,6 +467,12 @@ export default function AdminPanel() {
         provider_keys: (prev.provider_keys || []).filter((item) => item.id !== entry.id),
         active_provider_key_id: prev.active_provider_key_id === entry.id ? '' : prev.active_provider_key_id,
       }))
+      setProviderKeyModelDrafts((prev) => {
+        const next = { ...prev }
+        delete next[entry.id]
+        return next
+      })
+      setProviderKeyDeleteDialog(null)
       toast.success(t('admin.providerKeyDeleted', 'Cl\u00e9 fournisseur supprim\u00e9e'))
     } catch (e) {
       toast.error(getErrorMessage(e))
@@ -500,9 +547,14 @@ export default function AdminPanel() {
     const revealedSecret = revealedProviderKeys[entry.id]
     const providerLabel = providerLabelById[entry.provider] || entry.provider
     const visibleEmail = revealedSecret?.owner?.email || entry.owner_email || '-'
+    const providerCatalog = catalog.find((item) => item.id === entry.provider)
+    const providerModels = providerCatalog?.models || []
+    const selectedModelValue = providerKeyModelDrafts[entry.id] || entry.selected_model || providerCatalog?.defaultModel || providerModels[0]?.id || ''
+    const selectedModel = providerModels.find((model) => model.id === selectedModelValue)
     const isBusy = (
       refreshingProviderKeyId === entry.id
       || loadingProviderKeySecretId === entry.id
+      || updatingProviderKeyModelId === entry.id
       || deletingProviderKeyId === entry.id
     )
 
@@ -558,7 +610,7 @@ export default function AdminPanel() {
             </button>
             <button
               type="button"
-              onClick={() => deleteProviderKey(entry)}
+              onClick={() => setProviderKeyDeleteDialog(entry)}
               disabled={isBusy}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs font-mono hover:bg-red-500/20 transition-all disabled:opacity-40"
             >
@@ -589,6 +641,42 @@ export default function AdminPanel() {
             <p className="font-mono text-white/25 mb-1">{t('admin.providerPoolUsedAt', 'Derni\u00e8re utilisation')}</p>
             <p>{entry.last_used_at ? new Date(entry.last_used_at).toLocaleString(locale) : '-'}</p>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3 mt-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="font-mono text-white/25 mb-1">{t('admin.providerKeyModelLabel', 'Modele choisi')}</p>
+              <p className="text-sm text-white">{selectedModel?.label || selectedModelValue || '-'}</p>
+            </div>
+            {entry.is_selected ? (
+              <span className="badge bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20">
+                {t('admin.providerKeyInUse', 'Cl\u00e9 fournisseur active')}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2 lg:flex-row">
+            <select
+              className="select-field flex-1"
+              value={selectedModelValue}
+              onChange={(event) => setProviderKeyModelDrafts((prev) => ({ ...prev, [entry.id]: event.target.value }))}
+            >
+              {providerModels.map((model) => (
+                <option key={model.id} value={model.id}>{model.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => updateProviderKeyModel(entry)}
+              disabled={isBusy || !selectedModelValue || selectedModelValue === entry.selected_model}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs font-mono text-amber-300 transition-all hover:bg-amber-500/20 disabled:opacity-40"
+            >
+              {updatingProviderKeyModelId === entry.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {updatingProviderKeyModelId === entry.id ? t('admin.providerKeyModelSaving', 'Mise a jour...') : t('admin.providerKeyModelApply', 'Appliquer le modele')}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-white/35">{selectedModel?.description || t('admin.modelHelp')}</p>
         </div>
       </div>
     )
@@ -942,11 +1030,40 @@ export default function AdminPanel() {
             </div>
           )}
 
-          <button onClick={saveAI} disabled={saving || !aiCfg.model || (!aiCfg.hasApiKey && !aiCfg.api_key.trim() && providerPool.length < 1)} className="w-full py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-sm hover:bg-amber-500/20 transition-all disabled:opacity-40">
+          <button onClick={saveAI} disabled={saving || !aiCfg.model || (!aiCfg.hasApiKey && !aiCfg.api_key.trim() && usableProviderPool.length < 1)} className="w-full py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-sm hover:bg-amber-500/20 transition-all disabled:opacity-40">
             {saving ? t('admin.saving') : t('admin.save')}
           </button>
         </div>
       )}
+
+      <KeyDeleteConfirmDialog
+        open={!!providerKeyDeleteDialog}
+        busy={deletingProviderKeyId === providerKeyDeleteDialog?.id}
+        title={t('admin.providerKeyDeleteTitle', 'Supprimer cette clé fournisseur ?')}
+        description={t('admin.providerKeyDeleteDescription', 'Cette action retire immédiatement la clé du pool fournisseur. Si elle alimente encore l IA du site, il faudra en choisir une autre ou en remettre une nouvelle.')}
+        highlight={
+          providerKeyDeleteDialog?.status === 'valid'
+            ? t('admin.providerKeyDeleteHighlightValid', 'Cette clé est actuellement valide. Supprime-la seulement si tu es certain de vouloir la retirer du site.')
+            : t('admin.providerKeyDeleteHighlightInvalid', 'Cette clé sera supprimée pour tout le monde et ne pourra plus être réutilisée tant qu elle n est pas remise.')
+        }
+        details={providerKeyDeleteDialog ? [
+          { label: t('admin.providerPoolProvider', 'Fournisseur'), value: providerLabelById[providerKeyDeleteDialog.provider] || providerKeyDeleteDialog.provider },
+          { label: t('admin.providerKeyModelLabel', 'Modele choisi'), value: (() => {
+            const providerCatalog = catalog.find((item) => item.id === providerKeyDeleteDialog.provider)
+            const providerModel = providerCatalog?.models?.find((model) => model.id === providerKeyDeleteDialog.selected_model)
+            return providerModel?.label || providerKeyDeleteDialog.selected_model || '-'
+          })() },
+          { label: t('admin.providerPoolEmail', 'Email du fournisseur'), value: providerKeyDeleteDialog.owner_email || '-' },
+          { label: t('admin.statusLabel', 'Statut'), value: getProviderStatusLabel(locale, providerKeyDeleteDialog.status) },
+        ] : []}
+        confirmWord={t('admin.providerKeyDeleteWord', 'SUPPRIMER')}
+        inputLabel={t('admin.providerKeyDeleteInput', 'Tape SUPPRIMER pour confirmer')}
+        inputPlaceholder={t('admin.providerKeyDeleteWord', 'SUPPRIMER')}
+        cancelLabel={t('admin.providerKeyDeleteCancel', 'Annuler')}
+        confirmLabel={t('admin.providerKeyDeleteAction', 'Supprimer')}
+        onClose={() => setProviderKeyDeleteDialog(null)}
+        onConfirm={() => providerKeyDeleteDialog && deleteProviderKey(providerKeyDeleteDialog)}
+      />
     </div>
   )
 }
