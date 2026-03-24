@@ -263,15 +263,85 @@ function getErrorMessage(error, text) {
   return String(message).includes('/api/v1/support/') ? text.routeMissing : message
 }
 
-function renderAvatar(profile, size = 'h-11 w-11') {
+function getIdentityTone(profile, currentUser) {
+  const isPrimaryFounder = !!profile?.is_primary_founder || (!!profile?.id && profile.id === currentUser?.id && currentUser?.is_primary_founder)
+
+  if (profile?.role === 'system') {
+    return {
+      avatarFrame: 'border-violet-400/25 bg-[linear-gradient(135deg,rgba(34,211,238,0.24),rgba(139,92,246,0.28))] shadow-[0_10px_32px_rgba(76,29,149,0.24)]',
+      fallbackBg: 'from-cyan-500/28 to-violet-500/28',
+      bubble: 'border-violet-400/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.08),rgba(139,92,246,0.14))] shadow-[0_16px_34px_rgba(76,29,149,0.18)]',
+      name: 'text-cyan-100',
+      dot: 'bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.75)]',
+    }
+  }
+
+  if (isPrimaryFounder) {
+    return {
+      avatarFrame: 'border-amber-300/35 bg-[linear-gradient(135deg,rgba(251,191,36,0.34),rgba(245,158,11,0.22))] shadow-[0_12px_36px_rgba(245,158,11,0.24)]',
+      fallbackBg: 'from-amber-300/32 via-yellow-300/20 to-orange-400/24',
+      bubble: 'border-amber-300/24 bg-[linear-gradient(135deg,rgba(251,191,36,0.12),rgba(245,158,11,0.08),rgba(255,255,255,0.03))] shadow-[0_18px_40px_rgba(245,158,11,0.18)]',
+      name: 'text-amber-100',
+      dot: 'bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.75)]',
+    }
+  }
+
+  if (profile?.role === 'founder') {
+    return {
+      avatarFrame: 'border-violet-400/26 bg-[linear-gradient(135deg,rgba(34,211,238,0.18),rgba(139,92,246,0.3))] shadow-[0_12px_32px_rgba(91,33,182,0.22)]',
+      fallbackBg: 'from-cyan-400/22 to-violet-500/28',
+      bubble: 'border-violet-400/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.06),rgba(139,92,246,0.14))] shadow-[0_16px_34px_rgba(91,33,182,0.16)]',
+      name: 'text-violet-100',
+      dot: 'bg-violet-300 shadow-[0_0_10px_rgba(196,181,253,0.7)]',
+    }
+  }
+
+  if (profile?.role === 'admin') {
+    return {
+      avatarFrame: 'border-cyan-400/26 bg-[linear-gradient(135deg,rgba(34,211,238,0.26),rgba(14,165,233,0.18))] shadow-[0_12px_30px_rgba(34,211,238,0.2)]',
+      fallbackBg: 'from-cyan-400/28 to-sky-500/22',
+      bubble: 'border-cyan-400/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.1),rgba(14,165,233,0.08),rgba(255,255,255,0.03))] shadow-[0_16px_34px_rgba(34,211,238,0.14)]',
+      name: 'text-cyan-100',
+      dot: 'bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.72)]',
+    }
+  }
+
+  if (profile?.role === 'api_provider') {
+    return {
+      avatarFrame: 'border-emerald-400/26 bg-[linear-gradient(135deg,rgba(16,185,129,0.24),rgba(45,212,191,0.16))] shadow-[0_12px_30px_rgba(16,185,129,0.18)]',
+      fallbackBg: 'from-emerald-400/26 to-teal-400/22',
+      bubble: 'border-emerald-400/16 bg-[linear-gradient(135deg,rgba(16,185,129,0.08),rgba(45,212,191,0.06),rgba(255,255,255,0.03))] shadow-[0_16px_34px_rgba(16,185,129,0.12)]',
+      name: 'text-emerald-100',
+      dot: 'bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.68)]',
+    }
+  }
+
+  return {
+    avatarFrame: 'border-white/12 bg-[linear-gradient(135deg,rgba(59,130,246,0.12),rgba(255,255,255,0.06))] shadow-[0_10px_26px_rgba(15,23,42,0.28)]',
+    fallbackBg: 'from-slate-400/22 to-blue-400/18',
+    bubble: 'border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.04),rgba(59,130,246,0.04))] shadow-[0_16px_32px_rgba(15,23,42,0.22)]',
+    name: 'text-white',
+    dot: 'bg-white/45',
+  }
+}
+
+function renderAvatar(profile, currentUser, size = 'h-11 w-11') {
+  const tone = getIdentityTone(profile, currentUser)
+
   if (profile?.avatar_url) {
-    return <img src={profile.avatar_url} alt={profile?.username || 'User'} className={`${size} rounded-2xl border border-white/10 object-cover`} />
+    return (
+      <div className={`${size} shrink-0 aspect-square overflow-hidden rounded-2xl border p-[1px] ${tone.avatarFrame}`}>
+        <img src={profile.avatar_url} alt={profile?.username || 'User'} className="block h-full w-full rounded-[1rem] object-cover object-center" />
+      </div>
+    )
   }
 
   const initials = String(profile?.username || '?').slice(0, 2).toUpperCase()
   return (
-    <div className={`${size} flex items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-500/20 to-violet-500/20 font-mono text-xs text-white/85`}>
-      {initials}
+    <div className={`${size} shrink-0 aspect-square overflow-hidden rounded-2xl border p-[1px] ${tone.avatarFrame}`}>
+      <div className={`flex h-full w-full items-center justify-center rounded-[1rem] bg-gradient-to-br ${tone.fallbackBg} font-mono text-xs text-white/90`}>
+        {initials}
+      </div>
     </div>
   )
 }
@@ -303,7 +373,7 @@ function StatCard({ label, value, tone }) {
   )
 }
 
-function TicketRow({ ticket, locale, text, selected, onSelect, isStaff }) {
+function TicketRow({ ticket, locale, text, selected, onSelect, isStaff, currentUser }) {
   const meta = CATEGORY_META[ticket.category] || CATEGORY_META.other
   const Icon = meta.icon
 
@@ -316,7 +386,7 @@ function TicketRow({ ticket, locale, text, selected, onSelect, isStaff }) {
       }`}
     >
       <div className="flex items-start gap-3">
-        {renderAvatar(ticket.owner)}
+        {renderAvatar(ticket.owner, currentUser)}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Pill className="border-white/10 bg-white/[0.04] text-white/80">#{ticket.ticket_number}</Pill>
@@ -719,10 +789,12 @@ export default function SupportPage() {
               <>
                 <MetaPanel title={text.requester}>
                   <div className="flex items-center gap-3">
-                    {renderAvatar(selectedTicket.owner)}
+                    {renderAvatar(selectedTicket.owner, user)}
                     <div className="min-w-0">
-                      <div className="truncate font-display text-white font-700">{selectedTicket.owner?.username}</div>
-                      <div className="text-sm text-white/42">{text.roles[selectedTicket.owner?.role] || selectedTicket.owner?.role}</div>
+                      <div className="flex items-center gap-2">
+                        <div className={`h-1.5 w-1.5 rounded-full ${getIdentityTone(selectedTicket.owner, user).dot}`} />
+                        <div className={`truncate font-display font-700 ${getIdentityTone(selectedTicket.owner, user).name}`}>{selectedTicket.owner?.username}</div>
+                      </div>
                       <div className="mt-1 text-xs text-white/30">ID: {selectedTicket.owner?.id || '--'}</div>
                     </div>
                   </div>
@@ -731,10 +803,12 @@ export default function SupportPage() {
                 <MetaPanel title={text.claim}>
                   {selectedTicket.claimer ? (
                     <div className="flex items-center gap-3">
-                      {renderAvatar(selectedTicket.claimer)}
+                      {renderAvatar(selectedTicket.claimer, user)}
                       <div className="min-w-0">
-                        <div className="truncate font-display text-white font-700">{selectedTicket.claimer.username}</div>
-                        <div className="text-sm text-white/42">{text.roles[selectedTicket.claimer.role] || selectedTicket.claimer.role}</div>
+                        <div className="flex items-center gap-2">
+                          <div className={`h-1.5 w-1.5 rounded-full ${getIdentityTone(selectedTicket.claimer, user).dot}`} />
+                          <div className={`truncate font-display font-700 ${getIdentityTone(selectedTicket.claimer, user).name}`}>{selectedTicket.claimer.username}</div>
+                        </div>
                         <div className="mt-1 text-xs text-white/30">ID: {selectedTicket.claimer.id || '--'}</div>
                       </div>
                     </div>
@@ -839,17 +913,20 @@ export default function SupportPage() {
             }
 
             const own = message.author?.id && message.author.id === user?.id
-            const bubbleClass = own ? 'border-cyan-500/20 bg-cyan-500/10' : 'border-white/10 bg-white/[0.03]'
+            const tone = getIdentityTone(message.author, user)
+            const bubbleClass = own
+              ? `${tone.bubble} ring-1 ring-white/[0.04]`
+              : tone.bubble
 
             return (
               <div key={message.id} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[90%] rounded-[28px] border ${bubbleClass} px-4 py-4`}>
+                <div className={`max-w-[90%] rounded-[28px] border ${bubbleClass} px-4 py-4 backdrop-blur-[2px]`}>
                   <div className="flex items-start gap-3">
-                    {renderAvatar(message.author, 'h-10 w-10')}
+                    {renderAvatar(message.author, user, 'h-10 w-10')}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-display text-white font-700">{message.author?.username}</span>
-                        <Pill className="border-white/10 bg-black/20 text-white/65">{text.roles[message.author?.role] || message.author?.role}</Pill>
+                        <div className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+                        <span className={`font-display font-700 ${tone.name}`}>{message.author?.username}</span>
                         <span className="text-[11px] font-mono text-white/30">{formatDate(locale, message.created_at)}</span>
                       </div>
                       <div className="mt-3 whitespace-pre-wrap break-words text-white/88">{message.is_deleted ? text.deletedText : message.body}</div>
@@ -1059,6 +1136,7 @@ export default function SupportPage() {
                     selected={ticket.id === selectedTicketId}
                     onSelect={setSelectedTicketId}
                     isStaff={isStaff}
+                    currentUser={user}
                   />
                 ))}
               </div>
