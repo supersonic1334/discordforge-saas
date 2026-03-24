@@ -117,6 +117,36 @@
   pointer-events: none;
 }
 
+@keyframes danger-modal-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes danger-modal-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 91, 91, 0.12);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(255, 91, 91, 0);
+    transform: scale(1.02);
+  }
+}
+
+.danger-confirm-shell {
+  animation: danger-modal-pop 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.danger-confirm-pulse {
+  animation: danger-modal-pulse 2.1s ease-in-out infinite;
+}
+
 /* Module toggle switch */
 .toggle-switch {
   position: relative;
