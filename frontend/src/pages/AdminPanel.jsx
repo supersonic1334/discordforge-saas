@@ -136,6 +136,17 @@ export default function AdminPanel() {
     }
   }, [canManageUsers])
 
+  const currentPanelUser = useMemo(
+    () => users.find((user) => user.id === currentUserId) || null,
+    [users, currentUserId]
+  )
+  const canDeleteUsers = !!currentPanelUser?.is_primary_founder
+  const canManageProviderPool = !!(currentUser?.is_primary_founder || currentPanelUser?.is_primary_founder)
+  const canRevealPrimaryEmail = !!(
+    currentUser?.is_primary_founder
+    || (currentUser?.role === 'founder' && currentUser?.email === '********@********.***')
+  )
+
   useEffect(() => {
     if (!canManageUsers && tab === 'users') {
       setTab('ai')
@@ -237,16 +248,6 @@ export default function AdminPanel() {
 
     return filtered.length ? filtered : (selectedModel ? [selectedModel] : [])
   }, [modelOptions, modelSearch, selectedModel])
-  const currentPanelUser = useMemo(
-    () => users.find((user) => user.id === currentUserId) || null,
-    [users, currentUserId]
-  )
-  const canDeleteUsers = !!currentPanelUser?.is_primary_founder
-  const canManageProviderPool = !!(currentUser?.is_primary_founder || currentPanelUser?.is_primary_founder)
-  const canRevealPrimaryEmail = !!(
-    currentUser?.is_primary_founder
-    || (currentUser?.role === 'founder' && currentUser?.email === '********@********.***')
-  )
   const roleOptions = useMemo(() => ([
     { value: 'member', label: t('admin.roles.member') },
     { value: 'admin', label: t('admin.roles.admin') },
