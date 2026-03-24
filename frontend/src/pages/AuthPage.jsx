@@ -197,9 +197,9 @@ export default function AuthPage() {
             <motion.div
               animate={{ rotate: [0, 3, -3, 0] }}
               transition={{ duration: 4, repeat: Infinity }}
-              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 border border-neon-cyan/30 mb-4 shadow-neon-cyan p-1.5"
+              className="inline-flex items-center justify-center w-[88px] h-[88px] rounded-[28px] bg-gradient-to-br from-neon-cyan/12 via-white/4 to-neon-violet/14 border border-neon-cyan/24 mb-4 p-1.5 shadow-[0_16px_45px_rgba(68,118,255,0.2)]"
             >
-              <Bot className="w-7 h-7 text-neon-cyan drop-shadow-[0_0_18px_rgba(0,229,255,0.45)]" />
+              <img src="/discordforger-badge.svg" className="w-full h-full object-contain drop-shadow-[0_0_18px_rgba(119,166,255,0.24)]" alt="DiscordForger" />
             </motion.div>
             <h1 className="font-display font-800 text-3xl neon-text mb-1">DiscordForger</h1>
             <p className="text-white/40 text-sm">{t('auth.tagline')}</p>
