@@ -1,90 +1,129 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { CheckCircle2, Lock, MessageSquareText, Sparkles, Star } from 'lucide-react'
+import { motion } from 'framer-motion'
+import {
+  CheckCircle2,
+  Lock,
+  MessageSquareText,
+  PenSquare,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Users,
+} from 'lucide-react'
 import { reviewsAPI } from '../services/api'
 import { useI18n } from '../i18n'
 
+const STAR_POINTS = '12,2.25 15.03,8.42 21.84,9.41 16.92,14.2 18.08,21 12,17.8 5.92,21 7.08,14.2 2.16,9.41 8.97,8.42'
+
 const TEXT = {
   fr: {
-    title: 'Avis clients',
-    subtitle: 'Une note par compte. Ta note reste fixe, mais tu peux modifier ton message quand tu veux.',
-    average: 'Moyenne',
-    total: 'Avis',
-    yourReview: 'Ton avis',
-    noReviews: 'Aucun avis pour le moment.',
-    noReviewsBody: 'Sois le premier a laisser une note et un message.',
-    createTitle: 'Laisser un avis',
+    badge: 'Retour clients',
+    title: 'Les avis qui font monter la confiance.',
+    subtitle: 'Une note unique par compte, un message modifiable a tout moment, et une vitrine plus propre pour donner envie aux prochains clients.',
+    average: 'Note globale',
+    total: 'Avis publies',
+    oneVote: 'Une note par compte',
+    oneVoteBody: 'La note reste fixe pour garder une moyenne fiable.',
+    editableMessage: 'Message modifiable',
+    editableMessageBody: 'Tu peux retoucher ton texte quand tu veux.',
+    trustTitle: 'Vue d ensemble',
+    trustBody: 'Un rendu plus clair pour voir la tendance generale en un coup d oeil.',
+    distribution: 'Repartition',
+    yourSpace: 'Ton espace avis',
+    createTitle: 'Laisser ton avis',
     editTitle: 'Modifier ton message',
-    lockedRating: 'Ta note est deja enregistree et verrouillee.',
-    messageLabel: 'Message',
-    messagePlaceholder: 'Explique ce que tu aimes sur le site, ce qui t aide, ou ton ressenti global.',
+    createHint: 'Choisis ta note, ecris ton ressenti, puis publie.',
+    editHint: 'Ta note reste bloquee. Seul ton message reste modifiable.',
+    noteLabel: 'Note',
+    noteLocked: 'Note verrouillee',
+    lockedRating: 'Ta note est deja enregistree et ne peut plus changer.',
+    messageLabel: 'Ton message',
+    messagePlaceholder: 'Explique ce que tu aimes, ce qui te sert le plus, ou pourquoi le site t aide vraiment.',
     submit: 'Publier mon avis',
-    save: 'Sauvegarder le message',
+    save: 'Sauvegarder mon message',
     saving: 'Sauvegarde...',
     created: 'Avis enregistre',
     updated: 'Message mis a jour',
-    createHint: 'Choisis une note de 0,5 a 5 etoiles, puis ecris ton message.',
-    editHint: 'Tu peux modifier seulement le message. La note reste la meme.',
-    noteLabel: 'Note',
-    noteLocked: 'Note verrouillee',
-    listTitle: 'Tous les avis',
-    from: 'depuis',
-    starsSuffix: 'etoiles',
-    authOnly: 'Connecte-toi pour laisser ton avis.',
+    yourReview: 'Ton avis',
+    communityTitle: 'Avis de la communaute',
+    communityBody: 'Les derniers retours visibles par les futurs clients.',
+    noReviews: 'Aucun avis pour le moment.',
+    noReviewsBody: 'Le mur d avis s affichera ici des qu un premier retour sera publie.',
+    from: 'le',
+    outOfFive: '/ 5',
   },
   en: {
-    title: 'Customer reviews',
-    subtitle: 'One rating per account. Your rating stays fixed, but you can edit your message anytime.',
-    average: 'Average',
-    total: 'Reviews',
-    yourReview: 'Your review',
-    noReviews: 'No reviews yet.',
-    noReviewsBody: 'Be the first to leave a rating and a message.',
-    createTitle: 'Leave a review',
+    badge: 'Customer feedback',
+    title: 'Reviews that build trust instantly.',
+    subtitle: 'One rating per account, an editable message anytime, and a cleaner showcase that feels more premium to future clients.',
+    average: 'Overall score',
+    total: 'Published reviews',
+    oneVote: 'One rating per account',
+    oneVoteBody: 'The score stays fixed so the average remains reliable.',
+    editableMessage: 'Editable message',
+    editableMessageBody: 'You can update your text whenever you want.',
+    trustTitle: 'Quick overview',
+    trustBody: 'A clearer view so the overall trend is visible at a glance.',
+    distribution: 'Breakdown',
+    yourSpace: 'Your review space',
+    createTitle: 'Leave your review',
     editTitle: 'Edit your message',
-    lockedRating: 'Your rating is already saved and locked.',
-    messageLabel: 'Message',
-    messagePlaceholder: 'Explain what you like about the site, what helps you, or your overall feeling.',
+    createHint: 'Pick your rating, write your feedback, then publish.',
+    editHint: 'Your rating stays locked. Only the message can change.',
+    noteLabel: 'Rating',
+    noteLocked: 'Rating locked',
+    lockedRating: 'Your rating is already saved and can no longer change.',
+    messageLabel: 'Your message',
+    messagePlaceholder: 'Explain what you like, what helps most, or why the site is genuinely useful.',
     submit: 'Publish my review',
-    save: 'Save message',
+    save: 'Save my message',
     saving: 'Saving...',
     created: 'Review saved',
     updated: 'Message updated',
-    createHint: 'Pick a rating from 0.5 to 5 stars, then write your message.',
-    editHint: 'You can edit only the message. The rating stays the same.',
-    noteLabel: 'Rating',
-    noteLocked: 'Rating locked',
-    listTitle: 'All reviews',
-    from: 'since',
-    starsSuffix: 'stars',
-    authOnly: 'Sign in to leave your review.',
+    yourReview: 'Your review',
+    communityTitle: 'Community reviews',
+    communityBody: 'The latest public feedback future clients will see.',
+    noReviews: 'No reviews yet.',
+    noReviewsBody: 'The review wall will appear here as soon as the first feedback is published.',
+    from: 'on',
+    outOfFive: '/ 5',
   },
   es: {
-    title: 'Resenas de clientes',
-    subtitle: 'Una nota por cuenta. La nota queda fija, pero puedes modificar el mensaje cuando quieras.',
-    average: 'Media',
-    total: 'Resenas',
-    yourReview: 'Tu resena',
-    noReviews: 'Todavia no hay resenas.',
-    noReviewsBody: 'Se la primera persona en dejar una nota y un mensaje.',
-    createTitle: 'Dejar una resena',
+    badge: 'Comentarios de clientes',
+    title: 'Resenas que inspiran confianza al instante.',
+    subtitle: 'Una sola nota por cuenta, mensaje editable en cualquier momento y una presentacion mas premium para futuros clientes.',
+    average: 'Nota global',
+    total: 'Resenas publicadas',
+    oneVote: 'Una nota por cuenta',
+    oneVoteBody: 'La nota se mantiene fija para conservar una media fiable.',
+    editableMessage: 'Mensaje editable',
+    editableMessageBody: 'Puedes cambiar el texto cuando quieras.',
+    trustTitle: 'Vista general',
+    trustBody: 'Una vista mas clara para entender la tendencia de inmediato.',
+    distribution: 'Distribucion',
+    yourSpace: 'Tu espacio de resena',
+    createTitle: 'Dejar tu resena',
     editTitle: 'Modificar tu mensaje',
-    lockedRating: 'Tu nota ya esta guardada y bloqueada.',
-    messageLabel: 'Mensaje',
-    messagePlaceholder: 'Explica lo que te gusta del sitio, lo que te ayuda o tu impresion general.',
+    createHint: 'Elige tu nota, escribe tu opinion y publicala.',
+    editHint: 'La nota queda bloqueada. Solo puedes cambiar el mensaje.',
+    noteLabel: 'Nota',
+    noteLocked: 'Nota bloqueada',
+    lockedRating: 'Tu nota ya esta guardada y ya no puede cambiar.',
+    messageLabel: 'Tu mensaje',
+    messagePlaceholder: 'Explica lo que te gusta, lo que mas te ayuda o por que el sitio te resulta realmente util.',
     submit: 'Publicar mi resena',
-    save: 'Guardar mensaje',
+    save: 'Guardar mi mensaje',
     saving: 'Guardando...',
     created: 'Resena guardada',
     updated: 'Mensaje actualizado',
-    createHint: 'Elige una nota de 0,5 a 5 estrellas y luego escribe tu mensaje.',
-    editHint: 'Solo puedes modificar el mensaje. La nota se mantiene igual.',
-    noteLabel: 'Nota',
-    noteLocked: 'Nota bloqueada',
-    listTitle: 'Todas las resenas',
-    from: 'desde',
-    starsSuffix: 'estrellas',
-    authOnly: 'Inicia sesion para dejar tu resena.',
+    yourReview: 'Tu resena',
+    communityTitle: 'Resenas de la comunidad',
+    communityBody: 'Los ultimos comentarios visibles para futuros clientes.',
+    noReviews: 'Todavia no hay resenas.',
+    noReviewsBody: 'El muro de resenas aparecera aqui en cuanto se publique la primera opinion.',
+    from: 'el',
+    outOfFive: '/ 5',
   },
 }
 
@@ -115,22 +154,39 @@ function formatRating(locale, ratingHalf) {
 
 function Avatar({ review }) {
   if (review?.avatar_url) {
-    return <img src={review.avatar_url} alt={review.username} className="h-12 w-12 rounded-2xl border border-white/10 object-cover" />
+    return <img src={review.avatar_url} alt={review.username} className="h-12 w-12 rounded-2xl border border-white/10 object-cover shadow-[0_0_18px_rgba(250,204,21,0.12)]" />
   }
 
   return (
-    <div className="h-12 w-12 rounded-2xl border border-white/10 bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 flex items-center justify-center text-sm font-display font-700 text-white">
+    <div className="h-12 w-12 rounded-2xl border border-white/10 bg-gradient-to-br from-amber-500/20 to-yellow-400/15 flex items-center justify-center text-sm font-display font-700 text-white">
       {String(review?.username || '?').slice(0, 2).toUpperCase()}
     </div>
   )
 }
 
+function StarShape({ filled = false, className = '', glow = false }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <polygon
+        points={STAR_POINTS}
+        fill={filled ? '#facc15' : 'rgba(255,255,255,0.08)'}
+        stroke={filled ? '#fde68a' : 'rgba(255,255,255,0.16)'}
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+        style={glow ? { filter: 'drop-shadow(0 0 10px rgba(250,204,21,0.32))' } : undefined}
+      />
+    </svg>
+  )
+}
+
 function StarGlyph({ fill = 0, className = 'h-6 w-6' }) {
+  const width = `${Math.max(0, Math.min(100, fill * 100))}%`
+
   return (
     <div className={`relative ${className}`}>
-      <Star className="absolute inset-0 h-full w-full text-white/10" />
-      <div className="absolute inset-0 overflow-hidden" style={{ width: `${Math.max(0, Math.min(100, fill * 100))}%` }}>
-        <Star className="h-full w-full fill-amber-400 text-amber-400" />
+      <StarShape className="absolute inset-0 h-full w-full" />
+      <div className="absolute inset-0 overflow-hidden" style={{ width }}>
+        <StarShape filled glow className="h-full w-full" />
       </div>
     </div>
   )
@@ -154,7 +210,7 @@ function RatingInput({ valueHalf, onChange, disabled = false }) {
 
   return (
     <div
-      className={`flex items-center gap-1 ${disabled ? 'opacity-70' : ''}`}
+      className={`flex items-center gap-1.5 ${disabled ? 'opacity-70' : ''}`}
       onMouseLeave={() => setHoverHalf(null)}
     >
       {Array.from({ length: 5 }, (_, index) => {
@@ -164,12 +220,12 @@ function RatingInput({ valueHalf, onChange, disabled = false }) {
         const fill = renderValue >= rightValue ? 1 : renderValue === leftValue ? 0.5 : 0
 
         return (
-          <div key={starNumber} className="relative h-9 w-9">
+          <div key={starNumber} className="relative h-11 w-11 shrink-0">
             {!disabled && (
               <>
                 <button
                   type="button"
-                  className="absolute inset-y-0 left-0 z-10 w-1/2"
+                  className="absolute inset-y-0 left-0 z-10 w-1/2 rounded-l-xl"
                   onMouseEnter={() => setHoverHalf(leftValue)}
                   onFocus={() => setHoverHalf(leftValue)}
                   onClick={() => onChange(leftValue)}
@@ -177,7 +233,7 @@ function RatingInput({ valueHalf, onChange, disabled = false }) {
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 z-10 w-1/2"
+                  className="absolute inset-y-0 right-0 z-10 w-1/2 rounded-r-xl"
                   onMouseEnter={() => setHoverHalf(rightValue)}
                   onFocus={() => setHoverHalf(rightValue)}
                   onClick={() => onChange(rightValue)}
@@ -185,10 +241,35 @@ function RatingInput({ valueHalf, onChange, disabled = false }) {
                 />
               </>
             )}
-            <StarGlyph fill={fill} className="h-9 w-9" />
+            <div className={`transition-all duration-150 ${!disabled && hoverHalf && fill > 0 ? 'scale-105' : ''}`}>
+              <StarGlyph fill={fill} className="h-11 w-11" />
+            </div>
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function OverviewCard({ label, value, body, icon: Icon, accent = 'amber' }) {
+  const accentClasses = {
+    amber: 'from-amber-500/18 to-yellow-400/8 border-amber-400/15 text-amber-200',
+    cyan: 'from-cyan-500/16 to-cyan-400/6 border-cyan-400/15 text-cyan-200',
+    violet: 'from-violet-500/16 to-violet-400/6 border-violet-400/15 text-violet-200',
+  }
+
+  return (
+    <div className={`rounded-3xl border bg-gradient-to-br ${accentClasses[accent] || accentClasses.amber} p-4`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/40">{label}</p>
+          <p className="mt-3 font-display text-2xl font-800 text-white">{value}</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-2.5">
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+      <p className="mt-3 text-sm leading-relaxed text-white/55">{body}</p>
     </div>
   )
 }
@@ -254,141 +335,256 @@ export default function ReviewsPage() {
   }
 
   const myReview = overview.my_review
+  const displayAverage = Number(overview.stats?.average_rating || 0)
+  const displayAverageHalf = Math.round(displayAverage * 2)
+  const totalReviews = Number(overview.stats?.total_reviews || 0)
+  const distribution = useMemo(() => {
+    const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+    overview.reviews.forEach((review) => {
+      const bucket = Math.max(1, Math.min(5, Math.round(Number(review.rating_half || 0) / 2)))
+      counts[bucket] += 1
+    })
+
+    return [5, 4, 3, 2, 1].map((stars) => ({
+      stars,
+      count: counts[stars],
+      ratio: totalReviews > 0 ? counts[stars] / totalReviews : 0,
+    }))
+  }, [overview.reviews, totalReviews])
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[11px] font-mono text-amber-300 mb-3">
-            <Sparkles className="h-3.5 w-3.5" />
-            {text.yourReview}
-          </div>
-          <h1 className="font-display text-3xl font-800 text-white">{text.title}</h1>
-          <p className="text-white/45 mt-2 max-w-2xl">{text.subtitle}</p>
-        </div>
-      </div>
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+        className="grid xl:grid-cols-[minmax(0,1.15fr)_380px] gap-6"
+      >
+        <div className="relative overflow-hidden rounded-[2rem] border border-amber-400/14 bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.18),transparent_34%),radial-gradient(circle_at_right,rgba(139,92,246,0.14),transparent_36%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] p-7">
+          <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(250,204,21,0.06),transparent)] opacity-70" />
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-amber-200">
+              <Sparkles className="h-3.5 w-3.5" />
+              {text.badge}
+            </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
-        <div className="glass-card p-5">
-          <p className="text-xs font-mono text-white/35 mb-3">{text.average}</p>
-          <div className="flex items-center gap-3">
-            <p className="font-display text-3xl font-800 text-white">
-              {Number(overview.stats?.average_rating || 0).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-            </p>
-            <RatingDisplay ratingHalf={Math.round(Number(overview.stats?.average_rating || 0) * 2)} />
-          </div>
-        </div>
-        <div className="glass-card p-5">
-          <p className="text-xs font-mono text-white/35 mb-3">{text.total}</p>
-          <p className="font-display text-3xl font-800 text-white">{overview.stats?.total_reviews || 0}</p>
-        </div>
-        <div className="glass-card p-5">
-          <p className="text-xs font-mono text-white/35 mb-3">{text.noteLabel}</p>
-          {myReview ? (
-            <div className="space-y-2">
-              <RatingDisplay ratingHalf={myReview.rating_half} />
-              <p className="text-xs text-amber-300 inline-flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5" />
-                {text.noteLocked}
+            <div className="mt-5 max-w-3xl">
+              <h1 className="font-display text-4xl leading-[0.92] font-800 text-white sm:text-5xl">
+                {text.title}
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/60">
+                {text.subtitle}
               </p>
             </div>
-          ) : (
-            <div className="space-y-2">
-              <RatingDisplay ratingHalf={ratingHalf} />
-              <p className="text-xs text-white/45">{formatRating(locale, ratingHalf)} / 5</p>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <OverviewCard
+                label={text.average}
+                value={`${displayAverage.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${text.outOfFive}`}
+                body={text.trustBody}
+                icon={ShieldCheck}
+                accent="amber"
+              />
+              <OverviewCard
+                label={text.total}
+                value={totalReviews}
+                body={text.communityBody}
+                icon={Users}
+                accent="cyan"
+              />
+              <OverviewCard
+                label={text.oneVote}
+                value={myReview ? text.noteLocked : formatRating(locale, ratingHalf)}
+                body={myReview ? text.editableMessageBody : text.oneVoteBody}
+                icon={PenSquare}
+                accent="violet"
+              />
             </div>
-          )}
+          </div>
         </div>
-      </div>
+
+        <motion.div
+          initial={{ opacity: 0, x: 18 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35, ease: 'easeOut', delay: 0.05 }}
+          className="glass-card p-6 space-y-5"
+        >
+          <div>
+            <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-amber-300/80">{text.trustTitle}</p>
+            <h2 className="mt-2 font-display text-2xl font-700 text-white">{text.average}</h2>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-amber-400/14 bg-gradient-to-br from-amber-500/12 via-white/[0.02] to-transparent p-5">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="font-display text-5xl font-800 text-white">
+                  {displayAverage.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </p>
+                <p className="mt-2 text-sm text-white/45">{text.communityBody}</p>
+              </div>
+              <div className="rounded-2xl border border-amber-400/18 bg-amber-400/10 px-3 py-2 text-sm text-amber-200">
+                {totalReviews} {text.total.toLowerCase()}
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-3">
+              <RatingDisplay ratingHalf={displayAverageHalf} size="h-7 w-7" />
+              <span className="text-sm text-white/60">{text.outOfFive}</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-white">{text.distribution}</p>
+              <p className="text-xs font-mono text-white/35">{totalReviews} total</p>
+            </div>
+
+            {distribution.map((item) => (
+              <div key={item.stars} className="flex items-center gap-3">
+                <div className="flex w-12 items-center gap-1 text-sm text-white/65">
+                  <span>{item.stars}</span>
+                  <Star className="h-3.5 w-3.5 text-amber-300 fill-amber-300/50" />
+                </div>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 transition-all duration-500"
+                    style={{ width: `${Math.max(6, item.ratio * 100)}%`, opacity: item.count > 0 ? 1 : 0.18 }}
+                  />
+                </div>
+                <div className="w-10 text-right text-xs text-white/35">{item.count}</div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </motion.section>
 
       <div className="grid xl:grid-cols-[420px_minmax(0,1fr)] gap-6">
-        <div className="glass-card p-5 space-y-4">
-          <div>
-            <h2 className="font-display text-xl font-700 text-white">{myReview ? text.editTitle : text.createTitle}</h2>
-            <p className="text-sm text-white/45 mt-1">{myReview ? text.editHint : text.createHint}</p>
-          </div>
-
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <span className="text-xs font-mono text-white/35">{text.noteLabel}</span>
-              <span className="text-sm text-white/70">{formatRating(locale, myReview?.rating_half || ratingHalf)} / 5</span>
+        <motion.aside
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: 'easeOut', delay: 0.08 }}
+          className="xl:sticky xl:top-6 self-start"
+        >
+          <div className="glass-card p-5 space-y-5 border-amber-400/10">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/18 bg-amber-400/8 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-amber-200">
+                  <Star className="h-3.5 w-3.5 fill-amber-300/50 text-amber-300" />
+                  {text.yourSpace}
+                </div>
+                <h2 className="mt-3 font-display text-2xl font-700 text-white">{myReview ? text.editTitle : text.createTitle}</h2>
+                <p className="mt-2 text-sm leading-relaxed text-white/50">{myReview ? text.editHint : text.createHint}</p>
+              </div>
             </div>
-            <RatingInput valueHalf={myReview?.rating_half || ratingHalf} onChange={setRatingHalf} disabled={!!myReview} />
-            {myReview && (
-              <p className="text-xs text-amber-300 inline-flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5" />
-                {text.lockedRating}
-              </p>
-            )}
-          </div>
 
-          <div>
-            <label className="text-xs font-mono text-white/35 mb-2 block">{text.messageLabel}</label>
-            <textarea
-              className="input-field min-h-[170px] resize-none"
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder={text.messagePlaceholder}
-              maxLength={1500}
-            />
-          </div>
+            <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.03] p-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <span className="text-[11px] font-mono uppercase tracking-[0.16em] text-white/35">{text.noteLabel}</span>
+                <span className="text-sm font-medium text-white/70">{formatRating(locale, myReview?.rating_half || ratingHalf)} {text.outOfFive}</span>
+              </div>
 
-          <button
-            type="button"
-            onClick={myReview ? handleUpdate : handleCreate}
-            disabled={saving || !message.trim()}
-            className="w-full btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {saving ? text.saving : (myReview ? text.save : text.submit)}
-          </button>
-        </div>
+              <div className="mt-4">
+                <RatingInput valueHalf={myReview?.rating_half || ratingHalf} onChange={setRatingHalf} disabled={!!myReview} />
+              </div>
+
+              {myReview && (
+                <p className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-400/16 bg-amber-400/8 px-3 py-1 text-xs text-amber-200">
+                  <Lock className="h-3.5 w-3.5" />
+                  {text.lockedRating}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="mb-2 block text-[11px] font-mono uppercase tracking-[0.16em] text-white/35">{text.messageLabel}</label>
+              <textarea
+                className="input-field min-h-[190px] resize-none"
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder={text.messagePlaceholder}
+                maxLength={1500}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={myReview ? handleUpdate : handleCreate}
+              disabled={saving || !message.trim()}
+              className="w-full rounded-2xl border border-amber-400/18 bg-gradient-to-r from-amber-500/14 via-yellow-400/12 to-amber-500/14 px-4 py-3 font-display text-base font-700 text-amber-100 transition-all duration-200 hover:border-amber-300/25 hover:shadow-[0_0_28px_rgba(250,204,21,0.15)] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {saving ? text.saving : (myReview ? text.save : text.submit)}
+            </button>
+          </div>
+        </motion.aside>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <MessageSquareText className="h-5 w-5 text-neon-cyan" />
-            <h2 className="font-display text-xl font-700 text-white">{text.listTitle}</h2>
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: 'easeOut', delay: 0.12 }}
+            className="flex items-center justify-between gap-4 flex-wrap"
+          >
+            <div>
+              <div className="flex items-center gap-2">
+                <MessageSquareText className="h-5 w-5 text-amber-300" />
+                <h2 className="font-display text-2xl font-700 text-white">{text.communityTitle}</h2>
+              </div>
+              <p className="mt-2 text-sm text-white/45">{text.communityBody}</p>
+            </div>
+          </motion.div>
 
           {loading ? (
-            <div className="grid gap-3">
+            <div className="grid gap-4">
               {Array.from({ length: 3 }, (_, index) => (
-                <div key={index} className="glass-card p-5 skeleton h-36" />
+                <div key={index} className="glass-card p-5 skeleton h-40" />
               ))}
             </div>
           ) : overview.reviews.length < 1 ? (
             <div className="glass-card p-8 text-center">
-              <p className="font-display text-lg text-white">{text.noReviews}</p>
+              <p className="font-display text-xl text-white">{text.noReviews}</p>
               <p className="text-white/45 mt-2">{text.noReviewsBody}</p>
             </div>
           ) : (
-            <div className="grid gap-3">
-              {overview.reviews.map((review) => (
-                <div key={review.id} className="glass-card p-5">
-                  <div className="flex items-start gap-4">
+            <div className="grid gap-4">
+              {overview.reviews.map((review, index) => (
+                <motion.article
+                  key={review.id}
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeOut', delay: Math.min(index * 0.04, 0.18) }}
+                  className="group relative overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015))] p-5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] transition-all duration-200 hover:border-amber-400/12 hover:shadow-[0_24px_70px_rgba(0,0,0,0.26)]"
+                >
+                  <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.12),transparent_28%)]" />
+                  <div className="relative z-10 flex items-start gap-4">
                     <Avatar review={review} />
+
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-display text-lg font-700 text-white">{review.username}</p>
                             {review.is_mine && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-2 py-0.5 text-[11px] font-mono text-neon-cyan">
+                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/18 bg-amber-400/10 px-2.5 py-1 text-[11px] font-mono text-amber-200">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                 {text.yourReview}
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-3 mt-1 flex-wrap">
+
+                          <div className="mt-2 flex items-center gap-3 flex-wrap">
                             <RatingDisplay ratingHalf={review.rating_half} />
-                            <span className="text-sm text-white/65">{formatRating(locale, review.rating_half)} / 5</span>
+                            <span className="text-sm font-medium text-white/70">{formatRating(locale, review.rating_half)} {text.outOfFive}</span>
                             <span className="text-xs text-white/35">{text.from} {formatDate(locale, review.created_at)}</span>
                           </div>
                         </div>
                       </div>
-                      <p className="text-sm text-white/75 leading-relaxed mt-4 whitespace-pre-wrap">{review.message}</p>
+
+                      <div className="mt-4 rounded-[1.35rem] border border-white/[0.06] bg-black/10 px-4 py-3">
+                        <p className="text-sm leading-relaxed text-white/78 whitespace-pre-wrap">{review.message}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </motion.article>
               ))}
             </div>
           )}
