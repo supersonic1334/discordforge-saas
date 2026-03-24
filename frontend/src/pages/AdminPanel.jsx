@@ -5,6 +5,7 @@ import { adminAPI, authAPI } from '../services/api'
 import { useI18n } from '../i18n'
 import { useAuthStore } from '../stores'
 import KeyDeleteConfirmDialog from '../components/KeyDeleteConfirmDialog'
+import ProviderQuickLinks from '../components/ProviderQuickLinks'
 
 const DEFAULT_AI_CFG = {
   provider: 'anthropic',
@@ -926,6 +927,14 @@ export default function AdminPanel() {
             </select>
             {selectedProvider?.description && <p className="text-xs text-white/35 mt-1">{selectedProvider.description}</p>}
           </div>
+
+          <ProviderQuickLinks
+            provider={selectedProvider}
+            title={t('admin.providerQuickAccessTitle', 'Acces rapide API')}
+            description={t('admin.providerQuickAccessHelp', 'Ouvre directement la page officielle pour creer ou copier la cle API du fournisseur selectionne.')}
+            keyLabel={t('admin.providerQuickAccessKey', 'Ouvrir la page API')}
+            docsLabel={t('admin.providerQuickAccessDocs', 'Voir les modeles')}
+          />
 
           <div>
             <label className="text-xs font-mono text-white/40 mb-1.5 block">{t('admin.apiKey')}</label>
