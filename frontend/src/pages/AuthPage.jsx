@@ -195,11 +195,70 @@ export default function AuthPage() {
         >
           <div className="text-center mb-8">
             <motion.div
-              animate={{ rotate: [0, 1.5, -1.5, 0] }}
-              transition={{ duration: 5, repeat: Infinity }}
-              className="mx-auto mb-4 w-full max-w-[440px]"
+              initial={{ opacity: 0, scale: 0.92, y: 18 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: 'easeOut' }}
+              className="relative mx-auto mb-5 w-full max-w-[440px]"
             >
-              <img src="/discordforger-logo-full.png" className="w-full h-auto object-contain drop-shadow-[0_24px_60px_rgba(68,118,255,0.22)]" alt="DiscordForger" />
+              <motion.div
+                aria-hidden="true"
+                animate={{
+                  scale: [1, 1.06, 0.98, 1],
+                  opacity: [0.18, 0.34, 0.2, 0.18],
+                }}
+                transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute inset-x-[14%] top-[10%] h-[70%] rounded-full bg-[radial-gradient(circle,rgba(78,205,255,0.28),rgba(176,78,255,0.12)_55%,transparent_76%)] blur-3xl"
+              />
+
+              <motion.div
+                aria-hidden="true"
+                animate={{
+                  rotate: [0, 180, 360],
+                  scale: [1, 1.04, 1],
+                }}
+                transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+                className="absolute left-1/2 top-1/2 h-[76%] w-[76%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10"
+                style={{
+                  boxShadow: '0 0 30px rgba(84,165,255,0.14), inset 0 0 24px rgba(255,166,92,0.08)',
+                }}
+              />
+
+              <motion.div
+                animate={{
+                  y: [0, -10, 0, 7, 0],
+                  rotate: [0, -1.8, 1.6, 0],
+                  scale: [1, 1.018, 0.996, 1.01, 1],
+                }}
+                transition={{ duration: 7.2, repeat: Infinity, ease: 'easeInOut' }}
+                className="relative"
+              >
+                <motion.img
+                  src="/discordforger-logo-full.png"
+                  alt="DiscordForger"
+                  animate={{
+                    filter: [
+                      'drop-shadow(0 22px 52px rgba(68,118,255,0.20))',
+                      'drop-shadow(0 30px 74px rgba(68,118,255,0.28))',
+                      'drop-shadow(0 24px 60px rgba(255,153,92,0.20))',
+                      'drop-shadow(0 22px 52px rgba(68,118,255,0.20))',
+                    ],
+                  }}
+                  transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
+                  className="relative z-10 w-full h-auto object-contain"
+                />
+              </motion.div>
+
+              <motion.div
+                aria-hidden="true"
+                animate={{
+                  x: [0, 10, -6, 0],
+                  y: [0, -8, 4, 0],
+                  opacity: [0.42, 0.9, 0.48, 0.42],
+                  scale: [0.92, 1.08, 0.96, 0.92],
+                }}
+                transition={{ duration: 4.6, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute right-[12%] top-[12%] z-20 h-6 w-6 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.95),rgba(255,181,92,0.86)_34%,rgba(255,181,92,0.16)_66%,transparent_76%)] blur-[1px]"
+              />
             </motion.div>
             <p className="text-white/40 text-sm">{t('auth.tagline')}</p>
           </div>
