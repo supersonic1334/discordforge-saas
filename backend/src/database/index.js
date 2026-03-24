@@ -8,6 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
 const logger = require('../utils/logger').child('Database');
 const SCHEMA = require('./schema');
+const { getDefaultModel } = require('../config/aiCatalog');
 
 // ── Ensure data directory exists ──────────────────────────────────────────────
 const backendRoot = path.resolve(__dirname, '..', '..');
@@ -233,6 +234,7 @@ function runMigrations() {
   ensureColumn('ai_config', 'quota_window_hours', 'INTEGER DEFAULT 5');
   ensureColumn('ai_config', 'auto_mode', 'INTEGER NOT NULL DEFAULT 1');
   ensureColumn('ai_config', 'active_provider_key_id', 'TEXT');
+  ensureColumn('ai_provider_keys', 'selected_model', 'TEXT');
   db.exec(`
     UPDATE ai_config
     SET site_quota_tokens = user_quota_tokens
@@ -290,6 +292,16 @@ function runMigrations() {
       END
     WHERE trim(command_name) = ''
   `);
+
+  const providerKeysWithoutModel = db.prepare('SELECT id, provider FROM ai_provider_keys WHERE selected_model IS NULL OR trim(selected_model) = \'\'').all();
+  if (providerKeysWithoutModel.length > 0) {
+    const stmt = db.prepare('UPDATE ai_provider_keys SET selected_model = ?, updated_at = ? WHERE id = ?');
+    const now = new Date().toISOString();
+    for (const row of providerKeysWithoutModel) {
+      stmt.run(getDefaultModel(row.provider), now, row.id);
+    }
+  }
+
   logger.info('Migrations complete.');
 }
 
