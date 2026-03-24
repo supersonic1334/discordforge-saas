@@ -322,7 +322,7 @@ export default function Layout() {
           className={`group relative overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
             isActive('/dashboard/reviews')
               ? 'bg-gradient-to-r from-amber-500/16 via-yellow-400/10 to-amber-500/16 border border-amber-400/25 text-amber-200 shadow-[0_0_30px_rgba(250,204,21,0.18)]'
-              : 'text-white/55 border border-amber-500/10 hover:text-amber-200 hover:border-amber-400/18 hover:bg-gradient-to-r hover:from-amber-500/10 hover:via-yellow-400/6 hover:to-amber-500/10 hover:shadow-[0_0_24px_rgba(250,204,21,0.12)]'
+              : 'text-white/55 border border-transparent hover:text-amber-200 hover:border-amber-400/18 hover:bg-gradient-to-r hover:from-amber-500/10 hover:via-yellow-400/6 hover:to-amber-500/10 hover:shadow-[0_0_24px_rgba(250,204,21,0.12)]'
           } ${collapsed ? 'justify-center' : ''}`}
         >
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-[radial-gradient(circle_at_left,rgba(250,204,21,0.14),transparent_58%)]" />
