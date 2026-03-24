@@ -2,7 +2,6 @@
 
 const { WebSocketServer, WebSocket } = require('ws');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 const url = require('url');
 const config = require('../config');
 const db = require('../database');
@@ -146,16 +145,11 @@ class WSServer {
     try {
       const parsed = url.parse(req.url, true);
       const ticketUserId = this._consumeAuthTicket(parsed.query.ticket);
-      if (ticketUserId) {
-        return ticketUserId;
-      }
+      if (!ticketUserId) return null;
 
-      const token = parsed.query.token;
-      if (!token) return null;
-      const payload = jwt.verify(token, config.JWT_SECRET);
-      const user = db.findOne('users', { id: payload.userId });
+      const user = db.findOne('users', { id: ticketUserId });
       if (!user || !user.is_active) return null;
-      return payload.userId;
+      return ticketUserId;
     } catch {
       return null;
     }
