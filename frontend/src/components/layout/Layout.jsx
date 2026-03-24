@@ -229,8 +229,8 @@ export default function Layout() {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       <div className={`flex items-center gap-3 p-4 border-b border-white/[0.06] ${collapsed ? 'justify-center' : ''}`}>
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center shrink-0">
-          <Bot className="w-4.5 h-4.5 text-neon-cyan" />
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center shrink-0 overflow-hidden p-0.5 shadow-[0_8px_24px_rgba(92,138,255,0.16)]">
+          <img src="/discordforger-badge.svg" className="w-full h-full object-contain" alt="DiscordForger" />
         </div>
         {!collapsed && (
           <div>
@@ -462,8 +462,8 @@ export default function Layout() {
             <button onClick={() => setMobileOpen(true)} className="text-white/50 hover:text-white">
               <Menu className="w-5 h-5" />
             </button>
-            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center shrink-0">
-              <Bot className="w-4 h-4 text-neon-cyan" />
+            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center overflow-hidden shrink-0 p-0.5 shadow-[0_8px_24px_rgba(92,138,255,0.16)]">
+              <img src="/discordforger-badge.svg" className="w-full h-full object-contain" alt="DiscordForger" />
             </div>
             <span className="font-display font-700 text-white">{t('layout.appName')}</span>
           </div>
