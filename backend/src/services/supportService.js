@@ -10,6 +10,7 @@ const MESSAGE_COOLDOWN_MS = 4 * 1000;
 const DUPLICATE_TICKET_WINDOW_MS = 10 * 60 * 1000;
 const DUPLICATE_MESSAGE_WINDOW_MS = 45 * 1000;
 const MAX_OPEN_TICKETS_PER_USER = 3;
+const OPEN_UNCLAIMED_TICKET_AUTO_DELETE_MS = 24 * 60 * 60 * 1000;
 const CLOSED_TICKET_AUTO_DELETE_MS = 10 * 60 * 1000;
 const HOUSEKEEPING_COOLDOWN_MS = 30 * 1000;
 
@@ -37,6 +38,20 @@ function getClosedTicketExpiryThresholdIso() {
   return new Date(Date.now() - CLOSED_TICKET_AUTO_DELETE_MS).toISOString();
 }
 
+function getOpenUnclaimedTicketExpiryThresholdIso() {
+  return new Date(Date.now() - OPEN_UNCLAIMED_TICKET_AUTO_DELETE_MS).toISOString();
+}
+
+function purgeExpiredOpenUnclaimedTickets() {
+  return db.db.prepare(`
+    DELETE FROM support_tickets
+    WHERE status = 'open'
+      AND claimed_by_user_id IS NULL
+      AND claimed_once_at IS NULL
+      AND created_at <= ?
+  `).run(getOpenUnclaimedTicketExpiryThresholdIso()).changes || 0;
+}
+
 function purgeExpiredClosedTickets() {
   return db.db.prepare(`
     DELETE FROM support_tickets
@@ -46,6 +61,10 @@ function purgeExpiredClosedTickets() {
   `).run(getClosedTicketExpiryThresholdIso()).changes || 0;
 }
 
+function purgeExpiredTickets() {
+  return purgeExpiredClosedTickets() + purgeExpiredOpenUnclaimedTickets();
+}
+
 function ensureTicketHousekeeping(force = false) {
   const now = Date.now();
   if (!force && now - lastHousekeepingAt < HOUSEKEEPING_COOLDOWN_MS) {
@@ -53,7 +72,7 @@ function ensureTicketHousekeeping(force = false) {
   }
 
   lastHousekeepingAt = now;
-  return purgeExpiredClosedTickets();
+  return purgeExpiredTickets();
 }
 
 function normalizeText(value) {
@@ -580,9 +599,9 @@ function claimTicket(user, ticketId) {
   db.transaction(() => {
     db.db.prepare(`
       UPDATE support_tickets
-      SET claimed_by_user_id = ?, claimed_at = ?, status = 'claimed', closed_at = NULL, closed_by_user_id = NULL, updated_at = ?
+      SET claimed_by_user_id = ?, claimed_at = ?, claimed_once_at = COALESCE(claimed_once_at, ?), status = 'claimed', closed_at = NULL, closed_by_user_id = NULL, updated_at = ?
       WHERE id = ?
-    `).run(user.id, nowIso(), nowIso(), ticketId);
+    `).run(user.id, nowIso(), nowIso(), nowIso(), ticketId);
 
     recomputeTicketSnapshot(ticketId);
   });
@@ -758,6 +777,7 @@ module.exports = {
   isSupportStaff,
   isPrimaryFounder,
   purgeExpiredClosedTickets,
+  purgeExpiredTickets,
   listTickets,
   getTicketDetail,
   createTicket,
