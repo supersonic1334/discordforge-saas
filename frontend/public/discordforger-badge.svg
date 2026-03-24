@@ -1,0 +1,87 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="shieldFill" x1="92" y1="74" x2="426" y2="430" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7FBFF"/>
+      <stop offset="0.34" stop-color="#C5D4FF"/>
+      <stop offset="0.72" stop-color="#3C4A82"/>
+      <stop offset="1" stop-color="#141B36"/>
+    </linearGradient>
+    <linearGradient id="metalFill" x1="147" y1="175" x2="362" y2="361" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F9FDFF"/>
+      <stop offset="0.3" stop-color="#D8E6FF"/>
+      <stop offset="0.62" stop-color="#9DB7FF"/>
+      <stop offset="1" stop-color="#4C5F96"/>
+    </linearGradient>
+    <linearGradient id="steelDark" x1="156" y1="186" x2="352" y2="365" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#253765"/>
+      <stop offset="1" stop-color="#0E1426"/>
+    </linearGradient>
+    <linearGradient id="ember" x1="214" y1="136" x2="330" y2="206" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8B1"/>
+      <stop offset="0.44" stop-color="#FFAE5F"/>
+      <stop offset="1" stop-color="#FF6A3D"/>
+    </linearGradient>
+    <linearGradient id="arc" x1="203" y1="115" x2="286" y2="202" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFFFFF"/>
+      <stop offset="0.4" stop-color="#B7D5FF"/>
+      <stop offset="1" stop-color="#86A7FF"/>
+    </linearGradient>
+    <filter id="glowBlue" x="116" y="88" width="280" height="300" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowOrange" x="164" y="112" width="214" height="176" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <path d="M257 31L394 86L429 267C410 345 354 405 257 463C160 405 104 345 85 267L120 86L257 31Z" fill="url(#shieldFill)"/>
+  <path d="M257 59L373 106L402 256C387 321 341 370 257 421C173 370 127 321 112 256L141 106L257 59Z" fill="#16203E"/>
+  <path d="M257 70L365 113L391 253C376 312 334 356 257 403C180 356 138 312 123 253L149 113L257 70Z" stroke="#EEF6FF" stroke-width="13" stroke-linejoin="round"/>
+
+  <g filter="url(#glowBlue)">
+    <path d="M157 277L171 227H341L355 277H157Z" fill="url(#metalFill)"/>
+    <path d="M185 226L222 168H290L326 226H185Z" fill="url(#steelDark)"/>
+    <path d="M168 277H344L319 334H193L168 277Z" fill="url(#steelDark)"/>
+    <path d="M232 333H281V370H232V333Z" fill="url(#metalFill)"/>
+    <path d="M208 369H305L328 399H185L208 369Z" fill="url(#steelDark)"/>
+    <path d="M178 241H334" stroke="#F4FAFF" stroke-width="10" stroke-linecap="round"/>
+    <path d="M196 295H316" stroke="#9CB8FF" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
+  </g>
+
+  <path d="M167 278L188 234H216L197 278H167Z" fill="url(#metalFill)"/>
+  <path d="M146 230L90 262L143 279L167 246L146 230Z" fill="url(#metalFill)"/>
+  <path d="M144 237L99 262L140 274L159 248L144 237Z" fill="#16203E"/>
+
+  <g filter="url(#glowOrange)">
+    <path d="M283 125L330 92L404 168L358 199L283 125Z" fill="url(#metalFill)"/>
+    <path d="M313 100L347 75L373 112L339 137L313 100Z" fill="#EFF7FF"/>
+    <path d="M302 114L320 102L354 150L336 162L302 114Z" fill="#83A4FF"/>
+    <path d="M327 97L341 88L367 125L353 134L327 97Z" fill="#C6DBFF"/>
+    <path d="M359 198L344 210L285 142L300 130L359 198Z" fill="#2E4178"/>
+  </g>
+
+  <g filter="url(#glowOrange)">
+    <path d="M208 194L227 208L200 248L181 234L208 194Z" fill="url(#ember)"/>
+    <path d="M236 176L251 195L216 222L201 203L236 176Z" fill="url(#arc)"/>
+    <path d="M254 171L267 197L228 216L215 190L254 171Z" fill="#F8FCFF"/>
+    <path d="M278 179L289 206L250 221L239 194L278 179Z" fill="url(#ember)"/>
+    <path d="M301 189L307 216L267 224L261 197L301 189Z" fill="#FF9253"/>
+    <path d="M318 207L319 232L277 229L276 204L318 207Z" fill="#FFD68E"/>
+  </g>
+
+  <path d="M201 222C205 210 216 202 229 202H283C297 202 309 211 313 225L322 256C326 273 313 289 296 289H216C198 289 185 272 190 254L201 222Z" fill="#EDF7FF"/>
+  <path d="M214 222C217 214 224 210 233 210H279C288 210 296 216 299 225L305 248C308 259 299 269 287 269H224C212 269 203 258 207 246L214 222Z" fill="#8FB2FF"/>
+  <circle cx="237" cy="241" r="12" fill="#202743"/>
+  <circle cx="275" cy="241" r="12" fill="#202743"/>
+  <path d="M220 268C228 276 240 280 256 280C272 280 284 276 292 268" stroke="#1E294A" stroke-width="10" stroke-linecap="round"/>
+
+  <path d="M168 439C157 439 148 430 148 419C148 408 157 399 168 399H344C355 399 364 408 364 419C364 430 355 439 344 439H168Z" fill="#16203E" opacity="0.24"/>
+</svg>
