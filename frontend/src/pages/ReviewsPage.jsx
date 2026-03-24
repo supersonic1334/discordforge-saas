@@ -169,24 +169,30 @@ function StarShape({ filled = false, className = '', glow = false }) {
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
       <polygon
         points={STAR_POINTS}
-        fill={filled ? '#facc15' : 'rgba(255,255,255,0.08)'}
-        stroke={filled ? '#fde68a' : 'rgba(255,255,255,0.16)'}
+        fill={filled ? '#fbbf24' : 'rgba(255,255,255,0.07)'}
+        stroke={filled ? '#fde68a' : 'rgba(255,255,255,0.18)'}
         strokeWidth="1.3"
         strokeLinejoin="round"
-        style={glow ? { filter: 'drop-shadow(0 0 10px rgba(250,204,21,0.32))' } : undefined}
+        style={glow ? { filter: 'drop-shadow(0 0 12px rgba(250,204,21,0.34))' } : undefined}
       />
     </svg>
   )
 }
 
-function StarGlyph({ fill = 0, className = 'h-6 w-6' }) {
-  const width = `${Math.max(0, Math.min(100, fill * 100))}%`
+function StarGlyph({ fill = 0, className = 'h-6 w-6', glow = false }) {
+  const clipRight = `${Math.max(0, Math.min(100, 100 - (fill * 100)))}%`
 
   return (
     <div className={`relative ${className}`}>
       <StarShape className="absolute inset-0 h-full w-full" />
-      <div className="absolute inset-0 overflow-hidden" style={{ width }}>
-        <StarShape filled glow className="h-full w-full" />
+      <div
+        className="absolute inset-0"
+        style={{
+          clipPath: `inset(0 ${clipRight} 0 0)`,
+          WebkitClipPath: `inset(0 ${clipRight} 0 0)`,
+        }}
+      >
+        <StarShape filled glow={glow} className="h-full w-full" />
       </div>
     </div>
   )
@@ -198,7 +204,24 @@ function RatingDisplay({ ratingHalf, size = 'h-5 w-5' }) {
       {Array.from({ length: 5 }, (_, index) => {
         const starNumber = index + 1
         const fill = ratingHalf >= starNumber * 2 ? 1 : ratingHalf === starNumber * 2 - 1 ? 0.5 : 0
-        return <StarGlyph key={starNumber} fill={fill} className={size} />
+        return (
+          <motion.div
+            key={starNumber}
+            initial={{ opacity: 0, y: 6, scale: 0.9 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              scale: fill > 0 ? 1.02 : 1,
+            }}
+            transition={{
+              delay: starNumber * 0.035,
+              duration: 0.24,
+              ease: 'easeOut',
+            }}
+          >
+            <StarGlyph fill={fill} glow={fill > 0} className={size} />
+          </motion.div>
+        )
       })}
     </div>
   )
@@ -218,6 +241,7 @@ function RatingInput({ valueHalf, onChange, disabled = false }) {
         const leftValue = starNumber * 2 - 1
         const rightValue = starNumber * 2
         const fill = renderValue >= rightValue ? 1 : renderValue === leftValue ? 0.5 : 0
+        const highlighted = hoverHalf !== null && renderValue >= leftValue
 
         return (
           <div key={starNumber} className="relative h-11 w-11 shrink-0">
@@ -241,9 +265,30 @@ function RatingInput({ valueHalf, onChange, disabled = false }) {
                 />
               </>
             )}
-            <div className={`transition-all duration-150 ${!disabled && hoverHalf && fill > 0 ? 'scale-105' : ''}`}>
-              <StarGlyph fill={fill} className="h-11 w-11" />
-            </div>
+            <motion.div
+              animate={{
+                scale: highlighted ? 1.12 : fill > 0 ? 1.03 : 1,
+                y: highlighted ? -3 : 0,
+                rotate: highlighted ? (index % 2 === 0 ? -4 : 4) : 0,
+              }}
+              transition={{
+                type: 'spring',
+                stiffness: 380,
+                damping: 24,
+                mass: 0.5,
+              }}
+              className="relative"
+            >
+              <motion.div
+                className="absolute inset-1 rounded-full bg-amber-300/22 blur-md"
+                animate={{
+                  opacity: highlighted ? 0.9 : fill > 0 ? 0.35 : 0,
+                  scale: highlighted ? 1.15 : 0.9,
+                }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+              />
+              <StarGlyph fill={fill} glow={fill > 0} className="relative h-11 w-11" />
+            </motion.div>
           </div>
         )
       })}
