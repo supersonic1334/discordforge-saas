@@ -17,6 +17,17 @@ function DiscordMark(props) {
   )
 }
 
+function GoogleMark(props) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="#EA4335" d="M12.24 10.285v3.955h5.496c-.242 1.272-.967 2.35-2.059 3.075l3.327 2.583c1.94-1.787 3.058-4.42 3.058-7.553 0-.725-.065-1.421-.185-2.06H12.24Z" />
+      <path fill="#34A853" d="M12 22c2.76 0 5.078-.913 6.77-2.47l-3.327-2.583c-.924.62-2.103.988-3.443.988-2.647 0-4.89-1.786-5.69-4.19H2.87v2.666A9.997 9.997 0 0 0 12 22Z" />
+      <path fill="#4A90E2" d="M6.31 13.745A5.996 5.996 0 0 1 6 11.82c0-.668.114-1.318.31-1.925V7.229H2.87A9.997 9.997 0 0 0 2 11.82c0 1.61.386 3.134.87 4.591l3.44-2.666Z" />
+      <path fill="#FBBC05" d="M12 5.706c1.5 0 2.847.516 3.907 1.529l2.928-2.928C17.073 2.668 14.755 1.64 12 1.64a9.997 9.997 0 0 0-9.13 5.589l3.44 2.666c.8-2.404 3.043-4.19 5.69-4.19Z" />
+    </svg>
+  )
+}
+
 export default function AuthPage() {
   const { t } = useI18n()
   const [mode, setMode] = useState('login')
@@ -147,6 +158,27 @@ export default function AuthPage() {
   const startDiscordLogin = () => {
     window.location.href = '/api/v1/auth/discord'
   }
+
+  const startGoogleLogin = () => {
+    window.location.href = '/api/v1/auth/google'
+  }
+
+  const oauthButtons = [
+    oauthProviders.discord ? {
+      key: 'discord',
+      label: t('auth.discordButton', 'Discord'),
+      onClick: startDiscordLogin,
+      className: 'bg-[#5865F2] hover:bg-[#6773f6] shadow-[0_12px_30px_rgba(88,101,242,0.28)]',
+      icon: DiscordMark,
+    } : null,
+    oauthProviders.google ? {
+      key: 'google',
+      label: t('auth.googleButton', 'Google'),
+      onClick: startGoogleLogin,
+      className: 'bg-white text-[#111827] hover:bg-white/90 shadow-[0_12px_30px_rgba(255,255,255,0.12)]',
+      icon: GoogleMark,
+    } : null,
+  ].filter(Boolean)
 
   return (
     <div className="min-h-screen bg-surface-0 relative overflow-x-hidden p-4 md:px-6 md:py-8">
@@ -306,7 +338,7 @@ export default function AuthPage() {
                   ) : mode === 'login' ? t('auth.loginSubmit') : t('auth.registerSubmit')}
                 </button>
 
-                {oauthProviders.discord && (
+                {oauthButtons.length > 0 && (
                   <div className="space-y-3 pt-1">
                     <div className="flex items-center gap-3">
                       <div className="h-px flex-1 bg-white/[0.08]" />
@@ -316,14 +348,22 @@ export default function AuthPage() {
                       <div className="h-px flex-1 bg-white/[0.08]" />
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={startDiscordLogin}
-                      className="w-full py-3 rounded-xl font-display font-600 text-sm bg-[#5865F2] hover:bg-[#6773f6] text-white transition-all duration-200 shadow-[0_12px_30px_rgba(88,101,242,0.28)] flex items-center justify-center gap-2"
-                    >
-                      <DiscordMark className="w-4 h-4" />
-                      {t('auth.continueWithDiscord', 'Continuer avec Discord')}
-                    </button>
+                    <div className={`grid gap-3 ${oauthButtons.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                      {oauthButtons.map((provider) => {
+                        const Icon = provider.icon
+                        return (
+                          <button
+                            key={provider.key}
+                            type="button"
+                            onClick={provider.onClick}
+                            className={`w-full py-3 rounded-xl font-display font-600 text-sm transition-all duration-200 flex items-center justify-center gap-2 ${provider.className}`}
+                          >
+                            <Icon className="w-4 h-4 shrink-0" />
+                            {provider.label}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
               </form>
