@@ -218,6 +218,13 @@ function runMigrations() {
   ensureColumn('users', 'last_seen_device_hash', 'TEXT');
   ensureColumn('users', 'last_seen_user_agent', 'TEXT');
   ensureColumn('users', 'last_seen_at', 'TEXT');
+  ensureColumn('support_tickets', 'claimed_once_at', 'TEXT');
+  db.exec(`
+    UPDATE support_tickets
+    SET claimed_once_at = claimed_at
+    WHERE claimed_once_at IS NULL
+      AND claimed_at IS NOT NULL
+  `);
   ensureColumn('warnings', 'metadata', "TEXT DEFAULT '{}'");
   ensureUsersRoleConstraint();
   ensureAIConfigProviderConstraint();
