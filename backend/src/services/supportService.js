@@ -110,6 +110,7 @@ function serializeProfile(prefix, row, currentUser) {
   const username = row?.[`${prefix}_username`] || null;
   const avatarUrl = row?.[`${prefix}_avatar_url`] || null;
   const role = row?.[`${prefix}_role`] || (prefix === 'claimer' ? null : 'member');
+  const email = String(row?.[`${prefix}_email`] || '').trim().toLowerCase();
 
   if (!id && !username && !avatarUrl && !role) return null;
 
@@ -118,6 +119,7 @@ function serializeProfile(prefix, row, currentUser) {
     username: username || 'Support',
     avatar_url: avatarUrl,
     role: role || 'member',
+    is_primary_founder: authService.isPrimaryFounderEmail(email),
     email: prefix === 'owner' ? sanitizeSupportEmail(currentUser, id, row?.owner_email) : '',
     joined_at: prefix === 'owner' ? row?.owner_created_at || null : null,
     last_login_at: prefix === 'owner' ? row?.owner_last_login_at || null : null,
@@ -163,6 +165,7 @@ function decorateTicket(row, currentUser) {
 
 function formatMessage(row) {
   const fallbackRole = row.kind === 'staff' ? 'admin' : row.kind === 'system' ? 'system' : 'member';
+  const authorEmail = String(row.author_email || '').trim().toLowerCase();
   return {
     id: row.id,
     ticket_id: row.ticket_id,
@@ -173,9 +176,10 @@ function formatMessage(row) {
     updated_at: row.updated_at,
     author: {
       id: row.author_user_id || null,
-      username: row.author_username || (row.kind === 'system' ? 'Support' : 'Utilisateur'),
-      avatar_url: row.author_avatar_url || null,
-      role: row.author_role || fallbackRole,
+      username: row.effective_author_username || row.author_username || (row.kind === 'system' ? 'Support' : 'Utilisateur'),
+      avatar_url: row.effective_author_avatar_url || row.author_avatar_url || null,
+      role: row.effective_author_role || row.author_role || fallbackRole,
+      is_primary_founder: authService.isPrimaryFounderEmail(authorEmail),
     },
   };
 }
@@ -194,7 +198,8 @@ function getTicketRow(ticketId) {
       claimer.id AS claimer_id,
       claimer.username AS claimer_username,
       claimer.avatar_url AS claimer_avatar_url,
-      claimer.role AS claimer_role
+      claimer.role AS claimer_role,
+      claimer.email AS claimer_email
     FROM support_tickets t
     JOIN users owner ON owner.id = t.user_id
     LEFT JOIN users claimer ON claimer.id = t.claimed_by_user_id
@@ -422,9 +427,15 @@ function getTicketDetail(user, ticketId) {
   assertTicketAccess(user, ticket);
 
   const rows = db.db.prepare(`
-    SELECT *
-    FROM support_ticket_messages
-    WHERE ticket_id = ?
+    SELECT
+      m.*,
+      author.email AS author_email,
+      COALESCE(author.username, m.author_username) AS effective_author_username,
+      COALESCE(author.avatar_url, m.author_avatar_url) AS effective_author_avatar_url,
+      COALESCE(author.role, m.author_role) AS effective_author_role
+    FROM support_ticket_messages m
+    LEFT JOIN users author ON author.id = m.author_user_id
+    WHERE m.ticket_id = ?
     ORDER BY created_at ASC, id ASC
   `).all(ticketId);
 
