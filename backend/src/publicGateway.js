@@ -5,6 +5,7 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const httpProxy = require('http-proxy');
+const helmet = require('helmet');
 
 const app = express();
 const frontendDistDir = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
@@ -12,6 +13,34 @@ const backendPort = Number(process.env.BACKEND_PORT || 4000);
 const publicPort = Number(process.env.PUBLIC_PORT || 4010);
 const backendHttpTarget = `http://127.0.0.1:${backendPort}`;
 const backendWsTarget = `ws://127.0.0.1:${backendPort}`;
+const externalImageSources = [
+  "'self'",
+  'data:',
+  'blob:',
+  'https://cdn.discordapp.com',
+  'https://media.discordapp.net',
+  'https://lh3.googleusercontent.com',
+  'https://*.googleusercontent.com',
+];
+
+function getGatewayConnectSources() {
+  const sources = new Set(["'self'", 'ws:', 'wss:']);
+  const frontendOrigin = process.env.FRONTEND_URL;
+
+  if (frontendOrigin) {
+    try {
+      const parsed = new URL(frontendOrigin);
+      sources.add(parsed.origin);
+      sources.add(`${parsed.protocol === 'https:' ? 'wss:' : 'ws:'}//${parsed.host}`);
+    } catch {
+      // Ignore malformed overrides.
+    }
+  }
+
+  return [...sources];
+}
+
+const connectSources = getGatewayConnectSources();
 
 if (!fs.existsSync(path.join(frontendDistDir, 'index.html'))) {
   console.error(`Frontend build missing: ${frontendDistDir}`);
@@ -38,6 +67,42 @@ proxy.on('error', (error, req, res) => {
 });
 
 app.disable('x-powered-by');
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+  referrerPolicy: { policy: 'no-referrer' },
+  strictTransportSecurity: process.env.NODE_ENV === 'production'
+    ? {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      }
+    : false,
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'base-uri': ["'self'"],
+      'connect-src': connectSources,
+      'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
+      'form-action': ["'self'"],
+      'frame-ancestors': ["'none'"],
+      'img-src': externalImageSources,
+      'manifest-src': ["'self'"],
+      'media-src': ["'self'"],
+      'object-src': ["'none'"],
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      'worker-src': ["'self'", 'blob:'],
+    },
+  },
+}));
+app.use((req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()'
+  );
+  next();
+});
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
