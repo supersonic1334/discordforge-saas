@@ -255,8 +255,11 @@ function mapAIConfigRow(row) {
 
   const autoMode = Number(row.auto_mode ?? 1) !== 0;
   const quotaWindowHours = row.quota_window_hours ?? DEFAULT_AI_QUOTA_WINDOW_HOURS;
-  const resolvedModel = resolveConfiguredModel(row.provider, row.model);
   const selectedProviderKey = aiProviderKeyService.getConfiguredProviderKey(row);
+  const resolvedModel = resolveConfiguredModel(
+    row.provider,
+    selectedProviderKey?.selected_model || row.model
+  );
   const decryptedApiKey = selectedProviderKey?.encrypted_api_key
     ? decrypt(selectedProviderKey.encrypted_api_key)
     : (row.encrypted_api_key ? decrypt(row.encrypted_api_key) : null);
