@@ -3,14 +3,20 @@ import { KeyRound, RefreshCw, Save, ShieldCheck, Trash2, Users } from 'lucide-re
 import toast from 'react-hot-toast'
 import { providerAPI } from '../services/api'
 import { useI18n } from '../i18n'
+import KeyDeleteConfirmDialog from '../components/KeyDeleteConfirmDialog'
 
 const UI = {
   fr: {
     title: 'Panel fournisseur API',
-    subtitle: 'Ajoute ta propre clé IA. Le fondateur principal peut voir son état, mais pas ton accès complet.',
+    subtitle: 'Ajoute ta propre clé IA, choisis son modèle, puis laisse le fondateur principal la gérer si besoin.',
     provider: 'Fournisseur',
+    model: 'Modèle choisi',
+    modelHelp: 'Choisis le modèle exact qui devra être utilisé avec cette clé.',
+    modelSaved: 'Modèle fournisseur mis à jour',
+    applyModel: 'Appliquer le modèle',
+    applyingModel: 'Mise à jour...',
     apiKey: 'Clé API',
-    apiKeyHelp: 'Ta clé est stockée et vérifiée automatiquement.',
+    apiKeyHelp: 'Ta clé est stockée, vérifiée, puis reliée au modèle que tu choisis.',
     save: 'Enregistrer la clé',
     saving: 'Enregistrement...',
     refresh: 'Vérifier',
@@ -21,23 +27,38 @@ const UI = {
     refreshed: 'Statut actualisé',
     deleted: 'Clé supprimée',
     currentKeys: 'Tes clés enregistrées',
+    chosenModel: 'Version choisie',
+    statusLabel: 'Statut',
+    checkedAt: 'Dernière vérification',
+    usedAt: 'Dernière utilisation',
+    createdAt: 'Ajoutée le',
+    selectPlaceholder: 'Choisir un fournisseur',
     status: {
       valid: 'valide',
       quota_exhausted: 'quota vide',
       invalid: 'invalide',
       unknown: 'à vérifier',
     },
-    owner: 'Compte',
-    checkedAt: 'Dernière vérification',
-    usedAt: 'Dernière utilisation',
-    selectPlaceholder: 'Choisir un fournisseur',
+    deleteDialogTitle: 'Supprimer cette clé fournisseur ?',
+    deleteDialogText: 'Cette suppression retire la clé de ton accès fournisseur. Si cette clé est utilisée par le site, elle pourra aussi disparaître du pool général.',
+    deleteDialogHighlight: 'Pour éviter toute suppression accidentelle, la confirmation manuelle est obligatoire.',
+    deleteDialogInput: 'Tape SUPPRIMER pour confirmer',
+    deleteDialogPlaceholder: 'SUPPRIMER',
+    deleteDialogCancel: 'Annuler',
+    deleteDialogConfirm: 'Supprimer la clé',
+    deleteDialogWord: 'SUPPRIMER',
   },
   en: {
     title: 'API provider panel',
-    subtitle: 'Add your own AI key. The primary founder can see its status, but not your full access.',
+    subtitle: 'Add your own AI key, choose its model, then let the primary founder manage it when needed.',
     provider: 'Provider',
+    model: 'Selected model',
+    modelHelp: 'Choose the exact model that must be used with this key.',
+    modelSaved: 'Provider model updated',
+    applyModel: 'Apply model',
+    applyingModel: 'Updating...',
     apiKey: 'API key',
-    apiKeyHelp: 'Your key is stored and checked automatically.',
+    apiKeyHelp: 'Your key is stored, checked, then linked to the model you choose.',
     save: 'Save key',
     saving: 'Saving...',
     refresh: 'Refresh',
@@ -48,43 +69,68 @@ const UI = {
     refreshed: 'Status refreshed',
     deleted: 'Key deleted',
     currentKeys: 'Your saved keys',
+    chosenModel: 'Chosen version',
+    statusLabel: 'Status',
+    checkedAt: 'Last check',
+    usedAt: 'Last use',
+    createdAt: 'Added on',
+    selectPlaceholder: 'Choose a provider',
     status: {
       valid: 'valid',
       quota_exhausted: 'quota empty',
       invalid: 'invalid',
       unknown: 'to check',
     },
-    owner: 'Account',
-    checkedAt: 'Last check',
-    usedAt: 'Last use',
-    selectPlaceholder: 'Choose a provider',
+    deleteDialogTitle: 'Delete this provider key?',
+    deleteDialogText: 'This removes the key from your provider access. If the site is using it, it can also disappear from the shared pool.',
+    deleteDialogHighlight: 'Manual confirmation is required so this cannot be deleted by mistake.',
+    deleteDialogInput: 'Type DELETE to confirm',
+    deleteDialogPlaceholder: 'DELETE',
+    deleteDialogCancel: 'Cancel',
+    deleteDialogConfirm: 'Delete key',
+    deleteDialogWord: 'DELETE',
   },
   es: {
     title: 'Panel proveedor API',
-    subtitle: 'Agrega tu propia clave IA. El fundador principal puede ver su estado, pero no tu acceso completo.',
+    subtitle: 'Agrega tu propia clave IA, elige su modelo y deja que el fundador principal la gestione si hace falta.',
     provider: 'Proveedor',
+    model: 'Modelo elegido',
+    modelHelp: 'Elige el modelo exacto que debe usarse con esta clave.',
+    modelSaved: 'Modelo del proveedor actualizado',
+    applyModel: 'Aplicar modelo',
+    applyingModel: 'Actualizando...',
     apiKey: 'Clave API',
-    apiKeyHelp: 'Tu clave se guarda y se verifica automaticamente.',
+    apiKeyHelp: 'Tu clave se guarda, se verifica y queda vinculada al modelo que eliges.',
     save: 'Guardar clave',
     saving: 'Guardando...',
     refresh: 'Verificar',
     delete: 'Eliminar',
-    empty: 'Todavia no hay clave registrada',
+    empty: 'Todavía no hay clave registrada',
     emptyHint: 'Agrega una clave para alimentar la IA del sitio.',
     saved: 'Clave guardada',
     refreshed: 'Estado actualizado',
     deleted: 'Clave eliminada',
     currentKeys: 'Tus claves guardadas',
+    chosenModel: 'Versión elegida',
+    statusLabel: 'Estado',
+    checkedAt: 'Última verificación',
+    usedAt: 'Último uso',
+    createdAt: 'Agregada el',
+    selectPlaceholder: 'Elegir un proveedor',
     status: {
-      valid: 'valida',
-      quota_exhausted: 'cuota vacia',
-      invalid: 'invalida',
+      valid: 'válida',
+      quota_exhausted: 'cuota vacía',
+      invalid: 'inválida',
       unknown: 'por verificar',
     },
-    owner: 'Cuenta',
-    checkedAt: 'Ultima verificacion',
-    usedAt: 'Ultimo uso',
-    selectPlaceholder: 'Elegir un proveedor',
+    deleteDialogTitle: '¿Eliminar esta clave del proveedor?',
+    deleteDialogText: 'Esta acción quita la clave de tu acceso proveedor. Si el sitio la usa, también puede salir del pool compartido.',
+    deleteDialogHighlight: 'La confirmación manual es obligatoria para evitar borrarla por error.',
+    deleteDialogInput: 'Escribe ELIMINAR para confirmar',
+    deleteDialogPlaceholder: 'ELIMINAR',
+    deleteDialogCancel: 'Cancelar',
+    deleteDialogConfirm: 'Eliminar clave',
+    deleteDialogWord: 'ELIMINAR',
   },
 }
 
@@ -97,26 +143,41 @@ function getErrorMessage(error) {
   return error?.response?.data?.error || error?.message || 'Unexpected error'
 }
 
+function getModelLabel(catalog, providerId, modelId) {
+  const provider = catalog.find((entry) => entry.id === providerId)
+  const model = provider?.models?.find((entry) => entry.id === modelId)
+  return model?.label || modelId || '-'
+}
+
 export default function ProviderPanel() {
   const { locale } = useI18n()
   const ui = getUi(locale)
   const [catalog, setCatalog] = useState([])
   const [keys, setKeys] = useState([])
   const [provider, setProvider] = useState('anthropic')
+  const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busyKeyId, setBusyKeyId] = useState(null)
+  const [updatingModelKeyId, setUpdatingModelKeyId] = useState(null)
+  const [keyModelDrafts, setKeyModelDrafts] = useState({})
+  const [deleteDialogKey, setDeleteDialogKey] = useState(null)
 
   useEffect(() => {
     let cancelled = false
 
     providerAPI.getAI().then((res) => {
       if (cancelled) return
-      setCatalog(res.data.catalog || [])
-      setKeys(res.data.keys || [])
-      const firstProvider = res.data.keys?.[0]?.provider || res.data.catalog?.[0]?.id || 'anthropic'
+      const nextCatalog = res.data.catalog || []
+      const nextKeys = res.data.keys || []
+      const firstProvider = nextKeys[0]?.provider || nextCatalog[0]?.id || 'anthropic'
+      const firstProviderEntry = nextCatalog.find((entry) => entry.id === firstProvider)
+
+      setCatalog(nextCatalog)
+      setKeys(nextKeys)
       setProvider(firstProvider)
+      setModel(nextKeys[0]?.selected_model || firstProviderEntry?.defaultModel || firstProviderEntry?.models?.[0]?.id || '')
     }).catch((error) => {
       if (!cancelled) toast.error(getErrorMessage(error))
     }).finally(() => {
@@ -128,18 +189,38 @@ export default function ProviderPanel() {
     }
   }, [])
 
+  useEffect(() => {
+    const nextDrafts = {}
+    for (const entry of keys) {
+      const providerCatalog = catalog.find((item) => item.id === entry.provider)
+      nextDrafts[entry.id] = entry.selected_model || providerCatalog?.defaultModel || providerCatalog?.models?.[0]?.id || ''
+    }
+    setKeyModelDrafts(nextDrafts)
+  }, [keys, catalog])
+
   const selectedProvider = useMemo(
     () => catalog.find((entry) => entry.id === provider) || null,
     [catalog, provider]
   )
 
+  const providerModels = selectedProvider?.models || []
+
+  useEffect(() => {
+    if (!selectedProvider) return
+    if (providerModels.some((entry) => entry.id === model)) return
+
+    const existingKey = keys.find((entry) => entry.provider === provider)
+    setModel(existingKey?.selected_model || selectedProvider.defaultModel || providerModels[0]?.id || '')
+  }, [selectedProvider, providerModels, model, keys, provider])
+
   const saveKey = async () => {
-    if (!apiKey.trim()) return
+    if (!apiKey.trim() || !model) return
 
     setSaving(true)
     try {
       const res = await providerAPI.saveKey({
         provider,
+        model,
         api_key: apiKey.trim(),
       })
       const nextKey = res.data.key
@@ -148,6 +229,7 @@ export default function ProviderPanel() {
         if (!exists) return [nextKey, ...current]
         return current.map((entry) => (entry.id === nextKey.id ? nextKey : entry))
       })
+      setKeyModelDrafts((current) => ({ ...current, [nextKey.id]: nextKey.selected_model }))
       setApiKey('')
       toast.success(ui.saved)
     } catch (error) {
@@ -163,6 +245,7 @@ export default function ProviderPanel() {
       const res = await providerAPI.refreshKey(keyId)
       const nextKey = res.data.key
       setKeys((current) => current.map((entry) => (entry.id === keyId ? nextKey : entry)))
+      setKeyModelDrafts((current) => ({ ...current, [keyId]: nextKey.selected_model }))
       toast.success(ui.refreshed)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -171,11 +254,32 @@ export default function ProviderPanel() {
     }
   }
 
-  const deleteKey = async (keyId) => {
-    setBusyKeyId(keyId)
+  const updateKeyModel = async (keyId) => {
+    const nextModel = keyModelDrafts[keyId]
+    if (!nextModel) return
+
+    setUpdatingModelKeyId(keyId)
     try {
-      await providerAPI.deleteKey(keyId)
-      setKeys((current) => current.filter((entry) => entry.id !== keyId))
+      const res = await providerAPI.updateModel(keyId, nextModel)
+      const nextKey = res.data.key
+      setKeys((current) => current.map((entry) => (entry.id === keyId ? nextKey : entry)))
+      setKeyModelDrafts((current) => ({ ...current, [keyId]: nextKey.selected_model }))
+      toast.success(ui.modelSaved)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setUpdatingModelKeyId(null)
+    }
+  }
+
+  const confirmDeleteKey = async () => {
+    if (!deleteDialogKey?.id) return
+
+    setBusyKeyId(deleteDialogKey.id)
+    try {
+      await providerAPI.deleteKey(deleteDialogKey.id)
+      setKeys((current) => current.filter((entry) => entry.id !== deleteDialogKey.id))
+      setDeleteDialogKey(null)
       toast.success(ui.deleted)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -185,7 +289,7 @@ export default function ProviderPanel() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-5">
+    <div className="p-6 max-w-5xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
         <KeyRound className="w-6 h-6 text-neon-cyan" />
         <div>
@@ -203,7 +307,19 @@ export default function ProviderPanel() {
               <option key={entry.id} value={entry.id}>{entry.label}</option>
             ))}
           </select>
-          {selectedProvider?.description && <p className="text-xs text-white/35 mt-1">{selectedProvider.description}</p>}
+          {selectedProvider?.description ? <p className="text-xs text-white/35 mt-1">{selectedProvider.description}</p> : null}
+        </div>
+
+        <div>
+          <label className="text-xs font-mono text-white/40 mb-1.5 block">{ui.model}</label>
+          <select className="select-field" value={model} onChange={(event) => setModel(event.target.value)}>
+            {providerModels.map((entry) => (
+              <option key={entry.id} value={entry.id}>{entry.label}</option>
+            ))}
+          </select>
+          <p className="text-xs text-white/35 mt-1">
+            {providerModels.find((entry) => entry.id === model)?.description || ui.modelHelp}
+          </p>
         </div>
 
         <div>
@@ -228,7 +344,7 @@ export default function ProviderPanel() {
         <button
           type="button"
           onClick={saveKey}
-          disabled={saving || !apiKey.trim()}
+          disabled={saving || !apiKey.trim() || !model}
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-neon-cyan/10 border border-neon-cyan/25 text-neon-cyan text-sm font-mono hover:bg-neon-cyan/20 transition-all disabled:opacity-40"
         >
           {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -242,72 +358,135 @@ export default function ProviderPanel() {
           <p className="font-display font-600 text-white">{ui.currentKeys}</p>
         </div>
 
-        {!loading && keys.length === 0 && (
+        {!loading && keys.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-center">
             <p className="text-white/45">{ui.empty}</p>
             <p className="text-xs text-white/30 mt-1">{ui.emptyHint}</p>
           </div>
-        )}
+        ) : null}
 
         <div className="space-y-3">
-          {keys.map((key) => (
-            <div key={key.id} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-display font-600 text-white">{catalog.find((entry) => entry.id === key.provider)?.label || key.provider}</p>
-                    <span className={`badge ${
-                      key.status === 'valid'
-                        ? 'badge-online'
-                        : key.status === 'quota_exhausted'
-                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                        : key.status === 'invalid'
-                        ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                        : 'bg-white/[0.04] text-white/55 border border-white/10'
-                    }`}>
-                      {ui.status[key.status] || key.status}
-                    </span>
+          {keys.map((key) => {
+            const isBusy = busyKeyId === key.id || updatingModelKeyId === key.id
+            const cardModels = catalog.find((entry) => entry.id === key.provider)?.models || []
+            const draftModel = keyModelDrafts[key.id] || key.selected_model || cardModels[0]?.id || ''
+            const selectedCardModel = cardModels.find((entry) => entry.id === draftModel)
+
+            return (
+              <div key={key.id} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-display font-600 text-white">{catalog.find((entry) => entry.id === key.provider)?.label || key.provider}</p>
+                      <span className={`badge ${
+                        key.status === 'valid'
+                          ? 'badge-online'
+                          : key.status === 'quota_exhausted'
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          : key.status === 'invalid'
+                          ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          : 'bg-white/[0.04] text-white/55 border border-white/10'
+                      }`}>
+                        {ui.status[key.status] || key.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/35 font-mono mt-1">{key.key_masked}</p>
+                    {key.status_reason ? <p className="text-xs text-white/30 mt-1">{key.status_reason}</p> : null}
                   </div>
-                  <p className="text-xs text-white/35 font-mono mt-1">{key.key_masked}</p>
-                  {key.status_reason ? <p className="text-xs text-white/30 mt-1">{key.status_reason}</p> : null}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => refreshKey(key.id)}
+                      disabled={isBusy}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-white/70 text-xs font-mono hover:bg-white/[0.08] transition-all disabled:opacity-40"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${busyKeyId === key.id ? 'animate-spin' : ''}`} />
+                      {ui.refresh}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteDialogKey(key)}
+                      disabled={isBusy}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs font-mono hover:bg-red-500/20 transition-all disabled:opacity-40"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {ui.delete}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => refreshKey(key.id)}
-                    disabled={busyKeyId === key.id}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-white/70 text-xs font-mono hover:bg-white/[0.08] transition-all disabled:opacity-40"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${busyKeyId === key.id ? 'animate-spin' : ''}`} />
-                    {ui.refresh}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteKey(key.id)}
-                    disabled={busyKeyId === key.id}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs font-mono hover:bg-red-500/20 transition-all disabled:opacity-40"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    {ui.delete}
-                  </button>
-                </div>
-              </div>
+                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{ui.chosenModel}</p>
+                      <p className="text-sm text-white mt-1">{getModelLabel(catalog, key.provider, key.selected_model)}</p>
+                    </div>
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  </div>
 
-              <div className="grid sm:grid-cols-2 gap-3 text-xs text-white/35">
-                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2">
-                  <p className="font-mono text-white/30 mb-1">{ui.checkedAt}</p>
-                  <p>{key.checked_at ? new Date(key.checked_at).toLocaleString(locale) : '—'}</p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <select
+                      className="select-field flex-1"
+                      value={draftModel}
+                      onChange={(event) => setKeyModelDrafts((current) => ({ ...current, [key.id]: event.target.value }))}
+                    >
+                      {cardModels.map((entry) => (
+                        <option key={entry.id} value={entry.id}>{entry.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => updateKeyModel(key.id)}
+                      disabled={isBusy || !draftModel || draftModel === key.selected_model}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-xs font-mono text-neon-cyan transition-all hover:bg-neon-cyan/20 disabled:opacity-40"
+                    >
+                      {updatingModelKeyId === key.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      {updatingModelKeyId === key.id ? ui.applyingModel : ui.applyModel}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-white/35">{selectedCardModel?.description || ui.modelHelp}</p>
                 </div>
-                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2">
-                  <p className="font-mono text-white/30 mb-1">{ui.usedAt}</p>
-                  <p>{key.last_used_at ? new Date(key.last_used_at).toLocaleString(locale) : '—'}</p>
+
+                <div className="grid sm:grid-cols-3 gap-3 text-xs text-white/35">
+                  <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2">
+                    <p className="font-mono text-white/30 mb-1">{ui.createdAt}</p>
+                    <p>{key.created_at ? new Date(key.created_at).toLocaleString(locale) : '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2">
+                    <p className="font-mono text-white/30 mb-1">{ui.checkedAt}</p>
+                    <p>{key.checked_at ? new Date(key.checked_at).toLocaleString(locale) : '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2">
+                    <p className="font-mono text-white/30 mb-1">{ui.usedAt}</p>
+                    <p>{key.last_used_at ? new Date(key.last_used_at).toLocaleString(locale) : '—'}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
+
+      <KeyDeleteConfirmDialog
+        open={!!deleteDialogKey}
+        busy={busyKeyId === deleteDialogKey?.id}
+        title={ui.deleteDialogTitle}
+        description={ui.deleteDialogText}
+        highlight={ui.deleteDialogHighlight}
+        details={deleteDialogKey ? [
+          { label: ui.provider, value: catalog.find((entry) => entry.id === deleteDialogKey.provider)?.label || deleteDialogKey.provider },
+          { label: ui.chosenModel, value: getModelLabel(catalog, deleteDialogKey.provider, deleteDialogKey.selected_model) },
+          { label: ui.statusLabel, value: ui.status[deleteDialogKey.status] || deleteDialogKey.status },
+        ] : []}
+        confirmWord={ui.deleteDialogWord}
+        inputLabel={ui.deleteDialogInput}
+        inputPlaceholder={ui.deleteDialogPlaceholder}
+        cancelLabel={ui.deleteDialogCancel}
+        confirmLabel={ui.deleteDialogConfirm}
+        onClose={() => setDeleteDialogKey(null)}
+        onConfirm={confirmDeleteKey}
+      />
     </div>
   )
 }
