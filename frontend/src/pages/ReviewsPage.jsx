@@ -327,26 +327,40 @@ export default function ReviewsPage() {
   const [overview, setOverview] = useState({ stats: { average_rating: 0, total_reviews: 0 }, reviews: [], my_review: null })
   const [ratingHalf, setRatingHalf] = useState(9)
   const [message, setMessage] = useState('')
+  const [draftDirty, setDraftDirty] = useState(false)
 
-  const loadOverview = async () => {
-    setLoading(true)
+  const loadOverview = async ({ silent = false, hydrateDraft = false } = {}) => {
+    if (!silent) setLoading(true)
     try {
       const res = await reviewsAPI.overview()
       const nextOverview = res.data || { stats: { average_rating: 0, total_reviews: 0 }, reviews: [], my_review: null }
       setOverview(nextOverview)
-      if (nextOverview.my_review) {
+      if (nextOverview.my_review && (hydrateDraft || !draftDirty)) {
         setRatingHalf(nextOverview.my_review.rating_half)
         setMessage(nextOverview.my_review.message || '')
+        setDraftDirty(false)
       }
     } catch (error) {
+      if (silent) return
       toast.error(error?.response?.data?.error || error?.message || 'Unexpected error')
+    } finally {
+      if (!silent) setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
-    loadOverview()
+    loadOverview({ hydrateDraft: true })
   }, [])
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      loadOverview({ silent: true, hydrateDraft: false })
+    }, 8000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [draftDirty])
 
   const handleCreate = async () => {
     if (!message.trim()) return
@@ -357,7 +371,7 @@ export default function ReviewsPage() {
         message: message.trim(),
       })
       toast.success(text.created)
-      await loadOverview()
+      await loadOverview({ hydrateDraft: true })
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.message || 'Unexpected error')
     }
@@ -372,7 +386,7 @@ export default function ReviewsPage() {
         message: message.trim(),
       })
       toast.success(text.updated)
-      await loadOverview()
+      await loadOverview({ hydrateDraft: true })
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.message || 'Unexpected error')
     }
@@ -545,7 +559,10 @@ export default function ReviewsPage() {
               <textarea
                 className="input-field min-h-[190px] resize-none"
                 value={message}
-                onChange={(event) => setMessage(event.target.value)}
+                onChange={(event) => {
+                  setMessage(event.target.value)
+                  setDraftDirty(true)
+                }}
                 placeholder={text.messagePlaceholder}
                 maxLength={1500}
               />
