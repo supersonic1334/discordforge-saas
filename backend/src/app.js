@@ -43,6 +43,13 @@ const externalImageSources = [
 
 app.set('trust proxy', true);
 
+function setNoStoreHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+}
+
 // ── Security headers ──────────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -162,11 +169,18 @@ app.use(`${prefix}/support`, supportRoutes);
 app.use(`${prefix}/reviews`, reviewsRoutes);
 
 if (fs.existsSync(frontendDistDir)) {
-  app.use(express.static(frontendDistDir));
+  app.use(express.static(frontendDistDir, {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res) => {
+      setNoStoreHeaders(res);
+    },
+  }));
   app.get('*', (req, res, next) => {
     if (req.path === '/health' || req.path === '/ws' || req.path.startsWith(prefix)) {
       return next();
     }
+    setNoStoreHeaders(res);
     return res.sendFile(path.join(frontendDistDir, 'index.html'));
   });
 }
