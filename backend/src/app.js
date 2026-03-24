@@ -41,7 +41,35 @@ const externalImageSources = [
   'https://*.googleusercontent.com',
 ];
 
+function buildConnectSources() {
+  const sources = new Set(["'self'"]);
+  const originCandidates = [config.FRONTEND_URL, ...config.allowedOrigins];
+
+  for (const candidate of originCandidates) {
+    if (!candidate) continue;
+    try {
+      const parsed = new URL(candidate);
+      sources.add(parsed.origin);
+      sources.add(`${parsed.protocol === 'https:' ? 'wss:' : 'ws:'}//${parsed.host}`);
+    } catch {
+      // Ignore malformed custom origins from environment overrides.
+    }
+  }
+
+  if (config.isDev) {
+    sources.add('http://localhost:4000');
+    sources.add('http://localhost:5173');
+    sources.add('ws://localhost:4000');
+    sources.add('ws://localhost:5173');
+  }
+
+  return [...sources];
+}
+
+const cspConnectSources = buildConnectSources();
+
 app.set('trust proxy', true);
+app.disable('x-powered-by');
 
 function setNoStoreHeaders(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -53,13 +81,41 @@ function setNoStoreHeaders(res) {
 // ── Security headers ──────────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+  referrerPolicy: { policy: 'no-referrer' },
+  strictTransportSecurity: config.isProd
+    ? {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      }
+    : false,
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
+      'base-uri': ["'self'"],
+      'connect-src': cspConnectSources,
+      'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
+      'form-action': ["'self'"],
+      'frame-ancestors': ["'none'"],
       'img-src': externalImageSources,
+      'manifest-src': ["'self'"],
+      'media-src': ["'self'"],
+      'object-src': ["'none'"],
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      'worker-src': ["'self'", 'blob:'],
     },
   },
 }));
+
+app.use((req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()'
+  );
+  next();
+});
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 app.use(cors((req, cb) => {
@@ -91,7 +147,7 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 if (config.NODE_ENV !== 'test') {
   app.use(morgan('combined', {
     stream: { write: (msg) => logger.http(msg.trim()) },
-    skip: (req) => req.url === '/health',
+    skip: (req) => req.url === '/health' || req.url.startsWith('/ws'),
   }));
 }
 
@@ -158,6 +214,10 @@ app.get('/health', (req, res) => {
 // ── API Routes ────────────────────────────────────────────────────────────────
 const prefix = config.API_PREFIX;
 
+app.use(prefix, (req, res, next) => {
+  setNoStoreHeaders(res);
+  next();
+});
 app.use(`${prefix}/auth/login`, authLimiter);
 app.use(`${prefix}/auth/register`, authLimiter);
 app.use(`${prefix}/auth`,    authRoutes);
