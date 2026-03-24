@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
 import {
@@ -164,22 +164,70 @@ function Avatar({ review }) {
   )
 }
 
-function StarShape({ filled = false, className = '', glow = false }) {
+function StarShape({ filled = false, className = '', glow = false, glowStrength = 1 }) {
+  const svgId = useId().replace(/:/g, '')
+  const baseGradientId = `star-base-${svgId}`
+  const fillGradientId = `star-fill-${svgId}`
+  const shineGradientId = `star-shine-${svgId}`
+  const shadowId = `star-shadow-${svgId}`
+
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <polygon
-        points={STAR_POINTS}
-        fill={filled ? '#fbbf24' : 'rgba(255,255,255,0.07)'}
-        stroke={filled ? '#fde68a' : 'rgba(255,255,255,0.18)'}
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-        style={glow ? { filter: 'drop-shadow(0 0 12px rgba(250,204,21,0.34))' } : undefined}
-      />
+      <defs>
+        <linearGradient id={baseGradientId} x1="12" y1="2.25" x2="12" y2="21" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#30303a" />
+          <stop offset="58%" stopColor="#212129" />
+          <stop offset="100%" stopColor="#15151c" />
+        </linearGradient>
+        <linearGradient id={fillGradientId} x1="12" y1="2.25" x2="12" y2="21" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#fff7c2" />
+          <stop offset="28%" stopColor="#fde68a" />
+          <stop offset="62%" stopColor="#fbbf24" />
+          <stop offset="100%" stopColor="#d97706" />
+        </linearGradient>
+        <linearGradient id={shineGradientId} x1="12" y1="2.25" x2="12" y2="15" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.88)" />
+          <stop offset="45%" stopColor="rgba(255,255,255,0.22)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+        </linearGradient>
+        <filter id={shadowId} x="-90%" y="-90%" width="280%" height="280%">
+          <feDropShadow
+            dx="0"
+            dy={filled ? 1.1 : 0.6}
+            stdDeviation={filled ? 0.85 + (glow ? glowStrength * 0.7 : 0) : 0.55}
+            floodColor={filled ? '#fbbf24' : '#000000'}
+            floodOpacity={filled ? (glow ? 0.34 + (glowStrength * 0.12) : 0.18) : 0.26}
+          />
+          <feDropShadow
+            dx="0"
+            dy={filled ? 0 : 0.3}
+            stdDeviation={filled ? (glow ? 1.2 + (glowStrength * 0.5) : 0.45) : 0.4}
+            floodColor={filled ? '#fff1a8' : '#ffffff'}
+            floodOpacity={filled ? (glow ? 0.18 : 0.08) : 0.04}
+          />
+        </filter>
+      </defs>
+
+      <g filter={`url(#${shadowId})`}>
+        <polygon
+          points={STAR_POINTS}
+          fill={filled ? `url(#${fillGradientId})` : `url(#${baseGradientId})`}
+          stroke={filled ? '#ffe8a3' : 'rgba(255,255,255,0.16)'}
+          strokeWidth="1.25"
+          strokeLinejoin="round"
+        />
+        <polygon
+          points={STAR_POINTS}
+          fill={`url(#${shineGradientId})`}
+          opacity={filled ? 0.72 : 0.12}
+          stroke="none"
+        />
+      </g>
     </svg>
   )
 }
 
-function StarGlyph({ fill = 0, className = 'h-6 w-6', glow = false }) {
+function StarGlyph({ fill = 0, className = 'h-6 w-6', glow = false, glowStrength = 1 }) {
   const clipRight = `${Math.max(0, Math.min(100, 100 - (fill * 100)))}%`
 
   return (
@@ -192,7 +240,7 @@ function StarGlyph({ fill = 0, className = 'h-6 w-6', glow = false }) {
           WebkitClipPath: `inset(0 ${clipRight} 0 0)`,
         }}
       >
-        <StarShape filled glow={glow} className="h-full w-full" />
+        <StarShape filled glow={glow} glowStrength={glowStrength} className="h-full w-full" />
       </div>
     </div>
   )
@@ -219,7 +267,7 @@ function RatingDisplay({ ratingHalf, size = 'h-5 w-5' }) {
               ease: 'easeOut',
             }}
           >
-            <StarGlyph fill={fill} glow={fill > 0} className={size} />
+            <StarGlyph fill={fill} glow={fill > 0} glowStrength={0.8} className={size} />
           </motion.div>
         )
       })}
@@ -279,15 +327,12 @@ function RatingInput({ valueHalf, onChange, disabled = false }) {
               }}
               className="relative"
             >
-              <motion.div
-                className="absolute inset-1 rounded-full bg-amber-300/22 blur-md"
-                animate={{
-                  opacity: highlighted ? 0.9 : fill > 0 ? 0.35 : 0,
-                  scale: highlighted ? 1.15 : 0.9,
-                }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
+              <StarGlyph
+                fill={fill}
+                glow={fill > 0 || highlighted}
+                glowStrength={highlighted ? 1.45 : 0.9}
+                className="relative h-11 w-11"
               />
-              <StarGlyph fill={fill} glow={fill > 0} className="relative h-11 w-11" />
             </motion.div>
           </div>
         )
