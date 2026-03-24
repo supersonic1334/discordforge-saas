@@ -11,6 +11,7 @@ const { recordUserAccess, findMatchingBlock, syncDeviceCookie } = require('../se
 const discordService = require('../services/discordService');
 const botManager = require('../services/botManager');
 const { encrypt, hash } = require('../services/encryptionService');
+const wsServer = require('../websocket');
 const { requireAuth, validate } = require('../middleware');
 const {
   registerSchema,
@@ -150,6 +151,10 @@ router.get('/me/private-email', requireAuth, (req, res) => {
   res.json({
     email: String(req.user.email || '').trim().toLowerCase(),
   });
+});
+
+router.post('/ws-ticket', requireAuth, (req, res) => {
+  res.json(wsServer.issueAuthTicket(req.user.id));
 });
 
 // ── Discord OAuth ─────────────────────────────────────────────────────────────
