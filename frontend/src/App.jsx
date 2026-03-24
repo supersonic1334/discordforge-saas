@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { useAuthStore } from './stores'
 import { wsService } from './services/websocket'
 
+import AppErrorBoundary from './components/AppErrorBoundary'
 import Layout from './components/layout/Layout'
 import AuthPage from './pages/AuthPage'
 import SetupPage from './pages/SetupPage'
@@ -83,6 +84,13 @@ function DashboardHome() {
 
 function AppRoot() {
   const { token, fetchMe, logout } = useAuthStore()
+
+  useEffect(() => {
+    document.body.setAttribute('data-app-shell', 'ready')
+    return () => {
+      document.body.removeAttribute('data-app-shell')
+    }
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -212,10 +220,12 @@ function AppRoot() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <I18nProvider>
-        <AppRoot />
-      </I18nProvider>
-    </BrowserRouter>
+    <AppErrorBoundary>
+      <BrowserRouter>
+        <I18nProvider>
+          <AppRoot />
+        </I18nProvider>
+      </BrowserRouter>
+    </AppErrorBoundary>
   )
 }
