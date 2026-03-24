@@ -1,11 +1,15 @@
 'use strict';
 
 const { WebSocketServer, WebSocket } = require('ws');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const url = require('url');
 const config = require('../config');
 const db = require('../database');
 const logger = require('../utils/logger').child('WebSocket');
+
+const WS_AUTH_TICKET_TTL_MS = 45 * 1000;
+const WS_AUTH_TICKET_CLEANUP_MS = 15 * 1000;
 
 /**
  * A per-user WebSocket broadcaster.
@@ -16,14 +20,21 @@ class WSServer {
     this._wss = null;
     // Map<userId, Set<WebSocket>>
     this._clients = new Map();
+    this._authTickets = new Map();
     // Global ping interval
     this._pingInterval = null;
+    this._ticketCleanupInterval = null;
   }
 
   attach(httpServer) {
     this._wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
     this._wss.on('connection', (ws, req) => {
+      if (!this._isAllowedOrigin(req)) {
+        ws.close(4001, 'Unauthorized');
+        return;
+      }
+
       const userId = this._authenticate(req);
       if (!userId) {
         ws.close(4001, 'Unauthorized');
@@ -71,13 +82,74 @@ class WSServer {
       }
     }, 30_000);
 
+    this._ticketCleanupInterval = setInterval(() => {
+      this._cleanupExpiredTickets();
+    }, WS_AUTH_TICKET_CLEANUP_MS);
+
     logger.info('WebSocket server attached');
     return this;
+  }
+
+  issueAuthTicket(userId) {
+    const ticket = crypto.randomBytes(24).toString('base64url');
+    const expiresAt = Date.now() + WS_AUTH_TICKET_TTL_MS;
+
+    this._authTickets.set(ticket, {
+      userId: String(userId),
+      expiresAt,
+    });
+
+    return {
+      ticket,
+      expires_at: new Date(expiresAt).toISOString(),
+    };
+  }
+
+  _cleanupExpiredTickets() {
+    const now = Date.now();
+    for (const [ticket, meta] of this._authTickets.entries()) {
+      if (!meta || meta.expiresAt <= now) {
+        this._authTickets.delete(ticket);
+      }
+    }
+  }
+
+  _consumeAuthTicket(ticket) {
+    if (!ticket) return null;
+
+    const record = this._authTickets.get(String(ticket));
+    if (!record) return null;
+
+    this._authTickets.delete(String(ticket));
+    if (record.expiresAt <= Date.now()) return null;
+    return record.userId;
+  }
+
+  _isAllowedOrigin(req) {
+    const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
+    if (!origin) return true;
+    if (config.allowedOrigins.includes(origin) || origin === config.FRONTEND_URL) return true;
+
+    const forwardedHost = Array.isArray(req.headers['x-forwarded-host'])
+      ? req.headers['x-forwarded-host'][0]
+      : req.headers['x-forwarded-host'];
+    const requestHost = forwardedHost || req.headers.host;
+
+    try {
+      return new URL(origin).host === requestHost;
+    } catch {
+      return false;
+    }
   }
 
   _authenticate(req) {
     try {
       const parsed = url.parse(req.url, true);
+      const ticketUserId = this._consumeAuthTicket(parsed.query.ticket);
+      if (ticketUserId) {
+        return ticketUserId;
+      }
+
       const token = parsed.query.token;
       if (!token) return null;
       const payload = jwt.verify(token, config.JWT_SECRET);
@@ -145,6 +217,8 @@ class WSServer {
 
   shutdown() {
     clearInterval(this._pingInterval);
+    clearInterval(this._ticketCleanupInterval);
+    this._authTickets.clear();
     this._wss?.close();
   }
 }
