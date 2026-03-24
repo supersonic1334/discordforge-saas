@@ -301,6 +301,18 @@ const SCHEMA = [
   )`,
 
   // ────────────────────────────────────────────────────────────────────────────
+  // SITE REVIEWS
+  // ────────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS site_reviews (
+    id                TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    rating_half       INTEGER NOT NULL CHECK(rating_half >= 1 AND rating_half <= 10),
+    message           TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  // ────────────────────────────────────────────────────────────────────────────
   // BOT PROCESS STATUS (runtime state, not persisted across restarts)
   // ────────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS ai_global_quota (
@@ -357,6 +369,7 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status, last_message_at)`,
   `CREATE INDEX IF NOT EXISTS idx_support_tickets_claimed_by ON support_tickets(claimed_by_user_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_support_ticket_messages_ticket_id ON support_ticket_messages(ticket_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_site_reviews_updated_at ON site_reviews(updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_user_id ON access_blocks(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_lookup ON access_blocks(block_type, value_hash, is_active)`,
 ];

@@ -23,7 +23,7 @@ function normalizeReason(reason) {
 
 function maskKeyHash(keyHash) {
   const value = String(keyHash || '').trim();
-  return value ? `••••${value.slice(-6)}` : '••••';
+  return value ? `****${value.slice(-6)}` : '****';
 }
 
 function buildStatusOrderSql() {
@@ -53,6 +53,7 @@ function mapProviderKeyRow(row, selectedKeyId = null) {
     owner_username: row.owner_username || '',
     owner_role: row.owner_role || 'member',
     owner_avatar_url: row.owner_avatar_url || null,
+    owner_email: row.owner_email || '',
     is_selected: selectedKeyId ? row.id === selectedKeyId : false,
   };
 }
@@ -221,7 +222,7 @@ async function validateProviderKey(provider, apiKey) {
 
 function getProviderKeyById(id) {
   const row = db.raw(
-    `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url
+    `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url, u.email AS owner_email
      FROM ai_provider_keys k
      JOIN users u ON u.id = k.user_id
      WHERE k.id = ?
@@ -250,7 +251,7 @@ function listProviderKeys(filters = {}) {
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const selectedKeyId = db.raw("SELECT active_provider_key_id FROM ai_config WHERE id = 'singleton'")[0]?.active_provider_key_id || null;
   const rows = db.raw(
-    `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url
+    `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url, u.email AS owner_email
      FROM ai_provider_keys k
      JOIN users u ON u.id = k.user_id
      ${whereClause}
@@ -277,7 +278,7 @@ function getConfiguredProviderKey(aiConfigRow) {
 
   if (aiConfigRow.active_provider_key_id) {
     const selectedRow = db.raw(
-      `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url
+      `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url, u.email AS owner_email
        FROM ai_provider_keys k
        JOIN users u ON u.id = k.user_id
        WHERE k.id = ? AND k.provider = ? AND k.is_enabled = 1
@@ -285,15 +286,13 @@ function getConfiguredProviderKey(aiConfigRow) {
       [aiConfigRow.active_provider_key_id, provider]
     )[0];
 
-    if (selectedRow) return selectedRow;
+    if (selectedRow && !['invalid', 'quota_exhausted'].includes(String(selectedRow.status || '').trim().toLowerCase())) {
+      return selectedRow;
+    }
   }
 
-  if (aiConfigRow.encrypted_api_key) {
-    return null;
-  }
-
-  return db.raw(
-    `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url
+  const pooledKey = db.raw(
+    `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url, u.email AS owner_email
      FROM ai_provider_keys k
      JOIN users u ON u.id = k.user_id
      WHERE k.provider = ? AND k.is_enabled = 1
@@ -306,6 +305,10 @@ function getConfiguredProviderKey(aiConfigRow) {
      LIMIT 1`,
     [provider]
   )[0] || null;
+
+  if (pooledKey) return pooledKey;
+  if (aiConfigRow.encrypted_api_key) return null;
+  return null;
 }
 
 async function saveProviderKey(userId, { provider, apiKey }) {
@@ -339,6 +342,25 @@ async function saveProviderKey(userId, { provider, apiKey }) {
       ...payload,
       created_at: now,
     });
+  }
+
+  const aiConfig = db.raw("SELECT * FROM ai_config WHERE id = 'singleton' LIMIT 1")[0] || null;
+  if (!aiConfig) {
+    db.db.prepare(`
+      INSERT INTO ai_config (
+        id, provider, encrypted_api_key, active_provider_key_id, model, max_tokens, temperature,
+        user_quota_tokens, site_quota_tokens, quota_window_hours, auto_mode, enabled, updated_at
+      ) VALUES ('singleton', ?, NULL, ?, ?, 1024, 0.7, 4000, 20000, 5, 1, 1, ?)
+    `).run(normalizedProvider, keyId, resolveConfiguredModel(normalizedProvider, getDefaultModel(normalizedProvider)), now);
+  } else if (
+    normalizeProvider(aiConfig.provider) === normalizedProvider
+    && (!aiConfig.active_provider_key_id || aiConfig.active_provider_key_id === existing?.id)
+  ) {
+    db.db.prepare(`
+      UPDATE ai_config
+      SET active_provider_key_id = ?, enabled = 1, updated_at = ?
+      WHERE id = 'singleton'
+    `).run(keyId, now);
   }
 
   return getProviderKeyById(keyId);
@@ -389,6 +411,12 @@ function deleteProviderKey(id) {
   return true;
 }
 
+function getProviderKeySecret(id) {
+  const row = db.findOne('ai_provider_keys', { id });
+  if (!row?.encrypted_api_key) return null;
+  return decrypt(row.encrypted_api_key);
+}
+
 function getProviderKeyCountForUser(userId) {
   return Number(db.raw('SELECT COUNT(*) AS count FROM ai_provider_keys WHERE user_id = ?', [userId])[0]?.count || 0);
 }
@@ -402,6 +430,7 @@ module.exports = {
   markProviderKeyStatus,
   markProviderKeyUsed,
   deleteProviderKey,
+  getProviderKeySecret,
   countProviderKeys,
   getProviderKeyCountForUser,
 };

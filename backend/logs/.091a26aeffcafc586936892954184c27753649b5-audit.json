@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\33675\\OneDrive\\Bureau\\discord-saas-COMPLET_1\\backend\\logs\\.091a26aeffcafc586936892954184c27753649b5-audit.json",
+    "files": [
+        {
+            "date": 1774097965208,
+            "name": "C:\\Users\\33675\\OneDrive\\Bureau\\discord-saas-COMPLET_1\\backend\\logs\\combined-2026-03-21.log",
+            "hash": "f41b28b443938380836d532c7d95151b9bc618ca14dfd1971b829b18745d04df"
+        }
+    ],
+    "hashType": "sha256"
+}

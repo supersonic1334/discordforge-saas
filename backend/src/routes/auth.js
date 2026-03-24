@@ -7,7 +7,7 @@ const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 
 const config = require('../config');
 const authService = require('../services/authService');
-const { recordUserAccess } = require('../services/accessControlService');
+const { recordUserAccess, findMatchingBlock, syncDeviceCookie } = require('../services/accessControlService');
 const discordService = require('../services/discordService');
 const botManager = require('../services/botManager');
 const { encrypt, hash } = require('../services/encryptionService');
@@ -26,9 +26,20 @@ const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger').child('AuthRoutes');
 
 const router = express.Router();
+const discordOauthEnabled = !!(config.DISCORD_CLIENT_ID && config.DISCORD_CLIENT_SECRET && config.DISCORD_CALLBACK_URL);
+const googleOauthEnabled = !!(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET && config.GOOGLE_CALLBACK_URL);
+
+router.get('/access-status', (req, res) => {
+  syncDeviceCookie(req, res);
+  const block = findMatchingBlock(req);
+  res.json({
+    blocked: !!block,
+    code: block ? 'ACCESS_BLOCKED' : null,
+  });
+});
 
 // ── Passport OAuth Strategies ─────────────────────────────────────────────────
-if (config.DISCORD_CLIENT_ID) {
+if (discordOauthEnabled) {
   passport.use(new DiscordStrategy(
     {
       clientID: config.DISCORD_CLIENT_ID,
@@ -56,7 +67,7 @@ if (config.DISCORD_CLIENT_ID) {
   ));
 }
 
-if (config.GOOGLE_CLIENT_ID) {
+if (googleOauthEnabled) {
   passport.use(new GoogleStrategy(
     {
       clientID: config.GOOGLE_CLIENT_ID,
@@ -89,6 +100,13 @@ function redirectWithToken(res, token, error = null) {
   if (error) return res.redirect(`${base}/auth/callback?error=${encodeURIComponent(error)}`);
   return res.redirect(`${base}/auth/callback?token=${token}`);
 }
+
+router.get('/providers', (req, res) => {
+  res.json({
+    discord: discordOauthEnabled,
+    google: googleOauthEnabled,
+  });
+});
 
 // ── POST /register ────────────────────────────────────────────────────────────
 router.post('/register', validate(registerSchema), async (req, res, next) => {
@@ -135,26 +153,46 @@ router.get('/me/private-email', requireAuth, (req, res) => {
 });
 
 // ── Discord OAuth ─────────────────────────────────────────────────────────────
-router.get('/discord', passport.authenticate('discord'));
+if (discordOauthEnabled) {
+  router.get('/discord', passport.authenticate('discord'));
 
-router.get('/discord/callback',
-  passport.authenticate('discord', { session: false, failureRedirect: `${config.FRONTEND_URL}/auth?error=discord_failed` }),
-  (req, res) => {
-    recordUserAccess(req.user.user.id, req);
-    return redirectWithToken(res, req.user.token);
-  }
-);
+  router.get('/discord/callback',
+    passport.authenticate('discord', { session: false, failureRedirect: `${config.FRONTEND_URL}/auth?error=discord_failed` }),
+    (req, res) => {
+      recordUserAccess(req.user.user.id, req);
+      return redirectWithToken(res, req.user.token);
+    }
+  );
+} else {
+  router.get('/discord', (req, res) => {
+    res.status(503).json({ error: 'Discord OAuth not configured' });
+  });
+
+  router.get('/discord/callback', (req, res) => {
+    return redirectWithToken(res, null, 'discord_not_configured');
+  });
+}
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+if (googleOauthEnabled) {
+  router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-router.get('/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: `${config.FRONTEND_URL}/auth?error=google_failed` }),
-  (req, res) => {
-    recordUserAccess(req.user.user.id, req);
-    return redirectWithToken(res, req.user.token);
-  }
-);
+  router.get('/google/callback',
+    passport.authenticate('google', { session: false, failureRedirect: `${config.FRONTEND_URL}/auth?error=google_failed` }),
+    (req, res) => {
+      recordUserAccess(req.user.user.id, req);
+      return redirectWithToken(res, req.user.token);
+    }
+  );
+} else {
+  router.get('/google', (req, res) => {
+    res.status(503).json({ error: 'Google OAuth not configured' });
+  });
+
+  router.get('/google/callback', (req, res) => {
+    return redirectWithToken(res, null, 'google_not_configured');
+  });
+}
 
 // ── POST /bot-token — validate and store Discord bot token ────────────────────
 router.post('/bot-token', requireAuth, validate(botTokenSchema), async (req, res, next) => {

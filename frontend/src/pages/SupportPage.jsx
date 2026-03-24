@@ -53,6 +53,8 @@ const TEXT = {
     reason: 'Raison',
     status: 'Statut',
     claim: 'Prise en charge',
+    claimedBy: 'Pris par',
+    unclaimed: 'Sans claim',
     searchPlaceholder: 'Numero, pseudo, email ou texte',
     requester: 'Demandeur',
     contact: 'Contact',
@@ -152,6 +154,8 @@ const TEXT = {
     reason: 'Reason',
     status: 'Status',
     claim: 'Handling',
+    claimedBy: 'Claimed by',
+    unclaimed: 'Unclaimed',
     searchPlaceholder: 'Number, username, email or text',
     requester: 'Requester',
     contact: 'Contact',
@@ -307,7 +311,7 @@ function StatCard({ label, value, tone }) {
   )
 }
 
-function TicketRow({ ticket, locale, text, selected, onSelect }) {
+function TicketRow({ ticket, locale, text, selected, onSelect, isStaff }) {
   const meta = CATEGORY_META[ticket.category] || CATEGORY_META.other
   const Icon = meta.icon
 
@@ -337,6 +341,14 @@ function TicketRow({ ticket, locale, text, selected, onSelect }) {
             <span>{ticket.message_count} {text.messages}</span>
             <span>{formatDate(locale, ticket.last_message_at)}</span>
           </div>
+          {isStaff && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-mono">
+              <span className="text-white/28">{text.claimedBy}</span>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-white/72">
+                {ticket.claimer?.username || text.unclaimed}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </button>
@@ -704,12 +716,15 @@ export default function SupportPage() {
             {renderActions()}
           </div>
 
-          <div className={`mt-5 grid gap-3 ${isStaff ? 'xl:grid-cols-3' : 'md:grid-cols-2'}`}>
+          <div className={`mt-5 grid gap-3 ${isStaff ? 'xl:grid-cols-4' : ''}`}>
             <MetaPanel title={text.ticketInfo}>
               <div className="space-y-2 text-sm text-white/75">
                 <div>{text.reason}: <span className="text-white">{text.categories[selectedTicket.category]}</span></div>
                 <div>{text.status}: <span className="text-white">{text.filters[selectedTicket.status]}</span></div>
                 <div>{text.activity}: <span className="text-white">{formatTime(locale, selectedTicket.last_message_at)}</span></div>
+                {isStaff && (
+                  <div>{text.claimedBy}: <span className="text-white">{selectedTicket.claimer?.username || text.unclaimed}</span></div>
+                )}
               </div>
             </MetaPanel>
 
@@ -726,6 +741,21 @@ export default function SupportPage() {
                   </div>
                 </MetaPanel>
 
+                <MetaPanel title={text.claim}>
+                  {selectedTicket.claimer ? (
+                    <div className="flex items-center gap-3">
+                      {renderAvatar(selectedTicket.claimer)}
+                      <div className="min-w-0">
+                        <div className="truncate font-display text-white font-700">{selectedTicket.claimer.username}</div>
+                        <div className="text-sm text-white/42">{text.roles[selectedTicket.claimer.role] || selectedTicket.claimer.role}</div>
+                        <div className="mt-1 text-xs text-white/30">ID: {selectedTicket.claimer.id || '--'}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-white/45">{text.unclaimed}</div>
+                  )}
+                </MetaPanel>
+
                 <MetaPanel title={text.contact}>
                   <div className="space-y-2 text-sm text-white/75">
                     <div className="flex items-center gap-2">
@@ -737,21 +767,7 @@ export default function SupportPage() {
                   </div>
                 </MetaPanel>
               </>
-            ) : (
-              <MetaPanel title={text.claim}>
-                {selectedTicket.claimer ? (
-                  <div className="flex items-center gap-3">
-                    {renderAvatar(selectedTicket.claimer)}
-                    <div className="min-w-0">
-                      <div className="truncate font-display text-white font-700">{selectedTicket.claimer.username}</div>
-                      <div className="text-sm text-white/42">{text.roles[selectedTicket.claimer.role] || selectedTicket.claimer.role}</div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-sm text-white/45">{text.nobody}</div>
-                )}
-              </MetaPanel>
-            )}
+            ) : null}
           </div>
 
           {isStaff && (
@@ -1079,6 +1095,7 @@ export default function SupportPage() {
                     text={text}
                     selected={ticket.id === selectedTicketId}
                     onSelect={setSelectedTicketId}
+                    isStaff={isStaff}
                   />
                 ))}
               </div>

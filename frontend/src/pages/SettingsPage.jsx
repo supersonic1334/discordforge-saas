@@ -22,7 +22,7 @@ export default function SettingsPage() {
   const { fetchStatus: refreshBotStatus } = useBotStore()
   const { t, locale } = useI18n()
   const navigate = useNavigate()
-  const quickTokenOwner = user?.id || user?.email
+  const quickTokenOwner = { id: user?.id, email: user?.email }
   const fileInputRef = useRef(null)
   const [username, setUsername] = useState(user?.username || '')
   const [avatarDraft, setAvatarDraft] = useState(user?.avatar_url || '')

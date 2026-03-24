@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const passport = require('passport');
+const jwt = require('jsonwebtoken');
 
 const config = require('./config');
 const logger = require('./utils/logger');
@@ -25,6 +26,7 @@ const botRoutes  = require('./routes/bot');
 const { aiRouter, adminRouter } = require('./routes/aiAdmin');
 const providerRoutes = require('./routes/providerAI');
 const supportRoutes = require('./routes/support');
+const reviewsRoutes = require('./routes/reviews');
 
 // ── App ───────────────────────────────────────────────────────────────────────
 const app = express();
@@ -86,18 +88,47 @@ if (config.NODE_ENV !== 'test') {
   }));
 }
 
-// ── Rate limiting ─────────────────────────────────────────────────────────────
+// ?? Rate limiting ?????????????????????????????????????????????????????????????
+function getAuthenticatedUserId(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  try {
+    const payload = jwt.verify(authHeader.slice(7), config.JWT_SECRET);
+    return payload?.userId ? String(payload.userId) : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildClientRateLimitKey(req, { includeEmail = false } = {}) {
+  const deviceId = String(req.headers['x-device-id'] || '').trim();
+  const email = includeEmail ? String(req.body?.email || '').trim().toLowerCase() : '';
+  const userId = getAuthenticatedUserId(req);
+
+  if (userId) return `${req.ip}:user:${userId}`;
+  if (deviceId && email) return `${req.ip}:device:${deviceId}:email:${email}`;
+  if (deviceId) return `${req.ip}:device:${deviceId}`;
+  if (email) return `${req.ip}:email:${email}`;
+  return req.ip;
+}
+
 const globalLimiter = rateLimit({
   windowMs: config.RATE_LIMIT_WINDOW_MS,
-  max: config.RATE_LIMIT_MAX,
+  max: (req) => (getAuthenticatedUserId(req) ? config.AUTHENTICATED_RATE_LIMIT_MAX : config.RATE_LIMIT_MAX),
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => buildClientRateLimitKey(req),
   message: { error: 'Too many requests, please slow down.' },
 });
 
 const authLimiter = rateLimit({
-  windowMs: config.RATE_LIMIT_WINDOW_MS,
+  windowMs: config.AUTH_RATE_LIMIT_WINDOW_MS,
   max: config.AUTH_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => buildClientRateLimitKey(req, { includeEmail: true }),
+  skipSuccessfulRequests: true,
   message: { error: 'Too many auth attempts, please try again later.' },
 });
 
@@ -122,14 +153,13 @@ const prefix = config.API_PREFIX;
 
 app.use(`${prefix}/auth/login`, authLimiter);
 app.use(`${prefix}/auth/register`, authLimiter);
-app.use(`${prefix}/auth/discord`, authLimiter);
-app.use(`${prefix}/auth/google`, authLimiter);
 app.use(`${prefix}/auth`,    authRoutes);
 app.use(`${prefix}/bot`,     botRoutes);
 app.use(`${prefix}/ai`,      aiRouter);
 app.use(`${prefix}/admin`,   adminRouter);
 app.use(`${prefix}/provider`, providerRoutes);
 app.use(`${prefix}/support`, supportRoutes);
+app.use(`${prefix}/reviews`, reviewsRoutes);
 
 if (fs.existsSync(frontendDistDir)) {
   app.use(express.static(frontendDistDir));

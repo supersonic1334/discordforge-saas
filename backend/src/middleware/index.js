@@ -26,6 +26,10 @@ function getFounderByToken(req) {
 function requireUnblockedClient(req, res, next) {
   syncDeviceCookie(req, res);
 
+  if (req.path === '/auth/access-status') {
+    return next();
+  }
+
   const founder = getFounderByToken(req);
   if (founder) {
     req.blockBypassUser = founder;

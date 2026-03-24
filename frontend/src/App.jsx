@@ -16,12 +16,22 @@ import ProtectionPage from './pages/ProtectionPage'
 import ModerationPage from './pages/ModerationPage'
 import CommandsPage from './pages/CommandsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
+import ReviewsPage from './pages/ReviewsPage'
 import SupportPage from './pages/SupportPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPanel from './pages/AdminPanel'
 import ProviderPanel from './pages/ProviderPanel'
 import OAuthCallback from './pages/OAuthCallback'
 import { I18nProvider } from './i18n'
+
+function getAccessFingerprint(snapshot) {
+  const user = snapshot?.user
+  return [
+    user?.role || 'none',
+    user?.is_primary_founder ? 'primary' : 'standard',
+    snapshot?.hasBotToken ? 'bot' : 'no-bot',
+  ].join('|')
+}
 
 function RequireAuth({ children }) {
   const { token } = useAuthStore()
@@ -72,7 +82,7 @@ function DashboardHome() {
 }
 
 function AppRoot() {
-  const { token, fetchMe } = useAuthStore()
+  const { token, fetchMe, logout } = useAuthStore()
 
   useEffect(() => {
     let disposed = false
@@ -91,7 +101,63 @@ function AppRoot() {
       disposed = true
       wsService.disconnect()
     }
-  }, [token])
+  }, [token, fetchMe])
+
+  useEffect(() => {
+    if (!token) return undefined
+
+    const refreshSession = async (payload = {}) => {
+      if (payload?.forceReload || ['role_updated', 'access_restored'].includes(payload?.reason)) {
+        window.location.reload()
+        return
+      }
+
+      const ok = await fetchMe()
+      if (!ok) {
+        logout()
+        window.location.replace('/auth')
+      }
+    }
+
+    const unsubProfileUpdated = wsService.on('account:profileUpdated', refreshSession)
+    return () => {
+      unsubProfileUpdated()
+    }
+  }, [token, fetchMe, logout])
+
+  useEffect(() => {
+    if (!token) return undefined
+
+    let cancelled = false
+
+    const checkRoleRefresh = async () => {
+      if (cancelled || document.visibilityState === 'hidden') return
+
+      const before = getAccessFingerprint(useAuthStore.getState())
+      const ok = await fetchMe()
+      if (!ok || cancelled) return
+
+      const after = getAccessFingerprint(useAuthStore.getState())
+      if (before !== after) {
+        window.location.reload()
+      }
+    }
+
+    const intervalId = window.setInterval(checkRoleRefresh, 4000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkRoleRefresh()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [token, fetchMe])
 
   return (
     <>
@@ -128,6 +194,7 @@ function AppRoot() {
           <Route path="moderation" element={<PageTransition><ModerationPage /></PageTransition>} />
           <Route path="commands" element={<PageTransition><CommandsPage /></PageTransition>} />
           <Route path="analytics" element={<PageTransition><AnalyticsPage /></PageTransition>} />
+          <Route path="reviews" element={<PageTransition><ReviewsPage /></PageTransition>} />
           <Route path="support" element={<PageTransition><SupportPage /></PageTransition>} />
           <Route path="ai" element={<PageTransition><AIAssistant /></PageTransition>} />
           <Route path="settings" element={<PageTransition><SettingsPage /></PageTransition>} />

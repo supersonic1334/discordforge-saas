@@ -4,6 +4,9 @@ import { authAPI, botAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 
 const NO_SELECTED_GUILD = '__none__'
+let fetchMePromise = null
+let guildsRequestPromise = null
+let lastGuildFetchAt = 0
 
 // Helper to extract the most useful error message from any error shape
 function extractError(err) {
@@ -88,14 +91,22 @@ export const useAuthStore = create(
       },
 
       fetchMe: async () => {
-        try {
-          const res = await authAPI.me()
-          const { user, hasBotToken, botStatus } = res.data
-          set({ user, hasBotToken, botStatus })
-          return true
-        } catch {
-          return false
-        }
+        if (fetchMePromise) return fetchMePromise
+
+        fetchMePromise = (async () => {
+          try {
+            const res = await authAPI.me()
+            const { user, hasBotToken, botStatus } = res.data
+            set({ user, hasBotToken, botStatus })
+            return true
+          } catch {
+            return false
+          } finally {
+            fetchMePromise = null
+          }
+        })()
+
+        return fetchMePromise
       },
 
       logout: () => {
@@ -147,34 +158,64 @@ export const useGuildStore = create(
       }),
 
       fetchGuilds: async () => {
-        set({ isLoading: true })
-        try {
-          const res = await botAPI.guilds()
-          const guilds = res.data.guilds || []
-          if (guilds.length > 0) {
-            get().applyGuilds(guilds)
-            return
-          }
+        if (guildsRequestPromise) return guildsRequestPromise
+        if (get().guilds.length > 0 && Date.now() - lastGuildFetchAt < 1500) return get().guilds
 
+        set({ isLoading: true })
+
+        guildsRequestPromise = (async () => {
           try {
-            const syncRes = await botAPI.syncGuilds()
-            get().applyGuilds(syncRes.data.guilds || [])
+            const res = await botAPI.guilds()
+            const guilds = res.data.guilds || []
+            if (guilds.length > 0) {
+              lastGuildFetchAt = Date.now()
+              get().applyGuilds(guilds)
+              return guilds
+            }
+
+            try {
+              const syncRes = await botAPI.syncGuilds()
+              const syncedGuilds = syncRes.data.guilds || []
+              lastGuildFetchAt = Date.now()
+              get().applyGuilds(syncedGuilds)
+              return syncedGuilds
+            } catch {
+              lastGuildFetchAt = Date.now()
+              get().applyGuilds(guilds)
+              return guilds
+            }
           } catch {
-            get().applyGuilds(guilds)
+            set({ isLoading: false })
+            return []
+          } finally {
+            guildsRequestPromise = null
           }
-        } catch {
-          set({ isLoading: false })
-        }
+        })()
+
+        return guildsRequestPromise
       },
 
       syncGuilds: async () => {
+        if (guildsRequestPromise) return guildsRequestPromise
+
         set({ isLoading: true })
-        try {
-          const res = await botAPI.syncGuilds()
-          get().applyGuilds(res.data.guilds || [])
-        } catch {
-          set({ isLoading: false })
-        }
+
+        guildsRequestPromise = (async () => {
+          try {
+            const res = await botAPI.syncGuilds()
+            const guilds = res.data.guilds || []
+            lastGuildFetchAt = Date.now()
+            get().applyGuilds(guilds)
+            return guilds
+          } catch {
+            set({ isLoading: false })
+            return []
+          } finally {
+            guildsRequestPromise = null
+          }
+        })()
+
+        return guildsRequestPromise
       },
 
       selectGuild: (guildId) => set((state) => {

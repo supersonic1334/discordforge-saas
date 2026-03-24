@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   MessageSquare, LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
@@ -66,6 +66,7 @@ export default function Layout() {
   const canOpenWithoutGuild = (
     location.pathname === '/dashboard/servers'
     || location.pathname === '/dashboard/provider'
+    || location.pathname === '/dashboard/reviews'
     || location.pathname === '/dashboard/support'
   )
   const mustStayOnServers = !hasSelectedGuild && !canOpenWithoutGuild
@@ -78,13 +79,28 @@ export default function Layout() {
     { icon: MessageSquare, label: t('layout.nav.moderation'), path: '/dashboard/moderation', needsGuild: true },
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
+    { icon: Star, label: t('layout.nav.reviews', 'Avis'), path: '/dashboard/reviews' },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]
 
   useEffect(() => {
     fetchStatus()
     const refreshInterval = setInterval(() => fetchStatus(), 15000)
+    const handleBlockedAccess = () => {
+      wsService.disconnect()
+      setStatus({
+        status: 'stopped',
+        ping: -1,
+        guildCount: 0,
+        startedAt: null,
+        restartCount: 0,
+        lastError: null,
+        bot: null,
+      })
+      window.location.replace('/auth?blocked=1')
+    }
     const forceLogout = () => {
+      wsService.disconnect()
       setStatus({
         status: 'stopped',
         ping: -1,
@@ -100,7 +116,7 @@ export default function Layout() {
     const unsub = wsService.on('bot:statusChange', (payload) => {
       setStatus(payload)
     })
-    const unsubBlocked = wsService.on('account:blocked', forceLogout)
+    const unsubBlocked = wsService.on('account:blocked', handleBlockedAccess)
     const unsubDeleted = wsService.on('account:deleted', forceLogout)
     const unsubInvalid = wsService.on('session:invalid', forceLogout)
     return () => {

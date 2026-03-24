@@ -243,6 +243,16 @@ const supportTicketUpdateSchema = z.object({
   message: 'At least one field is required',
 });
 
+// ── Site reviews ─────────────────────────────────────────────────────────────
+const siteReviewCreateSchema = z.object({
+  rating_half: z.number().int().min(1).max(10),
+  message: z.string().trim().min(4).max(1500),
+});
+
+const siteReviewUpdateSchema = z.object({
+  message: z.string().trim().min(4).max(1500),
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -272,4 +282,6 @@ module.exports = {
   supportTicketMessageSchema,
   supportTicketStatusSchema,
   supportTicketUpdateSchema,
+  siteReviewCreateSchema,
+  siteReviewUpdateSchema,
 };

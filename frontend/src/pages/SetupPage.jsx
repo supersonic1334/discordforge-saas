@@ -21,7 +21,7 @@ export default function SetupPage() {
   const [error, setError] = useState('')
   const { user, fetchMe } = useAuthStore()
   const navigate = useNavigate()
-  const quickTokenOwner = user?.id || user?.email
+  const quickTokenOwner = { id: user?.id, email: user?.email }
   const steps = t('setup.steps', [])
   const stepResources = [
     {

@@ -10,6 +10,10 @@ const MESSAGE_COOLDOWN_MS = 4 * 1000;
 const DUPLICATE_TICKET_WINDOW_MS = 10 * 60 * 1000;
 const DUPLICATE_MESSAGE_WINDOW_MS = 45 * 1000;
 const MAX_OPEN_TICKETS_PER_USER = 3;
+const CLOSED_TICKET_AUTO_DELETE_MS = 10 * 60 * 1000;
+const HOUSEKEEPING_COOLDOWN_MS = 30 * 1000;
+
+let lastHousekeepingAt = 0;
 
 const AUTO_TICKET_TITLES = {
   bug: 'Bug signale',
@@ -27,6 +31,29 @@ function buildHttpError(status, message) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function getClosedTicketExpiryThresholdIso() {
+  return new Date(Date.now() - CLOSED_TICKET_AUTO_DELETE_MS).toISOString();
+}
+
+function purgeExpiredClosedTickets() {
+  return db.db.prepare(`
+    DELETE FROM support_tickets
+    WHERE status = 'closed'
+      AND closed_at IS NOT NULL
+      AND closed_at <= ?
+  `).run(getClosedTicketExpiryThresholdIso()).changes || 0;
+}
+
+function ensureTicketHousekeeping(force = false) {
+  const now = Date.now();
+  if (!force && now - lastHousekeepingAt < HOUSEKEEPING_COOLDOWN_MS) {
+    return 0;
+  }
+
+  lastHousekeepingAt = now;
+  return purgeExpiredClosedTickets();
 }
 
 function normalizeText(value) {
@@ -321,6 +348,7 @@ function getTicketCounts(user, query) {
 }
 
 function listTickets(user, query) {
+  ensureTicketHousekeeping();
   const staff = isSupportStaff(user);
   if (query.view === 'staff' && !staff) {
     throw buildHttpError(403, 'Acces support staff requis');
@@ -370,6 +398,7 @@ function listTickets(user, query) {
 }
 
 function getTicketDetail(user, ticketId) {
+  ensureTicketHousekeeping();
   const ticket = getTicketRow(ticketId);
   assertTicketAccess(user, ticket);
 
@@ -387,6 +416,7 @@ function getTicketDetail(user, ticketId) {
 }
 
 function createTicket(user, payload) {
+  ensureTicketHousekeeping();
   const timestamp = nowIso();
   const message = String(payload.message || '').trim();
   const autoTitleBase = AUTO_TICKET_TITLES[payload.category] || AUTO_TICKET_TITLES.other;
@@ -485,6 +515,7 @@ function createTicket(user, payload) {
 }
 
 function addTicketMessage(user, ticketId, body) {
+  ensureTicketHousekeeping();
   const ticket = getTicketRow(ticketId);
   assertTicketAccess(user, ticket);
 
@@ -532,6 +563,7 @@ function addTicketMessage(user, ticketId, body) {
 }
 
 function claimTicket(user, ticketId) {
+  ensureTicketHousekeeping();
   assertSupportStaff(user);
   const ticket = getTicketRow(ticketId);
   assertTicketAccess(user, ticket);
@@ -559,6 +591,7 @@ function claimTicket(user, ticketId) {
 }
 
 function unclaimTicket(user, ticketId) {
+  ensureTicketHousekeeping();
   assertSupportStaff(user);
   const ticket = getTicketRow(ticketId);
   assertTicketAccess(user, ticket);
@@ -586,6 +619,7 @@ function unclaimTicket(user, ticketId) {
 }
 
 function setTicketStatus(user, ticketId, status) {
+  ensureTicketHousekeeping();
   assertSupportStaff(user);
   const ticket = getTicketRow(ticketId);
   assertTicketAccess(user, ticket);
@@ -613,7 +647,7 @@ function setTicketStatus(user, ticketId, status) {
     addSystemMessage(
       ticketId,
       nextStatus === 'closed'
-        ? `Ticket ferme par ${user.username}.`
+        ? `Ticket ferme par ${user.username}. Suppression automatique dans 10 minutes si personne ne le rouvre.`
         : `Ticket rouvert par ${user.username}.`,
       user
     );
@@ -624,6 +658,7 @@ function setTicketStatus(user, ticketId, status) {
 }
 
 function updateTicket(user, ticketId, changes) {
+  ensureTicketHousekeeping();
   assertPrimaryFounder(user);
   const ticket = getTicketRow(ticketId);
   assertTicketAccess(user, ticket);
@@ -679,6 +714,7 @@ function updateTicket(user, ticketId, changes) {
 }
 
 function deleteTicket(user, ticketId) {
+  ensureTicketHousekeeping();
   assertPrimaryFounder(user);
   const ticket = getTicketRow(ticketId);
   assertTicketAccess(user, ticket);
@@ -687,6 +723,7 @@ function deleteTicket(user, ticketId) {
 }
 
 function deleteTicketMessage(user, messageId) {
+  ensureTicketHousekeeping();
   assertPrimaryFounder(user);
   const message = getTicketMessageRow(messageId);
   if (!message) {
@@ -720,6 +757,7 @@ function deleteTicketMessage(user, messageId) {
 module.exports = {
   isSupportStaff,
   isPrimaryFounder,
+  purgeExpiredClosedTickets,
   listTickets,
   getTicketDetail,
   createTicket,

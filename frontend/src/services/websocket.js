@@ -50,6 +50,13 @@ class WSService {
 
     this.ws.onclose = (event) => {
       clearInterval(this._pingInterval)
+      if (event?.code === 4005) {
+        this._emit('account:profileUpdated', {
+          reason: event?.reason || 'profile_updated',
+          forceReload: true,
+        })
+        return
+      }
       if (event?.code === 4003) {
         this._emit('account:blocked', {})
         return

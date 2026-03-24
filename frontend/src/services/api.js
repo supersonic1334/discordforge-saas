@@ -20,6 +20,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
+    if (err.response?.status === 403 && err.response?.data?.code === 'ACCESS_BLOCKED') {
+      if (!window.location.search.includes('blocked=1')) {
+        window.location.href = '/auth?blocked=1'
+      }
+    }
     if (err.response?.status === 401) {
       localStorage.removeItem('token')
       if (window.location.pathname !== '/auth') {
@@ -35,6 +40,8 @@ api.interceptors.response.use(
 export const authAPI = {
   register:       (data)     => api.post('/auth/register', data),
   login:          (data)     => api.post('/auth/login', data),
+  providers:      ()         => api.get('/auth/providers'),
+  accessStatus:   ()         => api.get('/auth/access-status'),
   me:             ()         => api.get('/auth/me'),
   getPrivateEmail: ()        => api.get('/auth/me/private-email'),
   setBotToken:    (token)    => api.post('/auth/bot-token', { token }),
@@ -113,6 +120,8 @@ export const adminAPI = {
   getAIRecommendation: (params) => api.get('/admin/ai/recommendation', { params }),
   setAI:      (data)     => api.put('/admin/ai', data),
   refreshProviderKey: (keyId) => api.post(`/admin/ai/provider-keys/${keyId}/refresh`),
+  getProviderKeySecret: (keyId) => api.get(`/admin/ai/provider-keys/${keyId}/secret`),
+  deleteProviderKey: (keyId) => api.delete(`/admin/ai/provider-keys/${keyId}`),
   system:     ()         => api.get('/admin/system'),
   bots:       ()         => api.get('/admin/bots'),
   restartBot: (userId)   => api.post(`/admin/bots/${userId}/restart`),
@@ -136,6 +145,12 @@ export const supportAPI = {
   updateTicket: (ticketId, data) => api.patch(`/support/tickets/${ticketId}`, data),
   deleteTicket: (ticketId) => api.delete(`/support/tickets/${ticketId}`),
   deleteMessage: (messageId) => api.delete(`/support/messages/${messageId}`),
+}
+
+export const reviewsAPI = {
+  overview: () => api.get('/reviews'),
+  create: (data) => api.post('/reviews', data),
+  updateMine: (data) => api.patch('/reviews/me', data),
 }
 
 export default api

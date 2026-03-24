@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 
 require('dotenv').config({
   path: path.resolve(__dirname, '..', '..', '.env'),
@@ -19,7 +20,7 @@ const envSchema = z.object({
   ENCRYPTION_KEY: z.string().min(32),
   ENCRYPTION_IV: z.string().min(16),
 
-  DATABASE_PATH: z.string().default('./data/discord_saas.db'),
+  DATABASE_PATH: z.string().optional(),
 
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   ALLOWED_ORIGINS: z.string().default('http://localhost:5173'),
@@ -33,15 +34,17 @@ const envSchema = z.object({
   GOOGLE_CALLBACK_URL: z.string().url().optional(),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),
-  RATE_LIMIT_MAX: z.coerce.number().default(100),
-  AUTH_RATE_LIMIT_MAX: z.coerce.number().default(20),
+  RATE_LIMIT_MAX: z.coerce.number().default(1800),
+  AUTHENTICATED_RATE_LIMIT_MAX: z.coerce.number().default(8000),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(600000),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().default(40),
 
   BOT_MAX_RESTART_ATTEMPTS: z.coerce.number().default(5),
   BOT_RESTART_DELAY_MS: z.coerce.number().default(5000),
   BOT_RESTART_BACKOFF_MULTIPLIER: z.coerce.number().default(2),
 
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug']).default('info'),
-  LOG_DIR: z.string().default('./logs'),
+  LOG_DIR: z.string().optional(),
   LOG_MAX_FILES: z.string().default('14d'),
   LOG_MAX_SIZE: z.string().default('20m'),
 
@@ -69,5 +72,30 @@ try {
 config.isDev = config.NODE_ENV === 'development';
 config.isProd = config.NODE_ENV === 'production';
 config.allowedOrigins = config.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
+
+const renderPersistentRoot = process.env.RENDER_DISK_ROOT
+  || process.env.PERSISTENT_DATA_DIR
+  || (fs.existsSync('/var/data') ? '/var/data' : '');
+
+const usingDefaultDatabasePath = !process.env.DATABASE_PATH || config.DATABASE_PATH === './data/discord_saas.db';
+const usingDefaultLogDir = !process.env.LOG_DIR || config.LOG_DIR === './logs';
+
+if (config.isProd && renderPersistentRoot) {
+  config.DATABASE_PATH = usingDefaultDatabasePath
+    ? path.join(renderPersistentRoot, 'discord_saas.db')
+    : config.DATABASE_PATH;
+  config.LOG_DIR = usingDefaultLogDir
+    ? path.join(renderPersistentRoot, 'logs')
+    : config.LOG_DIR;
+} else {
+  config.DATABASE_PATH = config.DATABASE_PATH || './data/discord_saas.db';
+  config.LOG_DIR = config.LOG_DIR || './logs';
+}
+
+config.hasPersistentStorage = Boolean(
+  config.isProd
+  && renderPersistentRoot
+  && String(config.DATABASE_PATH || '').startsWith(renderPersistentRoot)
+);
 
 module.exports = config;

@@ -1,11 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Eye, EyeOff, Bot, Shield, Zap, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Bot, Shield, Zap, AlertCircle, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
 import SnowCanvas from '../components/SnowCanvas'
+import { authAPI } from '../services/api'
 import { useAuthStore } from '../stores'
 import { useI18n } from '../i18n'
+
+function DiscordMark(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M20.317 4.369A19.791 19.791 0 0 0 15.885 3c-.191.335-.403.78-.554 1.135a18.27 18.27 0 0 0-5.098 0A12.64 12.64 0 0 0 9.677 3a19.736 19.736 0 0 0-4.434 1.37C2.44 8.603 1.681 12.73 2.06 16.8a19.9 19.9 0 0 0 5.433 2.73c.437-.59.826-1.214 1.16-1.87a12.85 12.85 0 0 1-1.826-.873c.154-.113.305-.23.45-.35 3.52 1.65 7.34 1.65 10.819 0 .148.12.299.237.45.35-.58.34-1.192.633-1.829.874.335.654.724 1.279 1.162 1.868a19.867 19.867 0 0 0 5.435-2.73c.445-4.716-.76-8.805-3.562-12.43ZM9.05 14.595c-1.057 0-1.924-.97-1.924-2.16 0-1.19.847-2.16 1.922-2.16 1.084 0 1.94.98 1.923 2.16 0 1.19-.848 2.16-1.922 2.16Zm5.906 0c-1.058 0-1.923-.97-1.923-2.16 0-1.19.846-2.16 1.923-2.16 1.083 0 1.939.98 1.922 2.16 0 1.19-.847 2.16-1.922 2.16Z" />
+    </svg>
+  )
+}
 
 export default function AuthPage() {
   const { t } = useI18n()
@@ -14,15 +24,20 @@ export default function AuthPage() {
   const [activeFeature, setActiveFeature] = useState('secure')
   const [form, setForm] = useState({ email: '', username: '', password: '' })
   const [error, setError] = useState('')
+  const [accessChecked, setAccessChecked] = useState(false)
+  const [blocked, setBlocked] = useState(false)
+  const [oauthProviders, setOauthProviders] = useState({ discord: false, google: false })
   const navigate = useNavigate()
+  const location = useLocation()
   const { login, register, isLoading } = useAuthStore()
+  const blockedHint = useMemo(() => new URLSearchParams(location.search).get('blocked') === '1', [location.search])
 
   const featureCards = [
     {
       key: 'secure',
       icon: Shield,
       label: t('auth.features.secure'),
-      description: t('auth.features.secureDesc', 'Connexion protegee et acces verrouille en toute securite.'),
+      description: t('auth.features.secureDesc', 'Connexion protégée et accès verrouillé en toute sécurité.'),
       iconClass: 'text-neon-cyan',
       iconBgClass: 'border-neon-cyan/20 bg-neon-cyan/10',
       activeClass: 'border-neon-cyan/30 bg-gradient-to-br from-neon-cyan/16 to-neon-cyan/4 shadow-[0_0_30px_rgba(0,229,255,0.14)]',
@@ -32,7 +47,7 @@ export default function AuthPage() {
       key: 'realtime',
       icon: Zap,
       label: t('auth.features.realtime'),
-      description: t('auth.features.realtimeDesc', 'Statuts, synchronisation et actions instantanees sur ton bot.'),
+      description: t('auth.features.realtimeDesc', 'Statuts, synchronisation et actions instantanées sur ton bot.'),
       iconClass: 'text-neon-violet',
       iconBgClass: 'border-neon-violet/20 bg-neon-violet/10',
       activeClass: 'border-neon-violet/30 bg-gradient-to-br from-neon-violet/16 to-neon-violet/4 shadow-[0_0_30px_rgba(176,78,255,0.14)]',
@@ -42,7 +57,7 @@ export default function AuthPage() {
       key: 'ai',
       icon: Bot,
       label: t('auth.features.ai'),
-      description: t('auth.features.aiDesc', 'Assistant integre pour configurer et piloter ton site plus vite.'),
+      description: t('auth.features.aiDesc', 'Assistant intégré pour configurer et piloter ton site plus vite.'),
       iconClass: 'text-green-400',
       iconBgClass: 'border-green-400/20 bg-green-400/10',
       activeClass: 'border-green-400/25 bg-gradient-to-br from-green-400/16 to-green-400/4 shadow-[0_0_30px_rgba(74,222,128,0.14)]',
@@ -50,6 +65,61 @@ export default function AuthPage() {
     },
   ]
   const activeFeatureCard = featureCards.find((feature) => feature.key === activeFeature) || featureCards[0]
+
+  useEffect(() => {
+    let cancelled = false
+
+    const checkAccess = async () => {
+      try {
+        const res = await authAPI.accessStatus()
+        if (cancelled) return
+
+        const isBlocked = !!res.data?.blocked
+        setBlocked(isBlocked)
+        setAccessChecked(true)
+
+        if (!isBlocked && blockedHint) {
+          const token = localStorage.getItem('token')
+          window.location.replace(token ? '/dashboard' : '/auth')
+        }
+      } catch (err) {
+        if (cancelled) return
+
+        const isBlocked = err?.response?.data?.code === 'ACCESS_BLOCKED'
+        setBlocked(isBlocked || blockedHint)
+        setAccessChecked(true)
+      }
+    }
+
+    checkAccess()
+    const intervalId = window.setInterval(checkAccess, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [blockedHint])
+
+  useEffect(() => {
+    let cancelled = false
+
+    authAPI.providers().then((res) => {
+      if (!cancelled) {
+        setOauthProviders({
+          discord: !!res.data?.discord,
+          google: !!res.data?.google,
+        })
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setOauthProviders({ discord: false, google: false })
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const set = (key, value) => {
     setForm((previous) => ({ ...previous, [key]: value }))
@@ -72,6 +142,10 @@ export default function AuthPage() {
     } else {
       setError(response.error || t('auth.unexpectedError'))
     }
+  }
+
+  const startDiscordLogin = () => {
+    window.location.href = '/api/v1/auth/discord'
   }
 
   return (
@@ -99,6 +173,35 @@ export default function AuthPage() {
             <p className="text-white/40 text-sm">{t('auth.tagline')}</p>
           </div>
 
+          {!accessChecked ? (
+            <div className="gradient-border">
+              <div className="bg-surface-1 rounded-2xl p-8 text-center space-y-4">
+                <div className="mx-auto w-10 h-10 border-2 border-white/15 border-t-neon-cyan rounded-full animate-spin" />
+                <p className="text-sm text-white/45 font-mono">
+                  {t('auth.blockedChecking', 'Verification de l acces...')}
+                </p>
+              </div>
+            </div>
+          ) : (blocked || blockedHint) ? (
+            <div className="gradient-border">
+              <div className="bg-surface-1 rounded-2xl p-8 text-center space-y-5">
+                <div className="mx-auto w-16 h-16 rounded-2xl border border-red-500/25 bg-red-500/10 text-red-400 flex items-center justify-center shadow-[0_0_30px_rgba(248,113,113,0.12)]">
+                  <Ban className="w-8 h-8" />
+                </div>
+                <div>
+                  <h2 className="font-display font-700 text-2xl text-white">{t('auth.blockedTitle', 'Acces bloque')}</h2>
+                  <p className="text-white/45 text-sm mt-2">
+                    {t('auth.blockedBody', 'Ton acces au site est actuellement bloque. Tant que le staff ne retablit pas l acces, tu ne peux pas utiliser le site ni te connecter.')}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
+                  <p className="text-xs font-mono text-white/45">
+                    {t('auth.blockedAutoRefresh', 'Verification automatique toutes les 5 secondes. Des que l acces est retabli, le site revient automatiquement.')}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
           <div className="gradient-border">
             <div className="bg-surface-1 rounded-2xl p-8">
               <div className="flex bg-white/[0.04] rounded-xl p-1 mb-6 border border-white/[0.06]">
@@ -202,6 +305,27 @@ export default function AuthPage() {
                     </span>
                   ) : mode === 'login' ? t('auth.loginSubmit') : t('auth.registerSubmit')}
                 </button>
+
+                {oauthProviders.discord && (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-white/[0.08]" />
+                      <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">
+                        {t('auth.oauthDivider', 'Ou')}
+                      </span>
+                      <div className="h-px flex-1 bg-white/[0.08]" />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={startDiscordLogin}
+                      className="w-full py-3 rounded-xl font-display font-600 text-sm bg-[#5865F2] hover:bg-[#6773f6] text-white transition-all duration-200 shadow-[0_12px_30px_rgba(88,101,242,0.28)] flex items-center justify-center gap-2"
+                    >
+                      <DiscordMark className="w-4 h-4" />
+                      {t('auth.continueWithDiscord', 'Continuer avec Discord')}
+                    </button>
+                  </div>
+                )}
               </form>
 
               <div className="mt-6 space-y-3">
@@ -263,6 +387,7 @@ export default function AuthPage() {
               </div>
             </div>
           </div>
+          )}
         </motion.div>
 
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AtSign, AlertTriangle, Bot, ChevronDown, ChevronUp, FileText, Link2, Mail, RefreshCw, Settings, Shield, Sparkles, Terminal, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -65,12 +65,17 @@ const LOG_EVENT_KEYS = [
   'nickname_change',
 ]
 
+const PROTECTION_LOAD_TOAST_ID = 'protection-load-error'
+
 const UI = {
   fr: {
     title: 'Protection',
     subtitle: 'Protections simples, claires et vraiment utiles pour ton serveur.',
     refresh: 'Recharger',
+    retry: 'Reessayer',
     loading: 'Chargement...',
+    loadError: 'Chargement impossible pour le moment.',
+    emptyCategory: 'Aucune protection dans cette categorie.',
     configure: 'Configurer',
     configuration: 'Configuration',
     save: 'Sauvegarder',
@@ -183,7 +188,10 @@ const UI = {
     title: 'Protection',
     subtitle: 'Clear, simple protections that are actually useful on your server.',
     refresh: 'Refresh',
+    retry: 'Retry',
     loading: 'Loading...',
+    loadError: 'Unable to load protections right now.',
+    emptyCategory: 'No protections in this category.',
     configure: 'Configure',
     configuration: 'Configuration',
     save: 'Save',
@@ -296,7 +304,10 @@ const UI = {
     title: 'Proteccion',
     subtitle: 'Protecciones claras, simples y realmente utiles para tu servidor.',
     refresh: 'Recargar',
+    retry: 'Reintentar',
     loading: 'Cargando...',
+    loadError: 'No se puede cargar la proteccion por ahora.',
+    emptyCategory: 'No hay protecciones en esta categoria.',
     configure: 'Configurar',
     configuration: 'Configuracion',
     save: 'Guardar',
@@ -1105,6 +1116,11 @@ export default function ProtectionPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [activeCategory, setActiveCategory] = useState('all')
+  const [loadError, setLoadError] = useState('')
+  const loadPromiseRef = useRef(null)
+  const pendingReloadRef = useRef(false)
+  const loadRequestIdRef = useRef(0)
+  const selectedGuildIdRef = useRef(selectedGuildId)
 
   const currentGuild = guilds.find((guild) => guild.id === selectedGuildId) || null
 
@@ -1123,38 +1139,72 @@ export default function ProtectionPage() {
   }, [activeCategory, modules])
 
   useEffect(() => {
+    selectedGuildIdRef.current = selectedGuildId
+  }, [selectedGuildId])
+
+  const loadAll = useCallback(async (initial = false) => {
+    if (!selectedGuildIdRef.current) return
+
+    if (loadPromiseRef.current) {
+      pendingReloadRef.current = true
+      return loadPromiseRef.current
+    }
+
+    const guildId = selectedGuildIdRef.current
+    const requestId = ++loadRequestIdRef.current
+
+    setLoadError('')
+    if (initial) setLoading(true)
+    else setRefreshing(true)
+
+    const request = Promise.all([
+      modulesAPI.list(guildId),
+      botAPI.roles(guildId),
+      botAPI.channels(guildId),
+    ])
+      .then(([modulesResponse, rolesResponse, channelsResponse]) => {
+        if (requestId !== loadRequestIdRef.current || guildId !== selectedGuildIdRef.current) return
+        setModules(modulesResponse.data.modules || [])
+        setRoles((rolesResponse.data.roles || []).filter((role) => role.name !== '@everyone'))
+        setChannels(channelsResponse.data.channels || [])
+        setLoadError('')
+        toast.dismiss(PROTECTION_LOAD_TOAST_ID)
+      })
+      .catch((error) => {
+        if (requestId !== loadRequestIdRef.current || guildId !== selectedGuildIdRef.current) return
+        const message = getErrorMessage(error)
+        setLoadError(message)
+        toast.error(message, { id: PROTECTION_LOAD_TOAST_ID })
+      })
+      .finally(() => {
+        if (requestId === loadRequestIdRef.current) {
+          setLoading(false)
+          setRefreshing(false)
+        }
+
+        loadPromiseRef.current = null
+
+        if (pendingReloadRef.current && guildId === selectedGuildIdRef.current) {
+          pendingReloadRef.current = false
+          void loadAll(false)
+        }
+      })
+
+    loadPromiseRef.current = request
+    return request
+  }, [])
+
+  useEffect(() => {
     if (!selectedGuildId) {
       setModules([])
       setRoles([])
       setChannels([])
+      setLoadError('')
       setLoading(false)
       return
     }
     loadAll(true)
-  }, [selectedGuildId])
-
-  const loadAll = async (initial = false) => {
-    if (!selectedGuildId) return
-    if (initial) setLoading(true)
-    else setRefreshing(true)
-
-    try {
-      const [modulesResponse, rolesResponse, channelsResponse] = await Promise.all([
-        modulesAPI.list(selectedGuildId),
-        botAPI.roles(selectedGuildId),
-        botAPI.channels(selectedGuildId),
-      ])
-
-      setModules(modulesResponse.data.modules || [])
-      setRoles((rolesResponse.data.roles || []).filter((role) => role.name !== '@everyone'))
-      setChannels(channelsResponse.data.channels || [])
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }
+  }, [loadAll, selectedGuildId])
 
   const toggleModule = async (type, enabled) => {
     await modulesAPI.toggle(selectedGuildId, type, enabled)
@@ -1239,6 +1289,24 @@ export default function ProtectionPage() {
 
       {loading ? (
         <div className="glass-card p-8 text-white/45">{ui.loading}</div>
+      ) : loadError && modules.length === 0 ? (
+        <div className="glass-card p-8 text-center space-y-4">
+          <div className="space-y-2">
+            <p className="text-lg font-display font-700 text-white">{ui.loadError}</p>
+            <p className="text-sm text-red-300/90">{loadError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadAll(false)}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl border border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/15 transition-colors disabled:opacity-60"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {ui.retry}
+          </button>
+        </div>
+      ) : filteredModules.length === 0 ? (
+        <div className="glass-card p-8 text-center text-white/45">{ui.emptyCategory}</div>
       ) : (
         <div className="grid gap-5 xl:grid-cols-2 items-start">
           {filteredModules.map((module) => (

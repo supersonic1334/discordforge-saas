@@ -41,6 +41,10 @@ function notifyAndDisconnectUser(userId, event, code, reason) {
   setTimeout(() => wsServer.disconnectUser(userId, code, reason), 80);
 }
 
+function notifyUserProfileChanged(userId, reason) {
+  notifyAndDisconnectUser(userId, 'account:profileUpdated', 4005, reason);
+}
+
 function requirePrimaryFounder(req, res, next) {
   if (!isPrimaryFounder(req.user)) {
     return res.status(403).json({ error: 'Primary founder access required' });
@@ -131,6 +135,8 @@ adminRouter.patch('/users/:userId/role', requireFounder, validate(adminRoleSchem
     }
   }
 
+  notifyUserProfileChanged(user.id, 'role_updated');
+
   res.json({ message: `Role updated to ${role}` });
 });
 
@@ -164,6 +170,7 @@ adminRouter.patch('/users/:userId/status', requireFounder, validate(userStatusSc
     notifyAndDisconnectUser(user.id, 'account:blocked', 4003, 'Account blocked');
   } else {
     clearAdvancedBlocksForUser(user.id);
+    notifyUserProfileChanged(user.id, 'access_restored');
   }
 
   res.json({ message: `User ${is_active ? 'activated' : 'deactivated'}` });
@@ -426,6 +433,38 @@ adminRouter.post('/ai/provider-keys/:keyId/refresh', requirePrimaryFounder, asyn
   } catch (err) {
     next(err);
   }
+});
+
+adminRouter.get('/ai/provider-keys/:keyId/secret', requirePrimaryFounder, (req, res) => {
+  const key = aiProviderKeyService.getProviderKeyById(req.params.keyId);
+  if (!key) return res.status(404).json({ error: 'Provider key not found' });
+
+  const secret = aiProviderKeyService.getProviderKeySecret(req.params.keyId);
+  if (!secret) return res.status(404).json({ error: 'Provider key secret not found' });
+
+  res.json({
+    keyId: key.id,
+    provider: key.provider,
+    owner: {
+      username: key.owner_username,
+      role: key.owner_role,
+      avatar_url: key.owner_avatar_url,
+      email: key.owner_email,
+    },
+    api_key: secret,
+    created_at: key.created_at,
+    updated_at: key.updated_at,
+    checked_at: key.checked_at,
+    last_used_at: key.last_used_at,
+  });
+});
+
+adminRouter.delete('/ai/provider-keys/:keyId', requirePrimaryFounder, (req, res) => {
+  const key = aiProviderKeyService.getProviderKeyById(req.params.keyId);
+  if (!key) return res.status(404).json({ error: 'Provider key not found' });
+
+  aiProviderKeyService.deleteProviderKey(req.params.keyId);
+  res.json({ message: 'Provider key deleted' });
 });
 
 adminRouter.get('/system', (req, res) => {

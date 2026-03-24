@@ -17,6 +17,10 @@ const dbPath = path.isAbsolute(config.DATABASE_PATH)
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
+if (config.isProd && !config.hasPersistentStorage) {
+  logger.warn(`Production database is using non-persistent storage: ${dbPath}`);
+}
+
 // ── Open connection ───────────────────────────────────────────────────────────
 const db = new DatabaseSync(dbPath);
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Crown, Users, Bot, Activity, Ban, ShieldCheck, Settings2, ChevronDown, ChevronUp, Trash2, KeyRound, RefreshCw } from 'lucide-react'
+import { Crown, Users, Bot, Activity, Ban, ShieldCheck, Settings2, ChevronDown, ChevronUp, Trash2, KeyRound, RefreshCw, Eye, EyeOff, Copy, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminAPI, authAPI } from '../services/api'
 import { useI18n } from '../i18n'
@@ -74,6 +74,10 @@ export default function AdminPanel() {
   const [saving, setSaving] = useState(false)
   const [updatingUserId, setUpdatingUserId] = useState(null)
   const [refreshingProviderKeyId, setRefreshingProviderKeyId] = useState(null)
+  const [deletingProviderKeyId, setDeletingProviderKeyId] = useState(null)
+  const [loadingProviderKeySecretId, setLoadingProviderKeySecretId] = useState(null)
+  const [revealedProviderKeys, setRevealedProviderKeys] = useState({})
+  const [copiedProviderKeyId, setCopiedProviderKeyId] = useState(null)
   const [openAdvancedUserId, setOpenAdvancedUserId] = useState(null)
   const [privateEmail, setPrivateEmail] = useState('')
   const [showPrivateEmail, setShowPrivateEmail] = useState(false)
@@ -133,10 +137,13 @@ export default function AdminPanel() {
   }, [canManageUsers])
 
   useEffect(() => {
-    if (!canManageUsers && tab !== 'ai') {
+    if (!canManageUsers && tab === 'users') {
       setTab('ai')
     }
-  }, [canManageUsers, tab])
+    if (!canManageProviderPool && tab === 'provider_keys') {
+      setTab('ai')
+    }
+  }, [canManageUsers, canManageProviderPool, tab])
 
   const selectedProvider = useMemo(
     () => catalog.find((provider) => provider.id === aiCfg.provider) || null,
@@ -194,6 +201,10 @@ export default function AdminPanel() {
     () => (aiCfg.provider_keys || []).filter((entry) => entry.provider === aiCfg.provider),
     [aiCfg.provider_keys, aiCfg.provider]
   )
+  const providerLabelById = useMemo(
+    () => Object.fromEntries((catalog || []).map((provider) => [provider.id, provider.label])),
+    [catalog]
+  )
 
   useEffect(() => {
     if (!aiCfg.active_provider_key_id) return
@@ -231,7 +242,7 @@ export default function AdminPanel() {
     [users, currentUserId]
   )
   const canDeleteUsers = !!currentPanelUser?.is_primary_founder
-  const canManageProviderPool = !!currentUser?.is_primary_founder
+  const canManageProviderPool = !!(currentUser?.is_primary_founder || currentPanelUser?.is_primary_founder)
   const canRevealPrimaryEmail = !!(
     currentUser?.is_primary_founder
     || (currentUser?.role === 'founder' && currentUser?.email === '********@********.***')
@@ -247,8 +258,19 @@ export default function AdminPanel() {
     if (canManageUsers) {
       availableTabs.unshift(['users', t('admin.tabs.users')])
     }
+    if (canManageProviderPool) {
+      availableTabs.push(['provider_keys', t('admin.tabs.providerKeys', 'Cl\u00e9s fournisseurs')])
+    }
     return availableTabs
-  }, [canManageUsers, t])
+  }, [canManageUsers, canManageProviderPool, t])
+  const validProviderKeys = useMemo(
+    () => (aiCfg.provider_keys || []).filter((entry) => entry.status === 'valid'),
+    [aiCfg.provider_keys]
+  )
+  const invalidProviderKeys = useMemo(
+    () => (aiCfg.provider_keys || []).filter((entry) => entry.status !== 'valid'),
+    [aiCfg.provider_keys]
+  )
 
   const handleProviderChange = (providerId) => {
     const provider = catalog.find((entry) => entry.id === providerId)
@@ -334,6 +356,82 @@ export default function AdminPanel() {
     setRefreshingProviderKeyId(null)
   }
 
+  const toggleProviderKeySecret = async (entry) => {
+    if (!entry?.id || !canManageProviderPool) return
+
+    if (revealedProviderKeys[entry.id]) {
+      setRevealedProviderKeys((prev) => {
+        const next = { ...prev }
+        delete next[entry.id]
+        return next
+      })
+      return
+    }
+
+    setLoadingProviderKeySecretId(entry.id)
+    try {
+      const res = await adminAPI.getProviderKeySecret(entry.id)
+      setRevealedProviderKeys((prev) => ({ ...prev, [entry.id]: res.data }))
+    } catch (e) {
+      toast.error(getErrorMessage(e))
+    }
+    setLoadingProviderKeySecretId(null)
+  }
+
+  const copyProviderKeySecret = async (entry) => {
+    if (!entry?.id || !canManageProviderPool) return
+
+    let secretPayload = revealedProviderKeys[entry.id]
+    if (!secretPayload) {
+      setLoadingProviderKeySecretId(entry.id)
+      try {
+        const res = await adminAPI.getProviderKeySecret(entry.id)
+        secretPayload = res.data
+        setRevealedProviderKeys((prev) => ({ ...prev, [entry.id]: res.data }))
+      } catch (e) {
+        toast.error(getErrorMessage(e))
+        setLoadingProviderKeySecretId(null)
+        return
+      }
+      setLoadingProviderKeySecretId(null)
+    }
+
+    try {
+      await navigator.clipboard.writeText(secretPayload.api_key)
+      setCopiedProviderKeyId(entry.id)
+      window.setTimeout(() => {
+        setCopiedProviderKeyId((current) => current === entry.id ? null : current)
+      }, 1800)
+      toast.success(t('admin.providerPoolCopied', 'Cl\u00e9 API copi\u00e9e'))
+    } catch {
+      toast.error(t('admin.providerPoolCopyFailed', 'Copie impossible'))
+    }
+  }
+
+  const deleteProviderKey = async (entry) => {
+    if (!entry?.id || !canManageProviderPool) return
+    if (!window.confirm(t('admin.providerKeyDeleteConfirm', 'Supprimer cette cl\u00e9 fournisseur pour tout le monde ?'))) return
+
+    setDeletingProviderKeyId(entry.id)
+    try {
+      await adminAPI.deleteProviderKey(entry.id)
+      setRevealedProviderKeys((prev) => {
+        const next = { ...prev }
+        delete next[entry.id]
+        return next
+      })
+      setAiCfg((prev) => ({
+        ...prev,
+        provider_keys: (prev.provider_keys || []).filter((item) => item.id !== entry.id),
+        active_provider_key_id: prev.active_provider_key_id === entry.id ? '' : prev.active_provider_key_id,
+      }))
+      toast.success(t('admin.providerKeyDeleted', 'Cl\u00e9 fournisseur supprim\u00e9e'))
+    } catch (e) {
+      toast.error(getErrorMessage(e))
+    }
+    setDeletingProviderKeyId(null)
+  }
+
   const saveAI = async () => {
     setSaving(true)
     try {
@@ -347,7 +445,7 @@ export default function AdminPanel() {
         site_quota_tokens: Number(aiCfg.site_quota_tokens),
         quota_window_hours: Number(aiCfg.quota_window_hours),
         auto_mode: !!aiCfg.auto_mode,
-        active_provider_key_id: aiCfg.active_provider_key_id || null,
+        active_provider_key_id: null,
       })
       setAiCfg((prev) => ({
         ...prev,
@@ -395,6 +493,104 @@ export default function AdminPanel() {
       toast.error(getErrorMessage(e))
     }
     setLoadingPrivateEmail(false)
+  }
+
+  const renderProviderKeyCard = (entry) => {
+    const revealedSecret = revealedProviderKeys[entry.id]
+    const providerLabel = providerLabelById[entry.provider] || entry.provider
+    const visibleEmail = revealedSecret?.owner?.email || entry.owner_email || '-'
+    const isBusy = (
+      refreshingProviderKeyId === entry.id
+      || loadingProviderKeySecretId === entry.id
+      || deletingProviderKeyId === entry.id
+    )
+
+    return (
+      <div key={entry.id} className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-display font-600 text-white">{entry.owner_username}</p>
+              <span className={`badge ${
+                entry.status === 'valid'
+                  ? 'badge-online'
+                  : entry.status === 'quota_exhausted'
+                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                  : entry.status === 'invalid'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'bg-white/[0.04] text-white/55 border border-white/10'
+              }`}>
+                {getProviderStatusLabel(locale, entry.status)}
+              </span>
+            </div>
+            <p className="text-xs text-white/30 font-mono mt-1 break-all">{revealedSecret?.api_key || entry.key_masked}</p>
+            {entry.status_reason ? <p className="text-xs text-white/30 mt-1">{entry.status_reason}</p> : null}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => toggleProviderKeySecret(entry)}
+              disabled={isBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-white/70 text-xs font-mono hover:bg-white/[0.08] transition-all disabled:opacity-40"
+            >
+              {revealedSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              {revealedSecret ? t('admin.providerPoolHide', 'Masquer') : t('admin.providerPoolReveal', 'Afficher')}
+            </button>
+            <button
+              type="button"
+              onClick={() => copyProviderKeySecret(entry)}
+              disabled={isBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan text-xs font-mono hover:bg-neon-cyan/20 transition-all disabled:opacity-40"
+            >
+              {copiedProviderKeyId === entry.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedProviderKeyId === entry.id ? t('admin.providerPoolCopiedShort', 'Copi\u00e9e') : t('admin.providerPoolCopy', 'Copier')}
+            </button>
+            <button
+              type="button"
+              onClick={() => refreshProviderKey(entry.id)}
+              disabled={isBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-white/70 text-xs font-mono hover:bg-white/[0.08] transition-all disabled:opacity-40"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshingProviderKeyId === entry.id ? 'animate-spin' : ''}`} />
+              {t('admin.providerPoolRefresh', 'V\u00e9rifier')}
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteProviderKey(entry)}
+              disabled={isBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs font-mono hover:bg-red-500/20 transition-all disabled:opacity-40"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('admin.providerKeyDeleteAction', 'Supprimer')}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-2 mt-3 text-xs text-white/35">
+          <div className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2">
+            <p className="font-mono text-white/25 mb-1">{t('admin.providerPoolProvider', 'Fournisseur')}</p>
+            <p>{providerLabel}</p>
+          </div>
+          <div className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2">
+            <p className="font-mono text-white/25 mb-1">{t('admin.providerPoolEmail', 'Email du fournisseur')}</p>
+            <p className="font-mono break-all">{visibleEmail}</p>
+          </div>
+          <div className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2">
+            <p className="font-mono text-white/25 mb-1">{t('admin.providerPoolCreatedAt', 'Ajout\u00e9e le')}</p>
+            <p>{entry.created_at ? new Date(entry.created_at).toLocaleString(locale) : '-'}</p>
+          </div>
+          <div className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2">
+            <p className="font-mono text-white/25 mb-1">{t('admin.providerPoolCheckedAt', 'Derni\u00e8re v\u00e9rification')}</p>
+            <p>{entry.checked_at ? new Date(entry.checked_at).toLocaleString(locale) : '-'}</p>
+          </div>
+          <div className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2">
+            <p className="font-mono text-white/25 mb-1">{t('admin.providerPoolUsedAt', 'Derni\u00e8re utilisation')}</p>
+            <p>{entry.last_used_at ? new Date(entry.last_used_at).toLocaleString(locale) : '-'}</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -561,6 +757,50 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {tab === 'provider_keys' && canManageProviderPool && (
+        <div className="space-y-5">
+          <div className="glass-card p-5 space-y-2">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-emerald-400" />
+              <p className="font-display font-600 text-white">{t('admin.providerKeysTitle', 'Cl\u00e9s fournisseurs')}</p>
+            </div>
+            <p className="text-sm text-white/45">
+              {t('admin.providerKeysHint', 'Toutes les cl\u00e9s fournisseurs enregistr\u00e9es. Les cl\u00e9s valides sont s\u00e9par\u00e9es des cl\u00e9s invalides ou vides.')}
+            </p>
+          </div>
+
+          <div className="grid xl:grid-cols-2 gap-5 items-start">
+            <div className="glass-card p-5 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-display font-600 text-white">{t('admin.providerKeysValid', 'Cl\u00e9s valides')}</p>
+                <span className="badge badge-online">{validProviderKeys.length}</span>
+              </div>
+              {validProviderKeys.length > 0 ? (
+                <div className="space-y-3">
+                  {validProviderKeys.map(renderProviderKeyCard)}
+                </div>
+              ) : (
+                <p className="text-sm text-white/35">{t('admin.providerKeysEmptyValid', 'Aucune cl\u00e9 valide pour le moment.')}</p>
+              )}
+            </div>
+
+            <div className="glass-card p-5 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-display font-600 text-white">{t('admin.providerKeysInvalid', 'Cl\u00e9s invalides')}</p>
+                <span className="badge bg-red-500/10 text-red-400 border border-red-500/20">{invalidProviderKeys.length}</span>
+              </div>
+              {invalidProviderKeys.length > 0 ? (
+                <div className="space-y-3">
+                  {invalidProviderKeys.map(renderProviderKeyCard)}
+                </div>
+              ) : (
+                <p className="text-sm text-white/35">{t('admin.providerKeysEmptyInvalid', 'Aucune cl\u00e9 invalide pour le moment.')}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {tab === 'ai' && (
         <div className="glass-card p-5 space-y-4 max-w-lg">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -615,97 +855,7 @@ export default function AdminPanel() {
               data-bwignore="true"
             />
             <p className="text-xs text-white/35 mt-1">{aiCfg.hasApiKey ? t('admin.apiKeySaved') : t('admin.apiKeyHelp')}</p>
-            {aiCfg.provider_key_source === 'provider_pool' && aiCfg.provider_key_owner && (
-              <p className="text-xs text-green-400/70 mt-1">
-                {t('admin.providerKeyInUse', 'Cle fournisseur active')}: {aiCfg.provider_key_owner.username}
-              </p>
-            )}
           </div>
-
-          {canManageProviderPool && (
-            <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-emerald-400" />
-                  <p className="text-sm font-display font-600 text-white">{t('admin.providerPoolTitle', 'Pool de cles fournisseurs')}</p>
-                </div>
-                <span className="text-xs font-mono text-white/35">{providerPool.length}</span>
-              </div>
-
-              <div>
-                <label className="text-xs font-mono text-white/40 mb-1.5 block">{t('admin.providerPoolSelect', 'Cle active pour ce fournisseur')}</label>
-                <select
-                  className="select-field"
-                  value={aiCfg.active_provider_key_id || ''}
-                  onChange={(e) => setAiCfg((prev) => ({ ...prev, active_provider_key_id: e.target.value }))}
-                >
-                  <option value="">{t('admin.providerPoolAuto', 'Selection automatique')}</option>
-                  {providerPool.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      {entry.owner_username} - {getProviderStatusLabel(locale, entry.status)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {providerPool.length === 0 ? (
-                <p className="text-xs text-white/35">{t('admin.providerPoolEmpty', 'Aucune cle fournisseur pour ce fournisseur pour le moment.')}</p>
-              ) : (
-                <div className="space-y-2">
-                  {providerPool.map((entry) => (
-                    <div key={entry.id} className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3">
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-display font-600 text-white">{entry.owner_username}</p>
-                            <span className={`badge ${
-                              entry.status === 'valid'
-                                ? 'badge-online'
-                                : entry.status === 'quota_exhausted'
-                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                : entry.status === 'invalid'
-                                ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                                : 'bg-white/[0.04] text-white/55 border border-white/10'
-                            }`}>
-                              {getProviderStatusLabel(locale, entry.status)}
-                            </span>
-                            {entry.is_selected && (
-                              <span className="badge bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20">
-                                {t('admin.providerPoolSelected', 'active')}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-white/30 font-mono mt-1">{entry.key_masked}</p>
-                          {entry.status_reason ? <p className="text-xs text-white/30 mt-1">{entry.status_reason}</p> : null}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => refreshProviderKey(entry.id)}
-                          disabled={refreshingProviderKeyId === entry.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-white/70 text-xs font-mono hover:bg-white/[0.08] transition-all disabled:opacity-40"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${refreshingProviderKeyId === entry.id ? 'animate-spin' : ''}`} />
-                          {t('admin.providerPoolRefresh', 'Verifier')}
-                        </button>
-                      </div>
-
-                      <div className="grid sm:grid-cols-2 gap-2 mt-3 text-xs text-white/35">
-                        <div className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2">
-                          <p className="font-mono text-white/25 mb-1">{t('admin.providerPoolCheckedAt', 'Derniere verification')}</p>
-                          <p>{entry.checked_at ? new Date(entry.checked_at).toLocaleString(locale) : '—'}</p>
-                        </div>
-                        <div className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2">
-                          <p className="font-mono text-white/25 mb-1">{t('admin.providerPoolUsedAt', 'Derniere utilisation')}</p>
-                          <p>{entry.last_used_at ? new Date(entry.last_used_at).toLocaleString(locale) : '—'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           <div>
             <label className="text-xs font-mono text-white/40 mb-1.5 block">{t('admin.model')}</label>

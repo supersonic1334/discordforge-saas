@@ -3,6 +3,7 @@
 const cron = require('node-cron');
 const db = require('../database');
 const botManager = require('../services/botManager');
+const supportService = require('../services/supportService');
 const logger = require('../utils/logger').child('Jobs');
 
 /**
@@ -91,11 +92,27 @@ const botWatchdogJob = cron.schedule('*/5 * * * *', async () => {
   }
 }, { scheduled: false });
 
+/**
+ * Delete support tickets that stayed closed for 10 minutes.
+ * Runs every minute.
+ */
+const supportTicketCleanupJob = cron.schedule('* * * * *', () => {
+  try {
+    const deleted = supportService.purgeExpiredClosedTickets();
+    if (deleted > 0) {
+      logger.info(`Support cleanup: deleted ${deleted} closed tickets`);
+    }
+  } catch (err) {
+    logger.error(`Support cleanup job failed: ${err.message}`);
+  }
+}, { scheduled: false });
+
 function startAll() {
   warningExpiryJob.start();
   guildSyncJob.start();
   logCleanupJob.start();
   botWatchdogJob.start();
+  supportTicketCleanupJob.start();
   logger.info('All cron jobs started');
 }
 
@@ -104,6 +121,7 @@ function stopAll() {
   guildSyncJob.stop();
   logCleanupJob.stop();
   botWatchdogJob.stop();
+  supportTicketCleanupJob.stop();
   logger.info('All cron jobs stopped');
 }
 
