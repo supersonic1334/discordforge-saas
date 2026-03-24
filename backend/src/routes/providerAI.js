@@ -4,7 +4,7 @@ const express = require('express');
 const router = express.Router();
 
 const { requireAuth, requireApiProvider, validate } = require('../middleware');
-const { providerAiKeySchema } = require('../validators/schemas');
+const { providerAiKeySchema, providerAiModelSchema } = require('../validators/schemas');
 const aiProviderKeyService = require('../services/aiProviderKeyService');
 const { getAICatalog } = require('../config/aiCatalog');
 const db = require('../database');
@@ -31,12 +31,27 @@ router.put('/ai', validate(providerAiKeySchema), async (req, res, next) => {
     const key = await aiProviderKeyService.saveProviderKey(req.user.id, {
       provider: req.body.provider,
       apiKey: req.body.api_key,
+      selectedModel: req.body.model,
     });
 
     res.json({
       message: 'Provider API key saved',
       key,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/ai/:keyId/model', validate(providerAiModelSchema), async (req, res, next) => {
+  try {
+    const row = db.findOne('ai_provider_keys', { id: req.params.keyId });
+    if (!row || row.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Provider key not found' });
+    }
+
+    const key = await aiProviderKeyService.updateProviderKeyModel(req.params.keyId, req.body.model);
+    res.json({ key, message: 'Provider model updated' });
   } catch (err) {
     next(err);
   }
