@@ -107,16 +107,14 @@ function AppRoot() {
     if (!token) return undefined
 
     const refreshSession = async (payload = {}) => {
-      if (payload?.forceReload || ['role_updated', 'access_restored'].includes(payload?.reason)) {
-        window.location.reload()
-        return
-      }
-
       const ok = await fetchMe()
       if (!ok) {
         logout()
         window.location.replace('/auth')
+        return
       }
+
+      wsService.connect(token)
     }
 
     const unsubProfileUpdated = wsService.on('account:profileUpdated', refreshSession)
@@ -139,7 +137,7 @@ function AppRoot() {
 
       const after = getAccessFingerprint(useAuthStore.getState())
       if (before !== after) {
-        window.location.reload()
+        wsService.connect(token)
       }
     }
 
