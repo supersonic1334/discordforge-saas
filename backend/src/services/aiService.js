@@ -256,13 +256,46 @@ function mapAIConfigRow(row) {
   const autoMode = Number(row.auto_mode ?? 1) !== 0;
   const quotaWindowHours = row.quota_window_hours ?? DEFAULT_AI_QUOTA_WINDOW_HOURS;
   const selectedProviderKey = aiProviderKeyService.getConfiguredProviderKey(row);
-  const resolvedModel = resolveConfiguredModel(
-    row.provider,
-    selectedProviderKey?.selected_model || row.model
-  );
-  const decryptedApiKey = selectedProviderKey?.encrypted_api_key
-    ? decrypt(selectedProviderKey.encrypted_api_key)
-    : (row.encrypted_api_key ? decrypt(row.encrypted_api_key) : null);
+
+  if (selectedProviderKey?.encrypted_api_key) {
+    const resolvedModel = resolveConfiguredModel(
+      selectedProviderKey.provider,
+      selectedProviderKey.selected_model || row.model
+    );
+    const decryptedApiKey = decrypt(selectedProviderKey.encrypted_api_key);
+    const autoConfig = autoMode
+      ? getAutoAIConfig({
+        provider: selectedProviderKey.provider,
+        model: resolvedModel,
+        quotaWindowHours,
+      })
+      : null;
+
+    if (!decryptedApiKey) return null;
+
+    return {
+      provider: selectedProviderKey.provider,
+      apiKey: decryptedApiKey,
+      model: resolvedModel,
+      maxTokens: autoMode ? autoConfig.maxTokens : (row.max_tokens ?? 1024),
+      temperature: autoMode ? autoConfig.temperature : (row.temperature ?? 0.7),
+      userQuotaTokens: autoMode ? autoConfig.userQuotaTokens : (row.user_quota_tokens ?? DEFAULT_AI_USER_QUOTA_TOKENS),
+      siteQuotaTokens: autoMode ? autoConfig.siteQuotaTokens : (row.site_quota_tokens ?? DEFAULT_AI_SITE_QUOTA_TOKENS),
+      quotaWindowHours,
+      autoMode,
+      autoTuning: autoMode ? autoConfig.autoTuning : null,
+      providerKeyId: selectedProviderKey.id || null,
+      apiKeySource: 'provider_pool',
+      providerKeyOwner: {
+        username: selectedProviderKey.owner_username,
+        role: selectedProviderKey.owner_role,
+        avatar_url: selectedProviderKey.owner_avatar_url,
+      },
+    };
+  }
+
+  const resolvedModel = resolveConfiguredModel(row.provider, row.model);
+  const decryptedApiKey = row.encrypted_api_key ? decrypt(row.encrypted_api_key) : null;
   const autoConfig = autoMode
     ? getAutoAIConfig({
       provider: row.provider,
@@ -296,7 +329,48 @@ function mapAIConfigRow(row) {
 
 function getAIConfig() {
   const row = db.raw("SELECT * FROM ai_config WHERE id = 'singleton'")[0];
-  return mapAIConfigRow(row);
+  const configured = mapAIConfigRow(row);
+  if (configured) return configured;
+
+  const fallbackProviderKey = aiProviderKeyService.getBestAvailableProviderKey();
+  if (!fallbackProviderKey?.encrypted_api_key) return null;
+
+  const quotaWindowHours = row?.quota_window_hours ?? DEFAULT_AI_QUOTA_WINDOW_HOURS;
+  const autoMode = Number(row?.auto_mode ?? 1) !== 0;
+  const resolvedModel = resolveConfiguredModel(
+    fallbackProviderKey.provider,
+    fallbackProviderKey.selected_model
+  );
+  const decryptedApiKey = decrypt(fallbackProviderKey.encrypted_api_key);
+  const autoConfig = autoMode
+    ? getAutoAIConfig({
+      provider: fallbackProviderKey.provider,
+      model: resolvedModel,
+      quotaWindowHours,
+    })
+    : null;
+
+  if (!decryptedApiKey) return null;
+
+  return {
+    provider: fallbackProviderKey.provider,
+    apiKey: decryptedApiKey,
+    model: resolvedModel,
+    maxTokens: autoMode ? autoConfig.maxTokens : (row?.max_tokens ?? 1024),
+    temperature: autoMode ? autoConfig.temperature : (row?.temperature ?? 0.7),
+    userQuotaTokens: autoMode ? autoConfig.userQuotaTokens : (row?.user_quota_tokens ?? DEFAULT_AI_USER_QUOTA_TOKENS),
+    siteQuotaTokens: autoMode ? autoConfig.siteQuotaTokens : (row?.site_quota_tokens ?? DEFAULT_AI_SITE_QUOTA_TOKENS),
+    quotaWindowHours,
+    autoMode,
+    autoTuning: autoMode ? autoConfig.autoTuning : null,
+    providerKeyId: fallbackProviderKey.id || null,
+    apiKeySource: 'provider_pool',
+    providerKeyOwner: {
+      username: fallbackProviderKey.owner_username,
+      role: fallbackProviderKey.owner_role,
+      avatar_url: fallbackProviderKey.owner_avatar_url,
+    },
+  };
 }
 
 function getUserQuotaLimit(aiConfig) {
