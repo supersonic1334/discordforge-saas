@@ -27,46 +27,107 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   const permissionStateRef = useRef('unknown')
   const baseValueRef = useRef('')
   const finalTranscriptRef = useRef('')
+  const interimTranscriptRef = useRef('')
+  const audioContextRef = useRef(null)
+  const analyserRef = useRef(null)
+  const sourceRef = useRef(null)
+  const streamRef = useRef(null)
+  const animationFrameRef = useRef(null)
   const [isListening, setIsListening] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
   const [interimTranscript, setInterimTranscript] = useState('')
+  const [audioBars, setAudioBars] = useState([0.14, 0.22, 0.18, 0.24, 0.16])
 
   const isSupported = useMemo(() => !!getRecognitionConstructor(), [])
 
-  const stop = useCallback(() => {
-    if (!recognitionRef.current) return
-    recognitionRef.current.stop()
+  const stopAudioMeter = useCallback(() => {
+    if (animationFrameRef.current) {
+      window.cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+
+    if (sourceRef.current) {
+      sourceRef.current.disconnect()
+      sourceRef.current = null
+    }
+
+    if (analyserRef.current) {
+      analyserRef.current.disconnect?.()
+      analyserRef.current = null
+    }
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {})
+      audioContextRef.current = null
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+
+    setAudioBars([0.14, 0.22, 0.18, 0.24, 0.16])
   }, [])
 
-  const ensureMicrophonePermission = useCallback(async () => {
-    if (typeof navigator === 'undefined') return true
-    if (permissionStateRef.current === 'granted') return true
-    if (!navigator.mediaDevices?.getUserMedia) return true
+  const startAudioMeter = useCallback(async (stream) => {
+    if (typeof window === 'undefined') return
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass || !stream) return
 
-    setIsRequestingPermission(true)
-    let stream = null
+    stopAudioMeter()
 
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      permissionStateRef.current = 'granted'
-      return true
-    } catch (error) {
-      if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') {
-        permissionStateRef.current = 'denied'
-        onError?.('not-allowed')
-      } else if (error?.name === 'NotFoundError') {
-        onError?.('not-found')
-      } else {
-        onError?.(error?.name || 'permission-error')
-      }
-      return false
-    } finally {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop())
-      }
-      setIsRequestingPermission(false)
+    const context = new AudioContextClass()
+    const analyser = context.createAnalyser()
+    const source = context.createMediaStreamSource(stream)
+    const dataArray = new Uint8Array(analyser.frequencyBinCount)
+
+    analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.82
+    source.connect(analyser)
+
+    audioContextRef.current = context
+    analyserRef.current = analyser
+    sourceRef.current = source
+    streamRef.current = stream
+
+    if (context.state === 'suspended') {
+      await context.resume().catch(() => {})
     }
-  }, [onError])
+
+    const tick = () => {
+      if (!analyserRef.current) return
+
+      analyserRef.current.getByteFrequencyData(dataArray)
+      const bucketSize = Math.max(1, Math.floor(dataArray.length / 5))
+      const nextBars = Array.from({ length: 5 }, (_, index) => {
+        const start = index * bucketSize
+        const end = Math.min(dataArray.length, start + bucketSize)
+        let sum = 0
+        for (let cursor = start; cursor < end; cursor += 1) {
+          sum += dataArray[cursor]
+        }
+        const average = end > start ? sum / (end - start) : 0
+        return Math.max(0.08, Math.min(1, average / 180))
+      })
+
+      setAudioBars(nextBars)
+      animationFrameRef.current = window.requestAnimationFrame(tick)
+    }
+
+    animationFrameRef.current = window.requestAnimationFrame(tick)
+  }, [stopAudioMeter])
+
+  const stop = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+      return
+    }
+
+    stopAudioMeter()
+    setIsListening(false)
+    setInterimTranscript('')
+    interimTranscriptRef.current = ''
+  }, [stopAudioMeter])
 
   const start = useCallback(async () => {
     const Recognition = getRecognitionConstructor()
@@ -77,68 +138,100 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
 
     if (isListening || isRequestingPermission) return true
 
-    const permissionGranted = await ensureMicrophonePermission()
-    if (!permissionGranted) {
-      return false
-    }
+    setIsRequestingPermission(true)
 
-    const recognition = new Recognition()
-    recognition.lang = normalizeLocale(locale)
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.maxAlternatives = 1
-
-    baseValueRef.current = String(value || '').trim()
-    finalTranscriptRef.current = ''
-    setInterimTranscript('')
-
-    recognition.onresult = (event) => {
-      let nextFinal = ''
-      let nextInterim = ''
-
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const chunk = String(event.results[index]?.[0]?.transcript || '').trim()
-        if (!chunk) continue
-
-        if (event.results[index].isFinal) {
-          nextFinal = mergeTranscript(nextFinal, chunk)
-        } else {
-          nextInterim = mergeTranscript(nextInterim, chunk)
-        }
+    try {
+      let stream = null
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        })
+        permissionStateRef.current = 'granted'
+        await startAudioMeter(stream)
       }
 
-      if (nextFinal) {
-        finalTranscriptRef.current = mergeTranscript(finalTranscriptRef.current, nextFinal)
-      }
+      const recognition = new Recognition()
+      recognition.lang = normalizeLocale(locale)
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.maxAlternatives = 1
 
-      setInterimTranscript(nextInterim)
-      onChange(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, nextInterim))
-    }
-
-    recognition.onerror = (event) => {
-      if (event?.error && event.error !== 'aborted') {
-        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-          permissionStateRef.current = 'denied'
-        }
-        onError?.(event.error)
-      }
-    }
-
-    recognition.onend = () => {
-      recognitionRef.current = null
-      setIsListening(false)
+      baseValueRef.current = String(value || '').trim()
+      finalTranscriptRef.current = ''
+      interimTranscriptRef.current = ''
       setInterimTranscript('')
-      const committed = mergeTranscript(baseValueRef.current, finalTranscriptRef.current)
-      if (committed) {
-        onChange(committed)
-      }
-    }
 
-    recognitionRef.current = recognition
-    recognition.start()
-    setIsListening(true)
-    return true
-  }, [isListening, locale, onChange, onError, value])
+      recognition.onresult = (event) => {
+        let nextFinal = ''
+        let nextInterim = ''
+
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const chunk = String(event.results[index]?.[0]?.transcript || '').trim()
+          if (!chunk) continue
+
+          if (event.results[index].isFinal) {
+            nextFinal = mergeTranscript(nextFinal, chunk)
+          } else {
+            nextInterim = mergeTranscript(nextInterim, chunk)
+          }
+        }
+
+        if (nextFinal) {
+          finalTranscriptRef.current = mergeTranscript(finalTranscriptRef.current, nextFinal)
+        }
+
+        interimTranscriptRef.current = nextInterim
+        setInterimTranscript(nextInterim)
+        onChange(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, nextInterim))
+      }
+
+      recognition.onerror = (event) => {
+        if (event?.error && event.error !== 'aborted') {
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            permissionStateRef.current = 'denied'
+          }
+          onError?.(event.error)
+        }
+      }
+
+      recognition.onend = () => {
+        recognitionRef.current = null
+        stopAudioMeter()
+        setIsListening(false)
+        const pendingInterim = interimTranscriptRef.current
+        setInterimTranscript('')
+        interimTranscriptRef.current = ''
+        const committed = mergeTranscript(baseValueRef.current, finalTranscriptRef.current, pendingInterim)
+        if (committed) {
+          onChange(committed)
+        }
+      }
+
+      recognitionRef.current = recognition
+      recognition.start()
+      setIsListening(true)
+      return true
+    } catch (error) {
+      stopAudioMeter()
+      if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') {
+        permissionStateRef.current = 'denied'
+        onError?.('not-allowed')
+      } else if (error?.name === 'NotFoundError') {
+        onError?.('not-found')
+      } else if (error?.name === 'AbortError') {
+        onError?.('aborted')
+      } else {
+        onError?.(error?.name || 'permission-error')
+      }
+      return false
+    } finally {
+      setIsRequestingPermission(false)
+    }
+  }, [isListening, isRequestingPermission, locale, onChange, onError, startAudioMeter, stopAudioMeter, value])
 
   useEffect(() => () => {
     if (recognitionRef.current) {
@@ -146,13 +239,15 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       recognitionRef.current.abort()
       recognitionRef.current = null
     }
-  }, [])
+    stopAudioMeter()
+  }, [stopAudioMeter])
 
   return {
     isSupported,
     isListening,
     isRequestingPermission,
     interimTranscript,
+    audioBars,
     start,
     stop,
   }
