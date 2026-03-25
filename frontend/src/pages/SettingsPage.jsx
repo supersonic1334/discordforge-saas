@@ -118,12 +118,13 @@ export default function SettingsPage() {
     setLoadingPrivateEmail(false)
   }
 
-  const saveAvatar = async () => {
+  const saveAvatar = async (nextAvatar = avatarDraft) => {
     setSaving('avatar')
     try {
-      const res = await authAPI.updateAvatar(avatarDraft || '')
+      const res = await authAPI.updateAvatar(nextAvatar || '')
       if (res.data?.user) {
         setUser(res.data.user)
+        setAvatarDraft(res.data.user.avatar_url || '')
       } else {
         await fetchMe()
       }
@@ -145,8 +146,9 @@ export default function SettingsPage() {
       const nextAvatar = await prepareAvatarDataUrl(file)
       setAvatarDraft(nextAvatar)
       setAvatarFileName(file.name)
+      await saveAvatar(nextAvatar)
     } catch (e) {
-      toast.error(getErrorMessage(e, 'Impossible de preparer cette image.'))
+      toast.error(getErrorMessage(e, 'Impossible de mettre cette photo.'))
     }
     setIsPreparingAvatar(false)
   }
