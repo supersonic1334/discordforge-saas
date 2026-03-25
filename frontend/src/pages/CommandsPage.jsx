@@ -6,7 +6,6 @@ import {
   Bot,
   Hash,
   Mic,
-  MicOff,
   Plus,
   RefreshCw,
   Send,
@@ -23,6 +22,7 @@ import { aiAPI, commandsAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
+import VoiceMeter from '../components/VoiceMeter'
 
 const UI = {
   fr: {
@@ -839,58 +839,55 @@ export default function CommandsPage() {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-xs font-mono uppercase tracking-[0.18em] text-white/35 block">{ui.promptLabel}</label>
-              <button
-                type="button"
-                onClick={() => (speech.isListening ? speech.stop() : speech.start())}
-                disabled={speech.isRequestingPermission}
-                className={`group relative overflow-hidden rounded-2xl border px-3.5 py-2.5 transition-all disabled:opacity-70 ${
-                  speech.isListening
-                    ? 'border-red-500/30 bg-red-500/12 text-red-200 shadow-[0_0_28px_rgba(248,113,113,0.16)]'
-                    : speech.isRequestingPermission
-                      ? 'border-amber-400/30 bg-amber-400/10 text-amber-200 shadow-[0_0_24px_rgba(251,191,36,0.14)]'
-                      : 'border-neon-cyan/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(168,85,247,0.08))] text-white hover:border-neon-cyan/35 hover:shadow-[0_0_28px_rgba(34,211,238,0.16)]'
-                }`}
-              >
-                <span className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_55%)] opacity-80" />
-                <span className="relative flex items-center gap-3">
-                  <span className={`relative flex h-9 w-9 items-center justify-center rounded-2xl border ${
-                    speech.isListening
-                      ? 'border-red-400/30 bg-red-400/12'
-                      : speech.isRequestingPermission
-                        ? 'border-amber-300/35 bg-amber-300/12'
-                        : 'border-white/12 bg-white/[0.06] group-hover:border-neon-cyan/30 group-hover:bg-neon-cyan/10'
-                  }`}>
-                    {speech.isListening && <span className="absolute inset-0 rounded-2xl animate-ping bg-red-400/20" />}
-                    {speech.isListening ? <MicOff className="relative z-10 w-4 h-4" /> : <Mic className="relative z-10 w-4 h-4" />}
-                  </span>
-                  <span className="flex flex-col items-start text-left leading-none">
-                    <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/85">
-                      {speech.isListening ? ui.voiceStop : ui.voiceStart}
-                    </span>
-                    <span className="text-[10px] font-mono mt-1 text-white/45">
-                      {speech.isRequestingPermission
-                        ? ui.voicePreparing
-                        : speech.isListening
-                          ? ui.voiceListening
-                          : ui.voiceStart}
-                    </span>
-                  </span>
-                </span>
-              </button>
-            </div>
-            <textarea
-              ref={promptInputRef}
-              className="input-field min-h-[140px] resize-y"
-              placeholder={editingCommand ? ui.promptEditPlaceholder : ui.promptPlaceholder}
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-            />
+            <label className="text-xs font-mono uppercase tracking-[0.18em] text-white/35 block">{ui.promptLabel}</label>
             {(speech.isListening || speech.isRequestingPermission) && (
               <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/70'}`}>
                 {speech.isRequestingPermission ? ui.voicePreparing : ui.voiceListening}
               </p>
+            )}
+            <div className="relative">
+              <textarea
+                ref={promptInputRef}
+                className="input-field min-h-[148px] resize-y pr-[126px] sm:pr-[154px]"
+                placeholder={editingCommand ? ui.promptEditPlaceholder : ui.promptPlaceholder}
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+              />
+              <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                {(speech.isListening || speech.isRequestingPermission) && (
+                  <VoiceMeter
+                    bars={speech.audioBars}
+                    active={speech.isListening}
+                    accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => (speech.isListening ? speech.stop() : speech.start())}
+                  disabled={speech.isRequestingPermission}
+                  className={`h-11 w-11 rounded-full border flex items-center justify-center transition-all shrink-0 disabled:opacity-70 ${
+                    speech.isListening
+                      ? 'border-red-500/35 bg-red-500/14 text-red-200 shadow-[0_0_20px_rgba(248,113,113,0.2)]'
+                      : speech.isRequestingPermission
+                        ? 'border-amber-400/35 bg-amber-400/12 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.18)]'
+                        : 'border-white/12 bg-white/[0.06] text-white/85 hover:border-neon-cyan/35 hover:bg-neon-cyan/10 hover:text-neon-cyan'
+                  }`}
+                  title={speech.isListening ? ui.voiceStop : ui.voiceStart}
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={sendAssistantPrompt}
+                  disabled={assistantLoading || !prompt.trim()}
+                  className="h-11 w-11 rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan flex items-center justify-center text-white shadow-neon-violet disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
+                >
+                  {assistantLoading ? <Sparkles className="w-4 h-4 animate-pulse" /> : <Send className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            {(speech.isListening || speech.isRequestingPermission) && (
+              <p className="text-[11px] text-white/35">{speech.interimTranscript || ''}</p>
             )}
           </div>
 
@@ -900,14 +897,6 @@ export default function CommandsPage() {
             </div>
           )}
 
-          <button
-            onClick={sendAssistantPrompt}
-            disabled={assistantLoading || !prompt.trim()}
-            className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/15 transition-all disabled:opacity-50"
-          >
-            {assistantLoading ? <Sparkles className="w-4 h-4 animate-pulse" /> : <Send className="w-4 h-4" />}
-            {assistantLoading ? ui.generating : ui.send}
-          </button>
         </div>
       </div>
     </div>
