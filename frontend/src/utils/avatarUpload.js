@@ -1,6 +1,6 @@
-const MAX_INPUT_FILE_SIZE = 8 * 1024 * 1024
-const MAX_OUTPUT_LENGTH = 850_000
-const MAX_DIMENSION = 512
+const MAX_INPUT_FILE_SIZE = 20 * 1024 * 1024
+const MAX_OUTPUT_LENGTH = 320_000
+const MAX_DIMENSION = 320
 const ALLOWED_IMAGE_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -45,15 +45,28 @@ function drawAvatar(image, mimeType, quality, maxDimension = MAX_DIMENSION) {
   return canvas.toDataURL(mimeType, quality)
 }
 
-function buildAvatarVariants(image) {
-  return [
-    ['image/webp', 0.86, 512],
-    ['image/webp', 0.8, 448],
-    ['image/webp', 0.74, 384],
-    ['image/jpeg', 0.82, 448],
-    ['image/jpeg', 0.74, 384],
-    ['image/jpeg', 0.68, 320],
+function buildAvatarVariants(image, sourceMimeType) {
+  const prefersJpeg = String(sourceMimeType || '').includes('jpeg') || String(sourceMimeType || '').includes('jpg')
+
+  const jpegFirst = [
+    ['image/jpeg', 0.82, 320],
+    ['image/jpeg', 0.74, 288],
+    ['image/jpeg', 0.66, 256],
+    ['image/webp', 0.8, 320],
+    ['image/webp', 0.72, 288],
+    ['image/webp', 0.64, 256],
   ]
+
+  const webpFirst = [
+    ['image/webp', 0.84, 320],
+    ['image/webp', 0.76, 288],
+    ['image/webp', 0.68, 256],
+    ['image/jpeg', 0.8, 320],
+    ['image/jpeg', 0.72, 288],
+    ['image/jpeg', 0.64, 256],
+  ]
+
+  return prefersJpeg ? jpegFirst : webpFirst
 }
 
 export async function prepareAvatarDataUrl(file) {
@@ -62,13 +75,13 @@ export async function prepareAvatarDataUrl(file) {
     throw new Error('Formats acceptes: JPG, PNG, WEBP ou GIF.')
   }
   if (file.size > MAX_INPUT_FILE_SIZE) {
-    throw new Error('Image trop lourde. Maximum: 8 Mo.')
+    throw new Error('Image trop lourde. Maximum: 20 Mo.')
   }
 
   const sourceDataUrl = await readFileAsDataUrl(file)
   const image = await loadImage(sourceDataUrl)
 
-  for (const [mimeType, quality, maxDimension] of buildAvatarVariants(image)) {
+  for (const [mimeType, quality, maxDimension] of buildAvatarVariants(image, file.type)) {
     const output = drawAvatar(image, mimeType, quality, maxDimension)
     if (output.length <= MAX_OUTPUT_LENGTH) {
       return output
