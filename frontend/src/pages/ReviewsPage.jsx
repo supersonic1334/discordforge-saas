@@ -457,7 +457,7 @@ export default function ReviewsPage() {
   }, [overview.reviews, totalReviews])
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-6">
       <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
