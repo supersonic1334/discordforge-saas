@@ -114,7 +114,7 @@ app.use(helmet({
 app.use((req, res, next) => {
   res.setHeader(
     'Permissions-Policy',
-    'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()'
+    'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(self), midi=(), payment=(), usb=()'
   );
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Origin-Agent-Cluster', '?1');
