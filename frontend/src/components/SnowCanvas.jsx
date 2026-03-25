@@ -19,7 +19,9 @@ export default function SnowCanvas() {
 
     try {
       const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
-      const qualityScale = prefersReducedMotion ? 0.45 : window.innerWidth < 768 ? 0.65 : 1
+      if (prefersReducedMotion || window.innerWidth < 768) return
+
+      const qualityScale = window.innerWidth < 1100 ? 0.72 : 1
       const width = Math.max(mount.clientWidth || window.innerWidth || 1, 1)
       const height = Math.max(mount.clientHeight || window.innerHeight || 1, 1)
 
