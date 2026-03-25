@@ -82,6 +82,8 @@ export const modulesAPI = {
 
 // ── Moderation ────────────────────────────────────────────────────────────────
 export const modAPI = {
+  searchUsers:   (guildId, params) => api.get(`/bot/guilds/${guildId}/moderation/search`, { params }),
+  userProfile:   (guildId, userId) => api.get(`/bot/guilds/${guildId}/moderation/users/${userId}`),
   warnings:      (guildId, params) => api.get(`/bot/guilds/${guildId}/moderation/warnings`, { params }),
   userWarnings:  (guildId, userId) => api.get(`/bot/guilds/${guildId}/moderation/warnings/user/${userId}`),
   addWarning:    (guildId, data)   => api.post(`/bot/guilds/${guildId}/moderation/warnings`, data),
