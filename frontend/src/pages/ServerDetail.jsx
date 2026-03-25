@@ -241,7 +241,7 @@ export default function ServerDetail() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="px-4 py-5 sm:p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-start gap-4">
         <Link to="/dashboard/servers" className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/[0.05] transition-all mt-1">
           <ArrowLeft className="w-4 h-4" />
