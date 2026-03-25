@@ -27,6 +27,8 @@ class WSService {
   async _fetchTicket(token) {
     const headers = {
       Authorization: `Bearer ${token}`,
+      'X-App-Client': 'discordforger-web',
+      'X-Requested-With': 'XMLHttpRequest',
     }
 
     const deviceId = getDeviceId()
