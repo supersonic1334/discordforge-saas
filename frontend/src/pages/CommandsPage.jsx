@@ -53,6 +53,7 @@ const UI = {
     voiceStart: 'Parler',
     voiceStop: 'Stop micro',
     voiceListening: 'Ecoute en cours...',
+    voicePreparing: 'Autorisation micro...',
     voiceUnsupported: 'Micro non pris en charge sur ce navigateur.',
     voiceDenied: 'Autorise le micro pour utiliser la dictée.',
     voiceError: 'La dictée vocale a rencontré un problème.',
@@ -101,6 +102,7 @@ const UI = {
     voiceStart: 'Speak',
     voiceStop: 'Stop mic',
     voiceListening: 'Listening...',
+    voicePreparing: 'Requesting mic...',
     voiceUnsupported: 'Microphone is not supported on this browser.',
     voiceDenied: 'Allow microphone access to use voice dictation.',
     voiceError: 'Voice dictation ran into an issue.',
@@ -149,6 +151,7 @@ const UI = {
     voiceStart: 'Hablar',
     voiceStop: 'Detener micro',
     voiceListening: 'Escuchando...',
+    voicePreparing: 'Autorizando micro...',
     voiceUnsupported: 'El micro no es compatible con este navegador.',
     voiceDenied: 'Autoriza el micro para usar la dictado por voz.',
     voiceError: 'El dictado por voz encontro un problema.',
@@ -837,14 +840,40 @@ export default function CommandsPage() {
               <button
                 type="button"
                 onClick={() => (speech.isListening ? speech.stop() : speech.start())}
-                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-mono transition-all ${
+                disabled={speech.isRequestingPermission}
+                className={`group relative overflow-hidden rounded-2xl border px-3.5 py-2.5 transition-all disabled:opacity-70 ${
                   speech.isListening
-                    ? 'border-red-500/25 bg-red-500/10 text-red-300'
-                    : 'border-white/10 bg-white/[0.03] text-white/65 hover:text-white hover:border-neon-cyan/20 hover:bg-neon-cyan/10'
+                    ? 'border-red-500/30 bg-red-500/12 text-red-200 shadow-[0_0_28px_rgba(248,113,113,0.16)]'
+                    : speech.isRequestingPermission
+                      ? 'border-amber-400/30 bg-amber-400/10 text-amber-200 shadow-[0_0_24px_rgba(251,191,36,0.14)]'
+                      : 'border-neon-cyan/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(168,85,247,0.08))] text-white hover:border-neon-cyan/35 hover:shadow-[0_0_28px_rgba(34,211,238,0.16)]'
                 }`}
               >
-                {speech.isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                {speech.isListening ? ui.voiceStop : ui.voiceStart}
+                <span className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_55%)] opacity-80" />
+                <span className="relative flex items-center gap-3">
+                  <span className={`relative flex h-9 w-9 items-center justify-center rounded-2xl border ${
+                    speech.isListening
+                      ? 'border-red-400/30 bg-red-400/12'
+                      : speech.isRequestingPermission
+                        ? 'border-amber-300/35 bg-amber-300/12'
+                        : 'border-white/12 bg-white/[0.06] group-hover:border-neon-cyan/30 group-hover:bg-neon-cyan/10'
+                  }`}>
+                    {speech.isListening && <span className="absolute inset-0 rounded-2xl animate-ping bg-red-400/20" />}
+                    {speech.isListening ? <MicOff className="relative z-10 w-4 h-4" /> : <Mic className="relative z-10 w-4 h-4" />}
+                  </span>
+                  <span className="flex flex-col items-start text-left leading-none">
+                    <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/85">
+                      {speech.isListening ? ui.voiceStop : ui.voiceStart}
+                    </span>
+                    <span className="text-[10px] font-mono mt-1 text-white/45">
+                      {speech.isRequestingPermission
+                        ? ui.voicePreparing
+                        : speech.isListening
+                          ? ui.voiceListening
+                          : ui.voiceStart}
+                    </span>
+                  </span>
+                </span>
               </button>
             </div>
             <textarea
@@ -854,8 +883,10 @@ export default function CommandsPage() {
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
             />
-            {speech.isListening && (
-              <p className="text-xs font-mono text-neon-cyan/70">{ui.voiceListening}</p>
+            {(speech.isListening || speech.isRequestingPermission) && (
+              <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/70'}`}>
+                {speech.isRequestingPermission ? ui.voicePreparing : ui.voiceListening}
+              </p>
             )}
           </div>
 
