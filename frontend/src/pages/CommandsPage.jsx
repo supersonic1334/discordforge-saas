@@ -37,6 +37,8 @@ const UI = {
     assistantTitle: 'Assistant de commandes',
     assistantCreate: 'Creation guidee',
     assistantEdit: 'Modification guidee',
+    editingTarget: 'Commande en cours',
+    cancelEdit: 'Annuler',
     assistantHint: 'Explique simplement ce que tu veux. Exemple: cree une commande bonjour qui repond bonjour {mention}.',
     assistantEmpty: "Le chat IA va creer la commande automatiquement et l'enregistrer directement.",
     modeLabel: 'Type de commande',
@@ -83,6 +85,8 @@ const UI = {
     assistantTitle: 'Command assistant',
     assistantCreate: 'Guided creation',
     assistantEdit: 'Guided edit',
+    editingTarget: 'Current command',
+    cancelEdit: 'Cancel',
     assistantHint: 'Describe what you want. Example: create a hello command that replies hello {mention}.',
     assistantEmpty: 'The AI chat will create the command automatically and save it directly.',
     modeLabel: 'Command type',
@@ -129,6 +133,8 @@ const UI = {
     assistantTitle: 'Asistente de comandos',
     assistantCreate: 'Creacion guiada',
     assistantEdit: 'Edicion guiada',
+    editingTarget: 'Comando actual',
+    cancelEdit: 'Cancelar',
     assistantHint: 'Describe lo que quieres. Ejemplo: crea un comando hola que responda hola {mention}.',
     assistantEmpty: 'El chat IA creara el comando automaticamente y lo guardara directamente.',
     modeLabel: 'Tipo de comando',
@@ -177,6 +183,17 @@ function isRouteNotFound(error, fragment) {
 function getUi(locale) {
   const key = String(locale || 'fr').toLowerCase().split('-')[0]
   return UI[key] || UI.fr
+}
+
+function buildEditPrompt(command, locale) {
+  const key = String(locale || 'fr').toLowerCase().split('-')[0]
+  if (key === 'en') {
+    return `Edit this command without deleting it.\nCurrent trigger: ${command.display_trigger}\nCurrent description: ${command.description || '(empty)'}\nCurrent response: ${command.response}\n\nWhat I want to change: `
+  }
+  if (key === 'es') {
+    return `Modifica este comando sin borrarlo.\nTrigger actual: ${command.display_trigger}\nDescripcion actual: ${command.description || '(vacia)'}\nRespuesta actual: ${command.response}\n\nLo que quiero cambiar: `
+  }
+  return `Modifie cette commande sans la supprimer.\nDeclencheur actuel: ${command.display_trigger}\nDescription actuelle: ${command.description || '(vide)'}\nReponse actuelle: ${command.response}\n\nCe que je veux changer: `
 }
 
 function upsertCommand(list, command) {
@@ -399,6 +416,8 @@ export default function CommandsPage() {
   const [togglingCommandIds, setTogglingCommandIds] = useState({})
   const toggleDesiredRef = useRef(new Map())
   const toggleRunningRef = useRef(new Set())
+  const assistantCardRef = useRef(null)
+  const promptInputRef = useRef(null)
   const speech = useSpeechToText({
     value: prompt,
     onChange: setPrompt,
@@ -426,6 +445,17 @@ export default function CommandsPage() {
     if (!selectedGuildId) return
     loadCommands()
   }, [selectedGuildId])
+
+  useEffect(() => {
+    if (!editingCommand) return
+    const timer = window.setTimeout(() => {
+      assistantCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      promptInputRef.current?.focus()
+      const length = promptInputRef.current?.value?.length || 0
+      promptInputRef.current?.setSelectionRange?.(length, length)
+    }, 60)
+    return () => window.clearTimeout(timer)
+  }, [editingCommand?.id])
 
   async function loadCommands(showToast = false) {
     if (!selectedGuildId) return
@@ -455,7 +485,7 @@ export default function CommandsPage() {
     setCommandInput(command.command_type === 'slash'
       ? (command.command_name || '')
       : (command.display_trigger || command.trigger || '!'))
-    setPrompt('')
+    setPrompt(buildEditPrompt(command, locale))
     setMessages([])
   }
 
@@ -666,7 +696,7 @@ export default function CommandsPage() {
               layout
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`glass-card p-5 transition-all ${!command.enabled ? 'opacity-55' : ''}`}
+              className={`glass-card p-5 transition-all ${!command.enabled ? 'opacity-55' : ''} ${editingCommand?.id === command.id ? 'ring-1 ring-neon-cyan/30 border-neon-cyan/25 shadow-[0_0_26px_rgba(34,211,238,0.12)]' : ''}`}
             >
               <div className="flex items-start gap-4">
                 <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 ${command.command_type === 'slash' ? 'border-violet-500/20 bg-violet-500/10 text-violet-300' : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300'}`}>
@@ -724,7 +754,7 @@ export default function CommandsPage() {
           ))}
         </div>
 
-        <div className="glass-card p-5 space-y-5 h-fit sticky top-24">
+        <div ref={assistantCardRef} className="glass-card p-5 space-y-5 h-fit sticky top-24">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="font-display font-700 text-white text-lg">{ui.assistantTitle}</p>
@@ -734,6 +764,27 @@ export default function CommandsPage() {
               <Bot className="w-5 h-5" />
             </div>
           </div>
+
+          {editingCommand && (
+            <div className="rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-neon-cyan/70 mb-1">{ui.editingTarget}</p>
+                  <p className="text-sm font-mono text-white break-all">{editingCommand.display_trigger}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="shrink-0 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-mono text-white/70 hover:text-white hover:border-white/20 transition-all"
+                >
+                  {ui.cancelEdit}
+                </button>
+              </div>
+              {editingCommand.description ? (
+                <p className="text-sm text-white/55">{editingCommand.description}</p>
+              ) : null}
+            </div>
+          )}
 
           <div className="grid gap-3">
             <div>
@@ -797,6 +848,7 @@ export default function CommandsPage() {
               </button>
             </div>
             <textarea
+              ref={promptInputRef}
               className="input-field min-h-[140px] resize-y"
               placeholder={ui.promptPlaceholder}
               value={prompt}
