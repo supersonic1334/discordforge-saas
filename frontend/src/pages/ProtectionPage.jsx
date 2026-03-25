@@ -1223,7 +1223,7 @@ export default function ProtectionPage() {
 
   if (!selectedGuildId) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="px-4 py-5 sm:p-6 max-w-4xl mx-auto">
         <div className="glass-card p-8 text-center space-y-3">
           <h1 className="font-display font-800 text-3xl text-white">{ui.noServer}</h1>
           <p className="text-white/45">{ui.subtitle}</p>
@@ -1239,7 +1239,7 @@ export default function ProtectionPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="font-display font-800 text-3xl text-white">{ui.title}</h1>
