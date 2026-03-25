@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bot, User, CheckCircle, AlertCircle, Sparkles, Mic, MicOff } from 'lucide-react'
+import { Send, Bot, User, CheckCircle, AlertCircle, Sparkles, Mic } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
 import { aiAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
+import VoiceMeter from '../components/VoiceMeter'
 
 function getAssistantErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback
@@ -218,8 +219,14 @@ export default function AIAssistant() {
       )}
 
       <div className="p-3 sm:p-4 border-t border-white/[0.06] shrink-0">
-        <div className="flex gap-2 sm:gap-3 items-end">
-          <div className="flex-1 relative">
+        <div className="space-y-2">
+          {(speech.isListening || speech.isRequestingPermission) && (
+            <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/70'}`}>
+              {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
+            </p>
+          )}
+
+          <div className="relative">
             <textarea
               ref={inputRef}
               value={input}
@@ -231,57 +238,49 @@ export default function AIAssistant() {
                 }
               }}
               placeholder={t('assistant.placeholder')}
-              className="input-field resize-none min-h-[48px] max-h-32 py-3 pr-12 font-body"
+              className="input-field resize-none min-h-[56px] max-h-36 py-3 pr-[120px] sm:pr-[148px] font-body"
               rows={1}
               style={{ height: 'auto' }}
             />
+            <div className="absolute right-3 bottom-3 flex items-center gap-2">
+              {(speech.isListening || speech.isRequestingPermission) && (
+                <VoiceMeter
+                  bars={speech.audioBars}
+                  active={speech.isListening}
+                  accent={speech.isRequestingPermission ? 'amber' : 'violet'}
+                />
+              )}
+              <motion.button
+                type="button"
+                onClick={() => (speech.isListening ? speech.stop() : speech.start())}
+                disabled={speech.isRequestingPermission}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+                className={`h-11 w-11 rounded-full border flex items-center justify-center transition-all shrink-0 disabled:opacity-70 ${
+                  speech.isListening
+                    ? 'border-red-500/35 bg-red-500/14 text-red-200 shadow-[0_0_20px_rgba(248,113,113,0.2)]'
+                    : speech.isRequestingPermission
+                      ? 'border-amber-400/35 bg-amber-400/12 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.18)]'
+                      : 'border-white/12 bg-white/[0.06] text-white/85 hover:border-neon-cyan/35 hover:bg-neon-cyan/10 hover:text-neon-cyan'
+                }`}
+                title={speech.isListening ? t('assistant.voiceStop') : t('assistant.voiceStart')}
+              >
+                <Mic className="w-4 h-4" />
+              </motion.button>
+              <motion.button
+                onClick={() => send()}
+                disabled={!input.trim() || loading}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+                className="h-11 w-11 rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan flex items-center justify-center text-white shadow-neon-violet disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
+              >
+                {loading
+                  ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <Send className="w-4 h-4" />}
+              </motion.button>
+            </div>
           </div>
-          <motion.button
-            type="button"
-            onClick={() => (speech.isListening ? speech.stop() : speech.start())}
-            disabled={speech.isRequestingPermission}
-            whileHover={{ scale: 1.04, y: -1 }}
-            whileTap={{ scale: 0.96 }}
-            className={`group relative w-14 h-14 rounded-[1.2rem] border flex items-center justify-center transition-all shrink-0 overflow-hidden disabled:opacity-70 ${
-              speech.isListening
-                ? 'border-red-500/30 bg-[linear-gradient(135deg,rgba(239,68,68,0.2),rgba(127,29,29,0.16))] text-red-200 shadow-[0_0_26px_rgba(248,113,113,0.18)]'
-                : speech.isRequestingPermission
-                  ? 'border-amber-400/30 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(120,53,15,0.14))] text-amber-100 shadow-[0_0_22px_rgba(251,191,36,0.16)]'
-                  : 'border-neon-cyan/25 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(168,85,247,0.12))] text-white shadow-[0_10px_26px_rgba(34,211,238,0.10)] hover:shadow-[0_12px_32px_rgba(34,211,238,0.18)]'
-            }`}
-            title={speech.isListening ? t('assistant.voiceStop') : t('assistant.voiceStart')}
-          >
-            <span className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_58%)] opacity-90" />
-            <span className={`absolute inset-[7px] rounded-[1rem] border ${
-              speech.isListening
-                ? 'border-red-300/18'
-                : speech.isRequestingPermission
-                  ? 'border-amber-200/20'
-                  : 'border-white/10'
-            }`} />
-            {speech.isListening && <span className="absolute inset-0 rounded-[1.2rem] animate-ping bg-red-400/12" />}
-            {speech.isListening ? <MicOff className="relative z-10 w-5 h-5" /> : <Mic className="relative z-10 w-5 h-5" />}
-          </motion.button>
-          <motion.button
-            onClick={() => send()}
-            disabled={!input.trim() || loading}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-violet to-neon-cyan flex items-center justify-center text-white shadow-neon-violet disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
-          >
-            {loading
-              ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              : <Send className="w-4 h-4" />}
-          </motion.button>
         </div>
-        {(speech.isListening || speech.isRequestingPermission) && (
-          <p className={`text-xs font-mono mt-2 text-center ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/70'}`}>
-            {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
-          </p>
-        )}
-        <p className="text-xs text-white/20 font-mono mt-2 text-center">
-          {t('assistant.footer')}
-        </p>
       </div>
     </div>
   )
