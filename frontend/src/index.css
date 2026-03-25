@@ -3,8 +3,39 @@
 @tailwind utilities;
 
 @layer base {
-  html { @apply bg-surface-0 text-white; }
-  body { font-family: 'DM Sans', sans-serif; }
+  html,
+  body,
+  #root {
+    @apply bg-surface-0 text-white;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    min-width: 0;
+  }
+  img,
+  svg,
+  video,
+  canvas,
+  iframe {
+    max-width: 100%;
+  }
+  pre,
+  code {
+    max-width: 100%;
+    word-break: break-word;
+  }
 }
 
 @layer components {
@@ -147,6 +178,33 @@
   animation: danger-modal-pulse 2.1s ease-in-out infinite;
 }
 
+body.app-protected {
+  -webkit-touch-callout: none;
+}
+
+body.app-protected img,
+body.app-protected svg,
+body.app-protected canvas,
+body.app-protected video {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+body.app-protected :not(input):not(textarea):not(select):not([contenteditable="true"]):not([data-allow-select]) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+[data-allow-select] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 /* Module toggle switch */
 .toggle-switch {
   position: relative;
@@ -183,6 +241,31 @@ input:checked + .toggle-slider:before {
   transform: translateX(20px);
   background: #00e5ff;
   box-shadow: 0 0 10px rgba(0,229,255,0.6);
+}
+
+@media (max-width: 767px) {
+  html,
+  body,
+  #root,
+  main {
+    overflow-x: hidden !important;
+  }
+
+  body {
+    position: relative;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font-size: 16px;
+  }
+
+  .glass-card,
+  .gradient-border {
+    max-width: 100%;
+  }
 }
 
 /* Shimmer loading */
