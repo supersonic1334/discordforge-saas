@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bot, User, CheckCircle, AlertCircle, Sparkles } from 'lucide-react'
+import { Send, Bot, User, CheckCircle, AlertCircle, Sparkles, Mic, MicOff } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import toast from 'react-hot-toast'
 import { aiAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
+import { useSpeechToText } from '../hooks/useSpeechToText'
 
 function getAssistantErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback
@@ -97,6 +99,23 @@ export default function AIAssistant() {
   const inputRef = useRef(null)
   const { selectedGuildId } = useGuildStore()
   const suggestions = t('assistant.suggestions', [])
+  const speech = useSpeechToText({
+    value: input,
+    onChange: setInput,
+    locale,
+    onError: (code) => {
+      if (code === 'unsupported') {
+        toast.error(t('assistant.voiceUnsupported'))
+        return
+      }
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        toast.error(t('assistant.voiceDenied'))
+        return
+      }
+      if (code === 'aborted') return
+      toast.error(t('assistant.voiceError'))
+    },
+  })
 
   useEffect(() => {
     aiAPI.status().then((r) => setAiStatus(r.data)).catch(() => {})
@@ -109,6 +128,7 @@ export default function AIAssistant() {
   const send = async (text) => {
     const msg = text || input.trim()
     if (!msg || loading) return
+    if (speech.isListening) speech.stop()
     setInput('')
     setLoading(true)
 
@@ -198,7 +218,7 @@ export default function AIAssistant() {
       )}
 
       <div className="p-3 sm:p-4 border-t border-white/[0.06] shrink-0">
-        <div className="flex gap-3 items-end">
+        <div className="flex gap-2 sm:gap-3 items-end">
           <div className="flex-1 relative">
             <textarea
               ref={inputRef}
@@ -217,6 +237,20 @@ export default function AIAssistant() {
             />
           </div>
           <motion.button
+            type="button"
+            onClick={() => (speech.isListening ? speech.stop() : speech.start())}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className={`w-12 h-12 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
+              speech.isListening
+                ? 'border-red-500/25 bg-red-500/10 text-red-300 shadow-[0_0_18px_rgba(248,113,113,0.16)]'
+                : 'border-white/[0.08] bg-white/[0.04] text-white/70 hover:text-neon-cyan hover:border-neon-cyan/20 hover:bg-neon-cyan/10'
+            }`}
+            title={speech.isListening ? t('assistant.voiceStop') : t('assistant.voiceStart')}
+          >
+            {speech.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </motion.button>
+          <motion.button
             onClick={() => send()}
             disabled={!input.trim() || loading}
             whileHover={{ scale: 1.05 }}
@@ -228,6 +262,11 @@ export default function AIAssistant() {
               : <Send className="w-4 h-4" />}
           </motion.button>
         </div>
+        {speech.isListening && (
+          <p className="text-xs text-neon-cyan/70 font-mono mt-2 text-center">
+            {t('assistant.voiceListening')}
+          </p>
+        )}
         <p className="text-xs text-white/20 font-mono mt-2 text-center">
           {t('assistant.footer')}
         </p>
