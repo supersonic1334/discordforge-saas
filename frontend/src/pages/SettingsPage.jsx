@@ -17,6 +17,11 @@ function getRoleLabel(t, role) {
   return t(`admin.roles.${role}`, role || '')
 }
 
+function getMaskedQuickToken(token) {
+  if (!token) return ''
+  return '••••••••••••••••••••••••'
+}
+
 export default function SettingsPage() {
   const { user, fetchMe, setUser, logout } = useAuthStore()
   const { fetchStatus: refreshBotStatus } = useBotStore()
@@ -59,6 +64,8 @@ export default function SettingsPage() {
   }, [fetchMe])
 
   useEffect(() => {
+    let active = true
+
     setUsername(user?.username || '')
     setAvatarDraft(user?.avatar_url || '')
     setAvatarFileName('')
@@ -66,11 +73,21 @@ export default function SettingsPage() {
       site_language: normalizePreference(user?.site_language),
       ai_language: normalizePreference(user?.ai_language),
     })
-    const savedToken = getQuickBotToken(quickTokenOwner)
-    setSavedQuickToken(savedToken)
-    setBotToken((currentToken) => currentToken || savedToken)
     setPrivateEmail('')
     setShowPrivateEmail(false)
+
+    const loadQuickToken = async () => {
+      const savedToken = await getQuickBotToken(quickTokenOwner)
+      if (!active) return
+      setSavedQuickToken(savedToken)
+      setBotToken((currentToken) => currentToken || savedToken)
+    }
+
+    loadQuickToken()
+
+    return () => {
+      active = false
+    }
   }, [user, quickTokenOwner])
 
   const togglePrivateEmail = async () => {
@@ -160,7 +177,7 @@ export default function SettingsPage() {
     try {
       const normalizedToken = botToken.trim()
       await authAPI.setBotToken(normalizedToken)
-      setQuickBotToken(quickTokenOwner, normalizedToken)
+      await setQuickBotToken(quickTokenOwner, normalizedToken)
       setSavedQuickToken(normalizedToken)
       await fetchMe()
       await refreshBotStatus()
@@ -194,7 +211,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-5">
+    <div className="px-4 py-5 sm:p-6 max-w-2xl mx-auto space-y-5">
       <h1 className="font-display font-800 text-2xl text-white">{t('settings.title')}</h1>
 
       <div className="glass-card p-5 space-y-4">
@@ -317,9 +334,9 @@ export default function SettingsPage() {
           {quickToken ? (
             <div className="flex flex-col sm:flex-row gap-2">
               <input
-                type="text"
+                type="password"
                 className="input-field secret-field sm:flex-1"
-                value={quickToken}
+                value={getMaskedQuickToken(quickToken)}
                 readOnly
                 name="saved-discord-bot-token"
                 autoComplete="off"
@@ -348,7 +365,7 @@ export default function SettingsPage() {
         <div className="relative">
           <Key className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
           <input
-            type="text"
+            type="password"
             className="input-field secret-field pl-10"
             placeholder={t('settings.botTokenPlaceholder')}
             value={botToken}
