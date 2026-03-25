@@ -717,7 +717,7 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-5">
+    <div className="px-4 py-5 sm:p-6 max-w-5xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
         <Crown className="w-6 h-6 text-amber-400" />
         <h1 className="font-display font-800 text-2xl text-white">{t('admin.title')}</h1>
