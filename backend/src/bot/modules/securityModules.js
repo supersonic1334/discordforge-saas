@@ -3,6 +3,7 @@
 const logger = require('../../utils/logger').child('SecurityModules');
 const discordService = require('../../services/discordService');
 const { banUserAcrossBotNetwork } = require('../../services/botBlacklistService');
+const { safeSendModerationDm } = require('../../services/moderationDmService');
 const { recordModAction, addWarning, getWarningCount } = require('../utils/modHelpers');
 
 // ── URL / Invite Patterns ─────────────────────────────────────────────────────
@@ -242,16 +243,53 @@ async function punishSecurityAction(action, guild, userOrMember, botToken, reaso
       case 'timeout':
         await discordService.timeoutMember(botToken, guildId, userId, normalizedTimeoutMs, reason);
         await recordModAction(guildId, 'timeout', userId, userTag, botId, botTag, reason, normalizedTimeoutMs, moduleSource);
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'timeout',
+          targetUserId: userId,
+          reason,
+          durationMs: normalizedTimeoutMs,
+          moderatorName: botTag,
+        });
         break;
       case 'kick':
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'kick',
+          targetUserId: userId,
+          reason,
+          moderatorName: botTag,
+        });
         await discordService.kickMember(botToken, guildId, userId, reason);
         await recordModAction(guildId, 'kick', userId, userTag, botId, botTag, reason, null, moduleSource);
         break;
       case 'ban':
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'ban',
+          targetUserId: userId,
+          reason,
+          moderatorName: botTag,
+        });
         await discordService.banMember(botToken, guildId, userId, reason);
         await recordModAction(guildId, 'ban', userId, userTag, botId, botTag, reason, null, moduleSource);
         break;
       case 'blacklist':
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'blacklist',
+          targetUserId: userId,
+          reason,
+          moderatorName: botTag,
+        });
         if (ownerUserId) {
           await banUserAcrossBotNetwork(ownerUserId, userId, userTag, botToken, reason, moduleSource);
         } else {

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   MessageSquare, LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
@@ -79,6 +79,7 @@ export default function Layout() {
     { icon: Server, label: t('layout.nav.servers'), path: '/dashboard/servers' },
     { icon: Shield, label: t('layout.nav.protection', 'Protection'), path: '/dashboard/protection', needsGuild: true },
     { icon: MessageSquare, label: t('layout.nav.moderation'), path: '/dashboard/moderation', needsGuild: true },
+    { icon: Send, label: t('layout.nav.messages', 'Messages'), path: '/dashboard/messages', needsGuild: true },
     { icon: Ban, label: t('layout.nav.blocked', 'Blocages'), path: '/dashboard/blocked', needsGuild: true },
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },

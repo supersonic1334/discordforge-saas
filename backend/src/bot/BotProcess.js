@@ -7,6 +7,7 @@ const logger = require('../utils/logger').child('BotProcess');
 const db = require('../database');
 const { decrypt } = require('../services/encryptionService');
 const { enforceBlacklistOnJoin } = require('../services/botBlacklistService');
+const { safeSendModerationDm } = require('../services/moderationDmService');
 const { MODULE_DEFINITIONS } = require('./modules/definitions');
 const { handleAntiSpam } = require('./modules/antiSpam');
 const { handleAntiLink, handleAntiInvite, handleAntiMassMention, handleAntiBotJoin, handleAntiRaid, punishSecurityAction } = require('./modules/securityModules');
@@ -558,10 +559,17 @@ class BotProcess extends EventEmitter {
           if (action === 'warn') {
             const username = target.tag || target.username || execution.userId;
             await addWarning(guild.id, execution.userId, username, guild.members.me?.id, guild.members.me?.user?.tag ?? 'Bot', 'AutoMod: contenu bloque', 1);
+            await safeSendModerationDm({
+              botToken: this.token,
+              guildId: guild.id,
+              guild,
+              actionType: 'warn',
+              targetUserId: execution.userId,
+              reason: 'AutoMod: contenu bloque',
+              points: 1,
+              moderatorName: guild.members.me?.user?.tag ?? 'Bot',
+            });
             await checkEscalation(guild.id, execution.userId, username, this.token, guild);
-            if (moduleConfig?.advanced_config?.dm_warning && member) {
-              await member.send('Ton message a ete bloque par la protection automatique du serveur.').catch(() => {});
-            }
             break;
           }
 

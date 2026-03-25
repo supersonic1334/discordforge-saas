@@ -7,6 +7,7 @@ const { requireAuth, requireBotToken, requireGuildOwner, validate, validateQuery
 const { addWarningSchema, modActionSchema, paginationSchema, moderationSearchSchema } = require('../validators/schemas');
 const { addWarning, getWarningCount, recordModAction, checkEscalation } = require('../bot/utils/modHelpers');
 const discordService = require('../services/discordService');
+const { safeSendModerationDm } = require('../services/moderationDmService');
 const { decrypt } = require('../services/encryptionService');
 const authService = require('../services/authService');
 const db = require('../database');
@@ -421,6 +422,17 @@ async function issueWarning(req, token, payload) {
     }
   );
 
+  await safeSendModerationDm({
+    botToken: token,
+    guildRow: req.guild,
+    actionType: 'warn',
+    targetUserId: target_user_id,
+    reason,
+    points,
+    moderatorName: moderatorUsername,
+    moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+  });
+
   const total = getWarningCount(req.guild.guild_id, target_user_id);
   const botProcess = require('../services/botManager').getProcess(req.user.id);
   if (botProcess?.client) {
@@ -810,9 +822,27 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
         await discordService.timeoutMember(token, guildId, target_user_id, null, reason ?? 'Manual remove timeout');
         break;
       case 'kick':
+        await safeSendModerationDm({
+          botToken: token,
+          guildRow: req.guild,
+          actionType: 'kick',
+          targetUserId: target_user_id,
+          reason,
+          moderatorName: moderatorUsername,
+          moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+        });
         await discordService.kickMember(token, guildId, target_user_id, reason ?? 'Manual kick');
         break;
       case 'ban':
+        await safeSendModerationDm({
+          botToken: token,
+          guildRow: req.guild,
+          actionType: 'ban',
+          targetUserId: target_user_id,
+          reason,
+          moderatorName: moderatorUsername,
+          moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+        });
         await discordService.banMember(token, guildId, target_user_id, reason ?? 'Manual ban', 0);
         break;
       case 'unban':
@@ -838,6 +868,19 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
         points,
       }
     );
+
+    if (action === 'timeout') {
+      await safeSendModerationDm({
+        botToken: token,
+        guildRow: req.guild,
+        actionType: 'timeout',
+        targetUserId: target_user_id,
+        reason,
+        durationMs: duration_ms,
+        moderatorName: moderatorUsername,
+        moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+      });
+    }
 
     res.json({
       message: `${action} executed successfully`,

@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../../database');
 const logger = require('../../utils/logger').child('ModHelpers');
 const discordService = require('../../services/discordService');
+const { safeSendModerationDm } = require('../../services/moderationDmService');
 
 /**
  * Record a moderation action to the audit log.
@@ -131,12 +132,40 @@ async function checkEscalation(guildId, targetUserId, targetUsername, botToken, 
       case 'timeout':
         await discordService.timeoutMember(botToken, guildId, targetUserId, step.duration_ms || 600000, reason);
         await recordModAction(guildId, 'timeout', targetUserId, targetUsername, botId, botTag, reason, step.duration_ms || 600000, 'WARNING_SYSTEM');
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'timeout',
+          targetUserId,
+          reason,
+          durationMs: step.duration_ms || 600000,
+          moderatorName: botTag,
+        });
         break;
       case 'kick':
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'kick',
+          targetUserId,
+          reason,
+          moderatorName: botTag,
+        });
         await discordService.kickMember(botToken, guildId, targetUserId, reason);
         await recordModAction(guildId, 'kick', targetUserId, targetUsername, botId, botTag, reason, null, 'WARNING_SYSTEM');
         break;
       case 'ban':
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'ban',
+          targetUserId,
+          reason,
+          moderatorName: botTag,
+        });
         await discordService.banMember(botToken, guildId, targetUserId, reason);
         await recordModAction(guildId, 'ban', targetUserId, targetUsername, botId, botTag, reason, null, 'WARNING_SYSTEM');
         break;

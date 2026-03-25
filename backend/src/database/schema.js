@@ -144,6 +144,21 @@ const SCHEMA = [
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  `CREATE TABLE IF NOT EXISTS guild_dm_settings (
+    id                TEXT PRIMARY KEY,
+    guild_id          TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    auto_dm_warn      INTEGER NOT NULL DEFAULT 1,
+    auto_dm_timeout   INTEGER NOT NULL DEFAULT 1,
+    auto_dm_kick      INTEGER NOT NULL DEFAULT 1,
+    auto_dm_ban       INTEGER NOT NULL DEFAULT 1,
+    auto_dm_blacklist INTEGER NOT NULL DEFAULT 1,
+    appeal_server_name TEXT NOT NULL DEFAULT '',
+    appeal_server_url TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(guild_id)
+  )`,
+
   // ────────────────────────────────────────────────────────────────────────────
   // CUSTOM COMMANDS
   // ────────────────────────────────────────────────────────────────────────────

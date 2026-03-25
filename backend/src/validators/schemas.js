@@ -101,6 +101,26 @@ const modActionSchema = z.object({
   moderator_discord_identity: z.string().trim().min(2).max(100).optional(),
 });
 
+const guildDmConfigSchema = z.object({
+  auto_dm_warn: z.boolean().optional(),
+  auto_dm_timeout: z.boolean().optional(),
+  auto_dm_kick: z.boolean().optional(),
+  auto_dm_ban: z.boolean().optional(),
+  auto_dm_blacklist: z.boolean().optional(),
+  appeal_server_name: z.string().trim().max(120).optional().default(''),
+  appeal_server_url: z.string().trim().max(500).optional().default('').refine(
+    (value) => value === '' || /^https?:\/\/\S+$/i.test(value),
+    'Invalid appeal server URL'
+  ),
+});
+
+const directMessageSchema = z.object({
+  target_user_id: z.string().regex(/^\d+$/, 'Must be a Discord user ID'),
+  target_username: z.string().trim().max(80).optional(),
+  title: z.string().trim().min(1).max(120).optional(),
+  message: z.string().trim().min(2).max(2000),
+});
+
 // ── Custom Commands ───────────────────────────────────────────────────────────
 const commandKeySchema = z.string().trim().min(1).max(50).regex(/^\S+$/, 'Trigger cannot contain spaces');
 const commandNameSchema = z.string().trim().min(1).max(32).regex(/^[\w-]+$/, 'Invalid command name');
@@ -276,6 +296,8 @@ module.exports = {
   moduleTypeSchema,
   addWarningSchema,
   modActionSchema,
+  guildDmConfigSchema,
+  directMessageSchema,
   customCommandSchema,
   commandAssistantSchema,
   commandToggleSchema,

@@ -15,6 +15,7 @@ import AIAssistant from './pages/AIAssistant'
 import ServersPage from './pages/ServersPage'
 import ProtectionPage from './pages/ProtectionPage'
 import ModerationPage from './pages/ModerationPage'
+import MessagesPage from './pages/MessagesPage'
 import BlockedPage from './pages/BlockedPage'
 import CommandsPage from './pages/CommandsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
@@ -271,6 +272,7 @@ function AppRoot() {
           <Route path="servers/:guildId" element={<Navigate to="/dashboard/servers" replace />} />
           <Route path="protection" element={<PageTransition><ProtectionPage /></PageTransition>} />
           <Route path="moderation" element={<PageTransition><ModerationPage /></PageTransition>} />
+          <Route path="messages" element={<PageTransition><MessagesPage /></PageTransition>} />
           <Route path="blocked" element={<PageTransition><BlockedPage /></PageTransition>} />
           <Route path="commands" element={<PageTransition><CommandsPage /></PageTransition>} />
           <Route path="analytics" element={<PageTransition><AnalyticsPage /></PageTransition>} />

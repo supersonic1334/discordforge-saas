@@ -301,6 +301,21 @@ async function sendMessage(token, channelId, payload) {
   });
 }
 
+async function createDmChannel(token, userId) {
+  return discordFetch('/users/@me/channels', token, {
+    method: 'POST',
+    body: JSON.stringify({ recipient_id: String(userId) }),
+  });
+}
+
+async function sendDirectMessage(token, userId, payload) {
+  const channel = await createDmChannel(token, userId);
+  if (!channel?.id) {
+    throw new DiscordAPIError('Unable to open DM channel', 400);
+  }
+  return sendMessage(token, channel.id, payload);
+}
+
 /**
  * Fetch guild members (requires GUILD_MEMBERS intent + privileged intent enabled).
  */
@@ -367,6 +382,8 @@ module.exports = {
   unbanMember,
   addRole,
   sendMessage,
+  createDmChannel,
+  sendDirectMessage,
   getGuildMembers,
   getAvatarUrl,
   getGuildIconUrl,

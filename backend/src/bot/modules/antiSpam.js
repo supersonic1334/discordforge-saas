@@ -3,6 +3,7 @@
 const logger = require('../../utils/logger').child('AntiSpam');
 const discordService = require('../../services/discordService');
 const { banUserAcrossBotNetwork } = require('../../services/botBlacklistService');
+const { safeSendModerationDm } = require('../../services/moderationDmService');
 const { recordModAction, addWarning, getWarningCount } = require('../utils/modHelpers');
 
 // Map<guildId, Map<userId, { messages: Array<{ timestamp: number, message: Message }> }>>
@@ -100,6 +101,19 @@ async function handleAntiSpam(message, config, botToken, ownerUserId) {
         `${reason} (auto)`,
         1
       );
+      await recordModAction(guildId, 'warn', userId, author.tag, guild.members.me?.id, guild.members.me?.user?.tag, `${reason} (auto)`, null, 'ANTI_SPAM', {
+        points: 1,
+      });
+      await safeSendModerationDm({
+        botToken,
+        guildId,
+        guild,
+        actionType: 'warn',
+        targetUserId: userId,
+        reason: `${reason} (auto)`,
+        points: 1,
+        moderatorName: guild.members.me?.user?.tag,
+      });
       try {
         await message.channel.send({
           content: `${author}, ralentis un peu. Une sanction automatique sera appliquee si ca continue.`,
@@ -136,16 +150,53 @@ async function executePunishment(action, guild, author, botToken, reason, timeou
       case 'timeout':
         await discordService.timeoutMember(botToken, guildId, userId, durationMs, reason);
         await recordModAction(guildId, 'timeout', userId, author.tag, guild.members.me?.id, guild.members.me?.user?.tag, reason, durationMs, 'ANTI_SPAM');
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'timeout',
+          targetUserId: userId,
+          reason,
+          durationMs,
+          moderatorName: guild.members.me?.user?.tag,
+        });
         break;
       case 'kick':
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'kick',
+          targetUserId: userId,
+          reason,
+          moderatorName: guild.members.me?.user?.tag,
+        });
         await discordService.kickMember(botToken, guildId, userId, reason);
         await recordModAction(guildId, 'kick', userId, author.tag, guild.members.me?.id, guild.members.me?.user?.tag, reason, null, 'ANTI_SPAM');
         break;
       case 'ban':
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'ban',
+          targetUserId: userId,
+          reason,
+          moderatorName: guild.members.me?.user?.tag,
+        });
         await discordService.banMember(botToken, guildId, userId, reason, 86400);
         await recordModAction(guildId, 'ban', userId, author.tag, guild.members.me?.id, guild.members.me?.user?.tag, reason, null, 'ANTI_SPAM');
         break;
       case 'blacklist':
+        await safeSendModerationDm({
+          botToken,
+          guildId,
+          guild,
+          actionType: 'blacklist',
+          targetUserId: userId,
+          reason,
+          moderatorName: guild.members.me?.user?.tag,
+        });
         if (ownerUserId) {
           await banUserAcrossBotNetwork(ownerUserId, userId, author.tag, botToken, reason, 'ANTI_SPAM');
         } else {

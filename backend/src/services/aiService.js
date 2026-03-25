@@ -7,6 +7,7 @@ const botManager = require('./botManager');
 const { decrypt } = require('./encryptionService');
 const aiProviderKeyService = require('./aiProviderKeyService');
 const discordService = require('./discordService');
+const { safeSendModerationDm } = require('./moderationDmService');
 const wsServer = require('../websocket');
 const { addWarning } = require('../bot/utils/modHelpers');
 const logger = require('../utils/logger').child('AIService');
@@ -939,12 +940,29 @@ async function executeAction(userId, actionBlock, botToken) {
       const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
       if (!guild) return { error: 'Guild not found' };
       await addWarning(guild.guild_id, params.targetUserId, params.targetUsername, userId, 'AI Agent', params.reason, params.points ?? 1);
+      await safeSendModerationDm({
+        botToken: token,
+        guildRow: guild,
+        actionType: 'warn',
+        targetUserId: params.targetUserId,
+        reason: params.reason,
+        points: params.points ?? 1,
+        moderatorName: 'Assistant IA',
+      });
       return { success: true, message: `Warning added to ${params.targetUsername}` };
     }
 
     case 'kick_user': {
       const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
       if (!guild) return { error: 'Guild not found' };
+      await safeSendModerationDm({
+        botToken: token,
+        guildRow: guild,
+        actionType: 'kick',
+        targetUserId: params.targetUserId,
+        reason: params.reason ?? 'Action de l assistant IA',
+        moderatorName: 'Assistant IA',
+      });
       await discordService.kickMember(token, guild.guild_id, params.targetUserId, params.reason ?? 'AI Agent action');
       return { success: true, message: 'User kicked' };
     }
@@ -952,6 +970,14 @@ async function executeAction(userId, actionBlock, botToken) {
     case 'ban_user': {
       const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
       if (!guild) return { error: 'Guild not found' };
+      await safeSendModerationDm({
+        botToken: token,
+        guildRow: guild,
+        actionType: 'ban',
+        targetUserId: params.targetUserId,
+        reason: params.reason ?? 'Action de l assistant IA',
+        moderatorName: 'Assistant IA',
+      });
       await discordService.banMember(token, guild.guild_id, params.targetUserId, params.reason ?? 'AI Agent action');
       return { success: true, message: 'User banned' };
     }
@@ -960,6 +986,15 @@ async function executeAction(userId, actionBlock, botToken) {
       const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
       if (!guild) return { error: 'Guild not found' };
       await discordService.timeoutMember(token, guild.guild_id, params.targetUserId, params.durationMs, params.reason ?? 'AI Agent action');
+      await safeSendModerationDm({
+        botToken: token,
+        guildRow: guild,
+        actionType: 'timeout',
+        targetUserId: params.targetUserId,
+        reason: params.reason ?? 'Action de l assistant IA',
+        durationMs: params.durationMs,
+        moderatorName: 'Assistant IA',
+      });
       return { success: true, message: 'User timed out' };
     }
 

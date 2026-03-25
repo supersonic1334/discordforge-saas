@@ -98,6 +98,13 @@ export const blockedAPI = {
   unblacklist:  (guildId, userId) => api.delete(`/bot/guilds/${guildId}/blocked/blacklist/${userId}`),
 }
 
+export const messagesAPI = {
+  config:     (guildId) => api.get(`/bot/guilds/${guildId}/messages/config`),
+  saveConfig: (guildId, data) => api.put(`/bot/guilds/${guildId}/messages/config`, data),
+  search:     (guildId, params) => api.get(`/bot/guilds/${guildId}/messages/search`, { params }),
+  send:       (guildId, data) => api.post(`/bot/guilds/${guildId}/messages/direct`, data),
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 export const commandsAPI = {
   list:   (guildId)       => api.get(`/bot/guilds/${guildId}/commands`),
