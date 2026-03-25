@@ -14,6 +14,7 @@ const moduleRoutes = require('./modules');
 const commandRoutes = require('./commands');
 const logRoutes = require('./logs');
 const moderationRoutes = require('./moderation');
+const blockedRoutes = require('./blocked');
 
 // ── GET /status ───────────────────────────────────────────────────────────────
 router.get('/status', requireAuth, requireBotToken, (req, res) => {
@@ -87,6 +88,7 @@ router.use('/guilds/:guildId/modules', moduleRoutes);
 router.use('/guilds/:guildId/commands', commandRoutes);
 router.use('/guilds/:guildId/logs', logRoutes);
 router.use('/guilds/:guildId/moderation', moderationRoutes);
+router.use('/guilds/:guildId/blocked', blockedRoutes);
 
 router.post('/guilds/sync', requireAuth, requireBotToken, async (req, res, next) => {
   try {
