@@ -24,12 +24,12 @@ function Message({ msg, locale, actionLabel }) {
           <Bot className="w-4 h-4 text-neon-violet" />
         </div>
       )}
-      <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
+      <div className={`max-w-[88%] sm:max-w-[80%] ${isUser ? 'order-first' : ''}`}>
         <div className={`px-4 py-3 rounded-2xl text-sm font-body ${
           isUser
             ? 'bg-neon-cyan/10 border border-neon-cyan/20 text-white ml-auto'
             : 'bg-white/[0.04] border border-white/[0.08] text-white/90'
-        }`}>
+        } break-words`}>
           {isUser ? (
             <p>{msg.content}</p>
           ) : (
@@ -141,8 +141,8 @@ export default function AIAssistant() {
   }
 
   return (
-    <div className="flex flex-col h-full max-h-screen">
-      <div className="flex items-center gap-3 p-6 border-b border-white/[0.06] shrink-0">
+    <div className="flex flex-col h-full max-h-screen overflow-x-hidden">
+      <div className="flex items-center gap-3 p-4 sm:p-6 border-b border-white/[0.06] shrink-0">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/20 border border-neon-violet/30 flex items-center justify-center">
           <Sparkles className="w-5 h-5 text-neon-violet" />
         </div>
@@ -156,7 +156,7 @@ export default function AIAssistant() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-none p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none p-4 sm:p-6 space-y-4">
         <AnimatePresence>
           {messages.map((msg, index) => <Message key={index} msg={msg} locale={locale} actionLabel={t('assistant.actionLabel')} />)}
         </AnimatePresence>
@@ -184,7 +184,7 @@ export default function AIAssistant() {
       </div>
 
       {messages.length <= 1 && (
-        <div className="px-6 pb-2 flex gap-2 flex-wrap">
+        <div className="px-4 sm:px-6 pb-2 flex gap-2 flex-wrap">
           {suggestions.map((suggestion) => (
             <button
               key={suggestion}
@@ -197,7 +197,7 @@ export default function AIAssistant() {
         </div>
       )}
 
-      <div className="p-4 border-t border-white/[0.06] shrink-0">
+      <div className="p-3 sm:p-4 border-t border-white/[0.06] shrink-0">
         <div className="flex gap-3 items-end">
           <div className="flex-1 relative">
             <textarea
