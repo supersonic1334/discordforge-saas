@@ -155,6 +155,22 @@ async function getUser(token, userId) {
   return discordFetch(`/users/${userId}`, token);
 }
 
+async function getGuildMember(token, guildId, userId) {
+  return discordFetch(`/guilds/${guildId}/members/${userId}`, token);
+}
+
+async function searchGuildMembers(token, guildId, query, limit = 10) {
+  const params = new URLSearchParams({
+    query: String(query || '').trim(),
+    limit: String(Math.max(1, Math.min(100, Number(limit) || 10))),
+  });
+  return discordFetch(`/guilds/${guildId}/members/search?${params.toString()}`, token);
+}
+
+async function getGuildBan(token, guildId, userId) {
+  return discordFetch(`/guilds/${guildId}/bans/${userId}`, token);
+}
+
 async function getGuildAuditLogs(token, guildId, options = {}) {
   const params = new URLSearchParams()
   if (options.userId) params.set('user_id', String(options.userId))
@@ -323,6 +339,9 @@ module.exports = {
   getGuildChannels,
   getGuildRoles,
   getUser,
+  getGuildMember,
+  searchGuildMembers,
+  getGuildBan,
   getGuildAuditLogs,
   listAutoModerationRules,
   createAutoModerationRule,
