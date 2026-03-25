@@ -674,7 +674,7 @@ export default function AnalyticsPage() {
 
   if (!selectedGuildId) {
     return (
-      <div className="p-6 max-w-3xl mx-auto pt-24">
+      <div className="px-4 pt-20 pb-5 sm:p-6 sm:pt-24 max-w-3xl mx-auto">
         <div className="glass-card p-10 text-center">
           <BarChart3 className="w-12 h-12 text-white/10 mx-auto mb-4" />
           <p className="font-display font-700 text-white text-xl">{t('analytics.selectServerTitle', 'Choisis d abord un serveur')}</p>
@@ -691,7 +691,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="px-4 py-5 sm:p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div>
           <h1 className="font-display font-800 text-2xl text-white">{t('analytics.title')}</h1>
