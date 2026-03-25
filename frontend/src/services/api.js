@@ -92,6 +92,12 @@ export const modAPI = {
   action:        (guildId, data)   => api.post(`/bot/guilds/${guildId}/moderation/actions`, data),
 }
 
+export const blockedAPI = {
+  list:         (guildId, params) => api.get(`/bot/guilds/${guildId}/blocked`, { params }),
+  unban:        (guildId, userId) => api.delete(`/bot/guilds/${guildId}/blocked/bans/${userId}`),
+  unblacklist:  (guildId, userId) => api.delete(`/bot/guilds/${guildId}/blocked/blacklist/${userId}`),
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 export const commandsAPI = {
   list:   (guildId)       => api.get(`/bot/guilds/${guildId}/commands`),
