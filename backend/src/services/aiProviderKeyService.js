@@ -35,6 +35,26 @@ function buildStatusOrderSql() {
   END`;
 }
 
+function findBestAvailableProviderKey(provider = null) {
+  const conditions = ["k.is_enabled = 1", "k.status IN ('valid','unknown')"];
+  const params = [];
+
+  if (provider) {
+    conditions.unshift('k.provider = ?');
+    params.push(normalizeProvider(provider));
+  }
+
+  return db.raw(
+    `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url, u.email AS owner_email
+     FROM ai_provider_keys k
+     JOIN users u ON u.id = k.user_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY ${buildStatusOrderSql()}, COALESCE(k.last_used_at, '') DESC, k.updated_at DESC
+     LIMIT 1`,
+    params
+  )[0] || null;
+}
+
 function resolveProviderModel(provider, selectedModel) {
   const normalizedProvider = normalizeProvider(provider);
   const catalogEntry = getProviderCatalog(normalizedProvider);
@@ -307,20 +327,7 @@ function getConfiguredProviderKey(aiConfigRow) {
     }
   }
 
-  const pooledKey = db.raw(
-    `SELECT k.*, u.username AS owner_username, u.role AS owner_role, u.avatar_url AS owner_avatar_url, u.email AS owner_email
-     FROM ai_provider_keys k
-     JOIN users u ON u.id = k.user_id
-     WHERE k.provider = ? AND k.is_enabled = 1 AND k.status IN ('valid','unknown')
-     ORDER BY CASE k.status
-       WHEN 'valid' THEN 0
-       WHEN 'unknown' THEN 1
-       WHEN 'quota_exhausted' THEN 2
-       ELSE 3
-     END, k.updated_at DESC
-     LIMIT 1`,
-    [provider]
-  )[0] || null;
+  const pooledKey = findBestAvailableProviderKey(provider);
 
   if (pooledKey) return pooledKey;
   if (aiConfigRow.encrypted_api_key) return null;
@@ -363,6 +370,21 @@ async function saveProviderKey(userId, { provider, apiKey, selectedModel }) {
   }
 
   const aiConfig = db.raw("SELECT * FROM ai_config WHERE id = 'singleton' LIMIT 1")[0] || null;
+  const currentProvider = normalizeProvider(aiConfig?.provider);
+  const currentProviderKey = aiConfig ? getConfiguredProviderKey(aiConfig) : null;
+  const hasUsableCurrentSource = !!currentProviderKey?.encrypted_api_key || !!aiConfig?.encrypted_api_key;
+  const shouldPromoteToAiConfig = probe.status === 'valid' && (
+    !aiConfig
+    || !hasUsableCurrentSource
+    || (
+      currentProvider === normalizedProvider
+      && (
+        !aiConfig.active_provider_key_id
+        || aiConfig.active_provider_key_id === existing?.id
+      )
+    )
+  );
+
   if (!aiConfig) {
     db.db.prepare(`
       INSERT INTO ai_config (
@@ -370,15 +392,18 @@ async function saveProviderKey(userId, { provider, apiKey, selectedModel }) {
         user_quota_tokens, site_quota_tokens, quota_window_hours, auto_mode, enabled, updated_at
       ) VALUES ('singleton', ?, NULL, ?, ?, 1024, 0.7, 4000, 20000, 5, 1, 1, ?)
     `).run(normalizedProvider, keyId, resolvedModel, now);
-  } else if (
-    normalizeProvider(aiConfig.provider) === normalizedProvider
-    && (!aiConfig.active_provider_key_id || aiConfig.active_provider_key_id === existing?.id)
-  ) {
+  } else if (shouldPromoteToAiConfig) {
     db.db.prepare(`
       UPDATE ai_config
-      SET active_provider_key_id = ?, enabled = 1, updated_at = ?
+      SET provider = ?, encrypted_api_key = ?, active_provider_key_id = ?, model = ?, enabled = 1, updated_at = ?
       WHERE id = 'singleton'
-    `).run(keyId, now);
+    `).run(
+      normalizedProvider,
+      currentProvider === normalizedProvider ? aiConfig.encrypted_api_key : null,
+      keyId,
+      resolvedModel,
+      now
+    );
   }
 
   return getProviderKeyById(keyId);
@@ -461,6 +486,7 @@ module.exports = {
   listProviderKeys,
   getProviderKeyById,
   getConfiguredProviderKey,
+  getBestAvailableProviderKey: findBestAvailableProviderKey,
   saveProviderKey,
   refreshProviderKeyStatus,
   updateProviderKeyModel,
