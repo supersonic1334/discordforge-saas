@@ -22,6 +22,10 @@ function getMaskedQuickToken(token) {
   return '••••••••••••••••••••••••'
 }
 
+function getErrorMessage(error, fallback) {
+  return error?.response?.data?.error || error?.message || fallback
+}
+
 export default function SettingsPage() {
   const { user, fetchMe, setUser, logout } = useAuthStore()
   const { fetchStatus: refreshBotStatus } = useBotStore()
@@ -126,7 +130,7 @@ export default function SettingsPage() {
       setAvatarFileName('')
       toast.success(t('settings.avatarSaved'))
     } catch (e) {
-      toast.error(e.message)
+      toast.error(getErrorMessage(e, 'Impossible d enregistrer cette photo.'))
     }
     setSaving(null)
   }
@@ -142,7 +146,7 @@ export default function SettingsPage() {
       setAvatarDraft(nextAvatar)
       setAvatarFileName(file.name)
     } catch (e) {
-      toast.error(e.message)
+      toast.error(getErrorMessage(e, 'Impossible de preparer cette image.'))
     }
     setIsPreparingAvatar(false)
   }
