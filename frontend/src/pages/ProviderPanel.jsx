@@ -302,7 +302,7 @@ export default function ProviderPanel() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-5">
+    <div className="px-4 py-5 sm:p-6 max-w-5xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
         <KeyRound className="w-6 h-6 text-neon-cyan" />
         <div>
