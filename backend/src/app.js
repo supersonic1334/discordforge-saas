@@ -94,7 +94,9 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       'base-uri': ["'self'"],
+      'child-src': ["'none'"],
       'connect-src': cspConnectSources,
+      'frame-src': ["'none'"],
       'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
       'form-action': ["'self'"],
       'frame-ancestors': ["'none'"],
@@ -114,6 +116,9 @@ app.use((req, res, next) => {
     'Permissions-Policy',
     'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()'
   );
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Origin-Agent-Cluster', '?1');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
   next();
 });
 
@@ -213,10 +218,59 @@ app.get('/health', (req, res) => {
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 const prefix = config.API_PREFIX;
+const allowedMutationFetchSites = new Set(['same-origin', 'same-site', 'none', '']);
+const oauthRoutePrefixes = [
+  '/auth/discord',
+  '/auth/google',
+];
+
+function hasAllowedOrigin(requestUrl) {
+  if (!requestUrl) return true;
+
+  try {
+    const parsed = new URL(requestUrl);
+    return config.allowedOrigins.includes(parsed.origin);
+  } catch {
+    return false;
+  }
+}
 
 app.use(prefix, (req, res, next) => {
   setNoStoreHeaders(res);
   next();
+});
+app.use(prefix, (req, res, next) => {
+  const relativePath = req.path || '';
+  const isOauthFlow = oauthRoutePrefixes.some((routePrefix) => relativePath.startsWith(routePrefix));
+  if (isOauthFlow) {
+    return next();
+  }
+
+  const appClient = String(req.headers['x-app-client'] || '').trim();
+  const requestedWith = String(req.headers['x-requested-with'] || '').trim();
+  if (appClient !== 'discordforger-web' || requestedWith !== 'XMLHttpRequest') {
+    return res.status(403).json({ error: 'Client request rejected.' });
+  }
+
+  const origin = String(req.headers.origin || '').trim();
+  const referer = String(req.headers.referer || '').trim();
+  if (!hasAllowedOrigin(origin) || !hasAllowedOrigin(referer)) {
+    return res.status(403).json({ error: 'Origin rejected.' });
+  }
+
+  return next();
+});
+app.use(prefix, (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
+  if (!allowedMutationFetchSites.has(fetchSite)) {
+    return res.status(403).json({ error: 'Cross-site request blocked.' });
+  }
+
+  return next();
 });
 app.use(`${prefix}/auth/login`, authLimiter);
 app.use(`${prefix}/auth/register`, authLimiter);
