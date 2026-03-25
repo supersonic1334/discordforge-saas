@@ -14,6 +14,13 @@ function getBlacklistEntry(ownerUserId, targetUserId) {
   )[0] ?? null;
 }
 
+function listBlacklistEntries(ownerUserId) {
+  return db.raw(
+    'SELECT * FROM bot_blacklist_entries WHERE owner_user_id = ? ORDER BY updated_at DESC, created_at DESC',
+    [ownerUserId]
+  );
+}
+
 function upsertBlacklistEntry(ownerUserId, targetUserId, targetUsername, reason, sourceModule) {
   const now = new Date().toISOString();
   const existing = getBlacklistEntry(ownerUserId, targetUserId);
@@ -120,8 +127,17 @@ async function enforceBlacklistOnJoin(ownerUserId, member, botToken) {
   }
 }
 
+function removeBlacklistEntry(ownerUserId, targetUserId) {
+  return db.remove('bot_blacklist_entries', {
+    owner_user_id: ownerUserId,
+    target_user_id: targetUserId,
+  });
+}
+
 module.exports = {
   getBlacklistEntry,
+  listBlacklistEntries,
+  removeBlacklistEntry,
   banUserAcrossBotNetwork,
   enforceBlacklistOnJoin,
 };
