@@ -5,6 +5,8 @@ import {
   ArrowRight,
   Bot,
   Hash,
+  Mic,
+  MicOff,
   Plus,
   RefreshCw,
   Send,
@@ -20,6 +22,7 @@ import toast from 'react-hot-toast'
 import { aiAPI, commandsAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
+import { useSpeechToText } from '../hooks/useSpeechToText'
 
 const UI = {
   fr: {
@@ -45,6 +48,12 @@ const UI = {
     slashNameHint: 'Exemple: music',
     promptLabel: 'Ce que tu veux',
     promptPlaceholder: 'Exemple: cree une commande annonce qui repond en embed avec le titre Infos du serveur',
+    voiceStart: 'Parler',
+    voiceStop: 'Stop micro',
+    voiceListening: 'Ecoute en cours...',
+    voiceUnsupported: 'Micro non pris en charge sur ce navigateur.',
+    voiceDenied: 'Autorise le micro pour utiliser la dictée.',
+    voiceError: 'La dictée vocale a rencontré un problème.',
     send: 'Generer la commande',
     generating: 'Generation...',
     created: 'Commande creee',
@@ -85,6 +94,12 @@ const UI = {
     slashNameHint: 'Example: music',
     promptLabel: 'What you want',
     promptPlaceholder: 'Example: create an announce command that replies with an embed titled Server info',
+    voiceStart: 'Speak',
+    voiceStop: 'Stop mic',
+    voiceListening: 'Listening...',
+    voiceUnsupported: 'Microphone is not supported on this browser.',
+    voiceDenied: 'Allow microphone access to use voice dictation.',
+    voiceError: 'Voice dictation ran into an issue.',
     send: 'Generate command',
     generating: 'Generating...',
     created: 'Command created',
@@ -125,6 +140,12 @@ const UI = {
     slashNameHint: 'Ejemplo: music',
     promptLabel: 'Lo que quieres',
     promptPlaceholder: 'Ejemplo: crea un comando anuncio que responda con un embed titulado Info del servidor',
+    voiceStart: 'Hablar',
+    voiceStop: 'Detener micro',
+    voiceListening: 'Escuchando...',
+    voiceUnsupported: 'El micro no es compatible con este navegador.',
+    voiceDenied: 'Autoriza el micro para usar la dictado por voz.',
+    voiceError: 'El dictado por voz encontro un problema.',
     send: 'Generar comando',
     generating: 'Generando...',
     created: 'Comando creado',
@@ -378,6 +399,23 @@ export default function CommandsPage() {
   const [togglingCommandIds, setTogglingCommandIds] = useState({})
   const toggleDesiredRef = useRef(new Map())
   const toggleRunningRef = useRef(new Set())
+  const speech = useSpeechToText({
+    value: prompt,
+    onChange: setPrompt,
+    locale,
+    onError: (code) => {
+      if (code === 'unsupported') {
+        toast.error(ui.voiceUnsupported)
+        return
+      }
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        toast.error(ui.voiceDenied)
+        return
+      }
+      if (code === 'aborted') return
+      toast.error(ui.voiceError)
+    },
+  })
 
   const conversationHistory = useMemo(
     () => messages.map((message) => ({ role: message.role, content: message.content })),
@@ -461,6 +499,7 @@ export default function CommandsPage() {
 
   async function sendAssistantPrompt() {
     if (!selectedGuildId || !prompt.trim() || assistantLoading) return
+    if (speech.isListening) speech.stop()
 
     const userMessage = { role: 'user', content: prompt.trim() }
     const nextMessages = [...messages, userMessage]
@@ -742,13 +781,30 @@ export default function CommandsPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-mono uppercase tracking-[0.18em] text-white/35 block">{ui.promptLabel}</label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-xs font-mono uppercase tracking-[0.18em] text-white/35 block">{ui.promptLabel}</label>
+              <button
+                type="button"
+                onClick={() => (speech.isListening ? speech.stop() : speech.start())}
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-mono transition-all ${
+                  speech.isListening
+                    ? 'border-red-500/25 bg-red-500/10 text-red-300'
+                    : 'border-white/10 bg-white/[0.03] text-white/65 hover:text-white hover:border-neon-cyan/20 hover:bg-neon-cyan/10'
+                }`}
+              >
+                {speech.isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                {speech.isListening ? ui.voiceStop : ui.voiceStart}
+              </button>
+            </div>
             <textarea
               className="input-field min-h-[140px] resize-y"
               placeholder={ui.promptPlaceholder}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
             />
+            {speech.isListening && (
+              <p className="text-xs font-mono text-neon-cyan/70">{ui.voiceListening}</p>
+            )}
           </div>
 
           {quota?.enabled && (
