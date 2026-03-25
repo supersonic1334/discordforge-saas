@@ -4,13 +4,19 @@ import { getDeviceId } from '../utils/deviceId'
 const api = axios.create({
   baseURL: '/api/v1',
   timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'X-App-Client': 'discordforger-web',
+    'X-Requested-With': 'XMLHttpRequest',
+  },
 })
 
 // Inject JWT token on every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  config.headers['X-App-Client'] = 'discordforger-web'
+  config.headers['X-Requested-With'] = 'XMLHttpRequest'
   const deviceId = getDeviceId()
   if (deviceId) config.headers['X-Device-ID'] = deviceId
   return config
