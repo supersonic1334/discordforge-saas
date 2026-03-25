@@ -239,16 +239,28 @@ export default function AIAssistant() {
           <motion.button
             type="button"
             onClick={() => (speech.isListening ? speech.stop() : speech.start())}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className={`w-12 h-12 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
+            disabled={speech.isRequestingPermission}
+            whileHover={{ scale: 1.04, y: -1 }}
+            whileTap={{ scale: 0.96 }}
+            className={`group relative w-14 h-14 rounded-[1.2rem] border flex items-center justify-center transition-all shrink-0 overflow-hidden disabled:opacity-70 ${
               speech.isListening
-                ? 'border-red-500/25 bg-red-500/10 text-red-300 shadow-[0_0_18px_rgba(248,113,113,0.16)]'
-                : 'border-white/[0.08] bg-white/[0.04] text-white/70 hover:text-neon-cyan hover:border-neon-cyan/20 hover:bg-neon-cyan/10'
+                ? 'border-red-500/30 bg-[linear-gradient(135deg,rgba(239,68,68,0.2),rgba(127,29,29,0.16))] text-red-200 shadow-[0_0_26px_rgba(248,113,113,0.18)]'
+                : speech.isRequestingPermission
+                  ? 'border-amber-400/30 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(120,53,15,0.14))] text-amber-100 shadow-[0_0_22px_rgba(251,191,36,0.16)]'
+                  : 'border-neon-cyan/25 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(168,85,247,0.12))] text-white shadow-[0_10px_26px_rgba(34,211,238,0.10)] hover:shadow-[0_12px_32px_rgba(34,211,238,0.18)]'
             }`}
             title={speech.isListening ? t('assistant.voiceStop') : t('assistant.voiceStart')}
           >
-            {speech.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            <span className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_58%)] opacity-90" />
+            <span className={`absolute inset-[7px] rounded-[1rem] border ${
+              speech.isListening
+                ? 'border-red-300/18'
+                : speech.isRequestingPermission
+                  ? 'border-amber-200/20'
+                  : 'border-white/10'
+            }`} />
+            {speech.isListening && <span className="absolute inset-0 rounded-[1.2rem] animate-ping bg-red-400/12" />}
+            {speech.isListening ? <MicOff className="relative z-10 w-5 h-5" /> : <Mic className="relative z-10 w-5 h-5" />}
           </motion.button>
           <motion.button
             onClick={() => send()}
@@ -262,9 +274,9 @@ export default function AIAssistant() {
               : <Send className="w-4 h-4" />}
           </motion.button>
         </div>
-        {speech.isListening && (
-          <p className="text-xs text-neon-cyan/70 font-mono mt-2 text-center">
-            {t('assistant.voiceListening')}
+        {(speech.isListening || speech.isRequestingPermission) && (
+          <p className={`text-xs font-mono mt-2 text-center ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/70'}`}>
+            {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
           </p>
         )}
         <p className="text-xs text-white/20 font-mono mt-2 text-center">
