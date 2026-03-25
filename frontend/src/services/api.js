@@ -105,6 +105,17 @@ export const messagesAPI = {
   send:       (guildId, data) => api.post(`/bot/guilds/${guildId}/messages/direct`, data),
 }
 
+export const teamAPI = {
+  overview:       (guildId) => api.get(`/bot/guilds/${guildId}/team`),
+  invite:         (guildId, data) => api.post(`/bot/guilds/${guildId}/team/invite`, data),
+  updateMember:   (guildId, userId, data) => api.patch(`/bot/guilds/${guildId}/team/members/${userId}`, data),
+  removeMember:   (guildId, userId) => api.delete(`/bot/guilds/${guildId}/team/members/${userId}`),
+  snapshots:      (guildId) => api.get(`/bot/guilds/${guildId}/team/snapshots`),
+  createSnapshot: (guildId, data) => api.post(`/bot/guilds/${guildId}/team/snapshots`, data),
+  restoreSnapshot:(guildId, snapshotId) => api.post(`/bot/guilds/${guildId}/team/snapshots/${snapshotId}/restore`),
+  deleteSnapshot: (guildId, snapshotId) => api.delete(`/bot/guilds/${guildId}/team/snapshots/${snapshotId}`),
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 export const commandsAPI = {
   list:   (guildId)       => api.get(`/bot/guilds/${guildId}/commands`),

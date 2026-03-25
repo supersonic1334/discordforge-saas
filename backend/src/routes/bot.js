@@ -5,9 +5,10 @@ const router = express.Router({ mergeParams: true });
 
 const botManager = require('../services/botManager');
 const { syncGuildsForUser, removeGuildForUser } = require('../services/guildSyncService');
+const guildAccessService = require('../services/guildAccessService');
 const discordService = require('../services/discordService');
 const { decrypt } = require('../services/encryptionService');
-const { requireAuth, requireBotToken, requireGuildOwner } = require('../middleware');
+const { requireAuth, requireBotToken, requireGuildOwner, requireGuildPrimaryOwner } = require('../middleware');
 const db = require('../database');
 const logger = require('../utils/logger').child('BotRoutes');
 const moduleRoutes = require('./modules');
@@ -16,11 +17,30 @@ const logRoutes = require('./logs');
 const moderationRoutes = require('./moderation');
 const blockedRoutes = require('./blocked');
 const messageRoutes = require('./messages');
+const teamRoutes = require('./team');
 
 // ── GET /status ───────────────────────────────────────────────────────────────
-router.get('/status', requireAuth, requireBotToken, (req, res) => {
-  const status = botManager.getBotStatus(req.user.id);
-  const tokenRow = req.botToken;
+router.get('/status', requireAuth, (req, res) => {
+  const ownTokenRow = db.findOne('bot_tokens', { user_id: req.user.id });
+  const accessibleGuilds = ownTokenRow ? [] : guildAccessService.listAccessibleGuilds(req.user.id);
+  const effectiveOwnerUserId = ownTokenRow
+    ? req.user.id
+    : (accessibleGuilds.find((entry) => entry.user_id)?.user_id || req.user.id);
+  const tokenRow = ownTokenRow || db.findOne('bot_tokens', { user_id: effectiveOwnerUserId });
+
+  if (!tokenRow) {
+    return res.json({
+      status: 'stopped',
+      ping: -1,
+      guildCount: 0,
+      startedAt: null,
+      restartCount: 0,
+      lastError: null,
+      bot: null,
+    });
+  }
+
+  const status = botManager.getBotStatus(effectiveOwnerUserId);
   res.json({
     status: status?.status ?? 'stopped',
     ping: status?.ping ?? status?.ping_ms ?? -1,
@@ -71,11 +91,13 @@ router.post('/restart', requireAuth, requireBotToken, async (req, res, next) => 
 });
 
 // ── GET /guilds ───────────────────────────────────────────────────────────────
-router.get('/guilds', requireAuth, requireBotToken, (req, res) => {
-  const guilds = db.findMany('guilds', { user_id: req.user.id, is_active: 1 });
+router.get('/guilds', requireAuth, (req, res) => {
+  const guilds = guildAccessService.listAccessibleGuilds(req.user.id);
   res.json({
     guilds: guilds.map((g) => ({
       ...g,
+      is_owner: !!g.is_owner,
+      is_shared: !g.is_owner,
       features: JSON.parse(g.features || '[]'),
       iconUrl: g.guild_id && g.icon
         ? discordService.getGuildIconUrl(g.guild_id, g.icon)
@@ -91,6 +113,7 @@ router.use('/guilds/:guildId/logs', logRoutes);
 router.use('/guilds/:guildId/moderation', moderationRoutes);
 router.use('/guilds/:guildId/blocked', blockedRoutes);
 router.use('/guilds/:guildId/messages', messageRoutes);
+router.use('/guilds/:guildId/team', teamRoutes);
 
 router.post('/guilds/sync', requireAuth, requireBotToken, async (req, res, next) => {
   try {
@@ -119,10 +142,10 @@ router.post('/guilds/sync', requireAuth, requireBotToken, async (req, res, next)
 });
 
 // ── DELETE /guilds/:guildId — remove bot from server ─────────────────────────
-router.delete('/guilds/:guildId', requireAuth, requireBotToken, requireGuildOwner, async (req, res, next) => {
+router.delete('/guilds/:guildId', requireAuth, requireBotToken, requireGuildOwner, requireGuildPrimaryOwner, async (req, res, next) => {
   try {
     const token = decrypt(req.botToken.encrypted_token);
-    await removeGuildForUser(req.user.id, req.guild.guild_id, token);
+    await removeGuildForUser(req.guild.user_id, req.guild.guild_id, token);
     res.json({ message: 'Bot left the server' });
   } catch (err) {
     if (err.httpStatus === 404) return res.status(404).json({ error: 'Bot is not in that server' });
@@ -135,6 +158,10 @@ router.get('/guilds/:guildId', requireAuth, requireBotToken, requireGuildOwner, 
   const g = req.guild;
   res.json({
     ...g,
+    is_owner: req.guildAccess?.is_owner ?? g.user_id === req.user.id,
+    access_role: req.guildAccess?.access_role || 'owner',
+    owner_user_id: req.guildAccess?.owner_user_id || g.user_id,
+    owner_username: req.guildAccess?.owner_username || null,
     features: JSON.parse(g.features || '[]'),
     iconUrl: g.guild_id && g.icon
       ? discordService.getGuildIconUrl(g.guild_id, g.icon)

@@ -3,6 +3,7 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const db = require('../database');
+const guildAccessService = require('../services/guildAccessService');
 const { findMatchingBlock, recordUserAccess, syncDeviceCookie } = require('../services/accessControlService');
 const logger = require('../utils/logger').child('Middleware');
 
@@ -101,11 +102,26 @@ function requireGuildOwner(req, res, next) {
   const { guildId } = req.params;
   if (!guildId) return res.status(400).json({ error: 'Missing guildId param' });
 
-  const guild = db.findOne('guilds', { id: guildId });
-  if (!guild) return res.status(404).json({ error: 'Guild not found' });
-  if (guild.user_id !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+  const access = guildAccessService.getGuildAccess(req.user.id, guildId);
+  if (!access) return res.status(404).json({ error: 'Guild not found or access denied' });
 
-  req.guild = guild;
+  req.guild = access.guild;
+  req.guildAccess = access;
+  req.guildOwnerUserId = access.owner_user_id;
+  next();
+}
+
+function requireGuildPrimaryOwner(req, res, next) {
+  const { guildId } = req.params;
+  if (!guildId) return res.status(400).json({ error: 'Missing guildId param' });
+
+  const access = req.guildAccess || guildAccessService.getGuildAccess(req.user.id, guildId);
+  if (!access) return res.status(404).json({ error: 'Guild not found or access denied' });
+  if (!access.is_owner) return res.status(403).json({ error: 'Primary guild owner access required' });
+
+  req.guild = access.guild;
+  req.guildAccess = access;
+  req.guildOwnerUserId = access.owner_user_id;
   next();
 }
 
@@ -138,7 +154,19 @@ function validateQuery(schema) {
 }
 
 function requireBotToken(req, res, next) {
-  const tokenRow = db.findOne('bot_tokens', { user_id: req.user.id });
+  let tokenOwnerUserId = req.user.id;
+
+  if (req.params?.guildId) {
+    const access = req.guildAccess || guildAccessService.getGuildAccess(req.user.id, req.params.guildId);
+    if (access) {
+      req.guild = access.guild;
+      req.guildAccess = access;
+      req.guildOwnerUserId = access.owner_user_id;
+      tokenOwnerUserId = access.owner_user_id;
+    }
+  }
+
+  const tokenRow = db.findOne('bot_tokens', { user_id: tokenOwnerUserId });
   if (!tokenRow) {
     return res.status(428).json({ error: 'Bot token required', code: 'NO_BOT_TOKEN' });
   }
@@ -147,6 +175,7 @@ function requireBotToken(req, res, next) {
   }
 
   req.botToken = tokenRow;
+  req.botOwnerUserId = tokenOwnerUserId;
   next();
 }
 
@@ -176,6 +205,7 @@ module.exports = {
   requireAdminPanelAccess,
   requireApiProvider,
   requireGuildOwner,
+  requireGuildPrimaryOwner,
   validate,
   validateQuery,
   requireBotToken,

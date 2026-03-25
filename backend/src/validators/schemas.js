@@ -121,6 +121,19 @@ const directMessageSchema = z.object({
   message: z.string().trim().min(2).max(2000),
 });
 
+const guildAccessInviteSchema = z.object({
+  target: z.string().trim().min(2).max(160),
+  access_role: z.enum(['admin', 'moderator', 'viewer']).optional().default('admin'),
+});
+
+const guildAccessRoleSchema = z.object({
+  access_role: z.enum(['admin', 'moderator', 'viewer']),
+});
+
+const guildSnapshotCreateSchema = z.object({
+  label: z.string().trim().max(120).optional().default(''),
+});
+
 // ── Custom Commands ───────────────────────────────────────────────────────────
 const commandKeySchema = z.string().trim().min(1).max(50).regex(/^\S+$/, 'Trigger cannot contain spaces');
 const commandNameSchema = z.string().trim().min(1).max(32).regex(/^[\w-]+$/, 'Invalid command name');
@@ -298,6 +311,9 @@ module.exports = {
   modActionSchema,
   guildDmConfigSchema,
   directMessageSchema,
+  guildAccessInviteSchema,
+  guildAccessRoleSchema,
+  guildSnapshotCreateSchema,
   customCommandSchema,
   commandAssistantSchema,
   commandToggleSchema,

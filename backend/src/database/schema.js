@@ -81,6 +81,27 @@ const SCHEMA = [
     UNIQUE(user_id, guild_id)
   )`,
 
+  `CREATE TABLE IF NOT EXISTS guild_access_members (
+    id              TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    access_role     TEXT NOT NULL DEFAULT 'admin' CHECK(access_role IN ('admin','moderator','viewer')),
+    invited_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    accepted_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(guild_id, user_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS guild_config_snapshots (
+    id              TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    label           TEXT NOT NULL DEFAULT '',
+    payload         TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
   // ────────────────────────────────────────────────────────────────────────────
   // MODULES (per guild, per module type)
   // ────────────────────────────────────────────────────────────────────────────
@@ -373,6 +394,9 @@ const SCHEMA = [
   // ────────────────────────────────────────────────────────────────────────────
   `CREATE INDEX IF NOT EXISTS idx_guilds_user_id ON guilds(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_guilds_guild_id ON guilds(guild_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_access_members_guild_id ON guild_access_members(guild_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_access_members_user_id ON guild_access_members(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_config_snapshots_guild_id ON guild_config_snapshots(guild_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_modules_guild_id ON modules(guild_id)`,
   `CREATE INDEX IF NOT EXISTS idx_bot_blacklist_owner_target ON bot_blacklist_entries(owner_user_id, target_user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_warnings_guild_id ON warnings(guild_id)`,
