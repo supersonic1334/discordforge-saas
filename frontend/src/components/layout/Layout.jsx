@@ -410,7 +410,7 @@ export default function Layout() {
   )
 
   return (
-    <div className="flex h-screen bg-surface-0 overflow-hidden">
+    <div className="flex min-h-screen md:h-screen max-w-full bg-surface-0 overflow-hidden">
       <SnowCanvas />
 
       {hasSelectedGuild && (
@@ -458,7 +458,7 @@ export default function Layout() {
         </>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
+      <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden relative z-10">
         {hasSelectedGuild && (
           <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/[0.06] bg-surface-1/80 backdrop-blur-xl">
             <button onClick={() => setMobileOpen(true)} className="text-white/50 hover:text-white">
@@ -471,7 +471,7 @@ export default function Layout() {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto scrollbar-none">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
           <Outlet />
         </main>
       </div>
