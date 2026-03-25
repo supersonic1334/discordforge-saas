@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Save, Key, User, Lock, Languages, ImagePlus, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -31,7 +31,10 @@ export default function SettingsPage() {
   const { fetchStatus: refreshBotStatus } = useBotStore()
   const { t, locale } = useI18n()
   const navigate = useNavigate()
-  const quickTokenOwner = { id: user?.id, email: user?.email }
+  const quickTokenOwner = useMemo(() => ({
+    id: user?.id || null,
+    email: user?.email || null,
+  }), [user?.id, user?.email])
   const fileInputRef = useRef(null)
   const [username, setUsername] = useState(user?.username || '')
   const [avatarDraft, setAvatarDraft] = useState(user?.avatar_url || '')
@@ -92,7 +95,7 @@ export default function SettingsPage() {
     return () => {
       active = false
     }
-  }, [user, quickTokenOwner])
+  }, [user?.id, user?.username, user?.email, user?.avatar_url, user?.site_language, user?.ai_language, user?.role, quickTokenOwner])
 
   const togglePrivateEmail = async () => {
     if (!canRevealPrimaryEmail) return
@@ -125,9 +128,8 @@ export default function SettingsPage() {
       if (res.data?.user) {
         setUser(res.data.user)
         setAvatarDraft(res.data.user.avatar_url || '')
-      } else {
-        await fetchMe()
       }
+      await fetchMe()
       setAvatarFileName('')
       toast.success(t('settings.avatarSaved'))
     } catch (e) {
