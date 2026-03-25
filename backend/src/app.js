@@ -145,8 +145,8 @@ app.use(cors((req, cb) => {
 }));
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // ── HTTP logging ──────────────────────────────────────────────────────────────
 if (config.NODE_ENV !== 'test') {
