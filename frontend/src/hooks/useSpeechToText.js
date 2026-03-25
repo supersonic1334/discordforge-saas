@@ -24,9 +24,11 @@ function mergeTranscript(...parts) {
 
 export function useSpeechToText({ value, onChange, locale, onError }) {
   const recognitionRef = useRef(null)
+  const permissionStateRef = useRef('unknown')
   const baseValueRef = useRef('')
   const finalTranscriptRef = useRef('')
   const [isListening, setIsListening] = useState(false)
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false)
   const [interimTranscript, setInterimTranscript] = useState('')
 
   const isSupported = useMemo(() => !!getRecognitionConstructor(), [])
@@ -36,14 +38,49 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     recognitionRef.current.stop()
   }, [])
 
-  const start = useCallback(() => {
+  const ensureMicrophonePermission = useCallback(async () => {
+    if (typeof navigator === 'undefined') return true
+    if (permissionStateRef.current === 'granted') return true
+    if (!navigator.mediaDevices?.getUserMedia) return true
+
+    setIsRequestingPermission(true)
+    let stream = null
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      permissionStateRef.current = 'granted'
+      return true
+    } catch (error) {
+      if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') {
+        permissionStateRef.current = 'denied'
+        onError?.('not-allowed')
+      } else if (error?.name === 'NotFoundError') {
+        onError?.('not-found')
+      } else {
+        onError?.(error?.name || 'permission-error')
+      }
+      return false
+    } finally {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop())
+      }
+      setIsRequestingPermission(false)
+    }
+  }, [onError])
+
+  const start = useCallback(async () => {
     const Recognition = getRecognitionConstructor()
     if (!Recognition) {
       onError?.('unsupported')
       return false
     }
 
-    if (isListening) return true
+    if (isListening || isRequestingPermission) return true
+
+    const permissionGranted = await ensureMicrophonePermission()
+    if (!permissionGranted) {
+      return false
+    }
 
     const recognition = new Recognition()
     recognition.lang = normalizeLocale(locale)
@@ -80,6 +117,9 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
 
     recognition.onerror = (event) => {
       if (event?.error && event.error !== 'aborted') {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          permissionStateRef.current = 'denied'
+        }
         onError?.(event.error)
       }
     }
@@ -111,6 +151,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   return {
     isSupported,
     isListening,
+    isRequestingPermission,
     interimTranscript,
     start,
     stop,
