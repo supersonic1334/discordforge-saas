@@ -82,7 +82,9 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       'base-uri': ["'self'"],
+      'child-src': ["'none'"],
       'connect-src': connectSources,
+      'frame-src': ["'none'"],
       'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
       'form-action': ["'self'"],
       'frame-ancestors': ["'none'"],
@@ -101,6 +103,9 @@ app.use((req, res, next) => {
     'Permissions-Policy',
     'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()'
   );
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Origin-Agent-Cluster', '?1');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
   next();
 });
 app.use((req, res, next) => {
