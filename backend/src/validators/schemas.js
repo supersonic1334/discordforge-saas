@@ -206,6 +206,11 @@ const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
 });
 
+const moderationSearchSchema = z.object({
+  q: z.string().trim().min(1).max(80),
+  limit: z.coerce.number().int().min(1).max(20).optional().default(8),
+});
+
 // ── Log channel ───────────────────────────────────────────────────────────────
 const logChannelSchema = z.object({
   channel_id: z.string().regex(/^\d+$/, 'Must be a Discord channel ID'),
@@ -282,6 +287,7 @@ module.exports = {
   adminRoleSchema,
   adminPasswordSchema,
   paginationSchema,
+  moderationSearchSchema,
   logChannelSchema,
   supportTicketListSchema,
   supportTicketCreateSchema,
