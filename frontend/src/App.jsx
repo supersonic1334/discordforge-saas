@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast'
 import { motion } from 'framer-motion'
 
-import { useAuthStore } from './stores'
+import { useAuthStore, useGuildStore, useBotStore } from './stores'
 import { wsService } from './services/websocket'
 
 import AppErrorBoundary from './components/AppErrorBoundary'
@@ -14,13 +14,15 @@ import Dashboard from './pages/Dashboard'
 import AIAssistant from './pages/AIAssistant'
 import ServersPage from './pages/ServersPage'
 import ProtectionPage from './pages/ProtectionPage'
-import ModerationPage from './pages/ModerationPage'
+import SearchPage from './pages/SearchPage'
+import LogsPage from './pages/LogsPage'
 import MessagesPage from './pages/MessagesPage'
 import BlockedPage from './pages/BlockedPage'
 import CommandsPage from './pages/CommandsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import ReviewsPage from './pages/ReviewsPage'
 import SupportPage from './pages/SupportPage'
+import TeamPage from './pages/TeamPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPanel from './pages/AdminPanel'
 import ProviderPanel from './pages/ProviderPanel'
@@ -33,6 +35,8 @@ function getAccessFingerprint(snapshot) {
     user?.role || 'none',
     user?.is_primary_founder ? 'primary' : 'standard',
     snapshot?.hasBotToken ? 'bot' : 'no-bot',
+    snapshot?.accessibleGuildCount || 0,
+    snapshot?.sharedGuildCount || 0,
   ].join('|')
 }
 
@@ -196,6 +200,8 @@ function AppRoot() {
         return
       }
 
+      await useGuildStore.getState().fetchGuilds().catch(() => [])
+      await useBotStore.getState().fetchStatus().catch(() => {})
       wsService.connect(token)
     }
 
@@ -271,13 +277,16 @@ function AppRoot() {
           <Route path="servers" element={<PageTransition><ServersPage /></PageTransition>} />
           <Route path="servers/:guildId" element={<Navigate to="/dashboard/servers" replace />} />
           <Route path="protection" element={<PageTransition><ProtectionPage /></PageTransition>} />
-          <Route path="moderation" element={<PageTransition><ModerationPage /></PageTransition>} />
+          <Route path="search" element={<PageTransition><SearchPage /></PageTransition>} />
+          <Route path="logs" element={<PageTransition><LogsPage /></PageTransition>} />
+          <Route path="moderation" element={<Navigate to="/dashboard/search" replace />} />
           <Route path="messages" element={<PageTransition><MessagesPage /></PageTransition>} />
           <Route path="blocked" element={<PageTransition><BlockedPage /></PageTransition>} />
           <Route path="commands" element={<PageTransition><CommandsPage /></PageTransition>} />
           <Route path="analytics" element={<PageTransition><AnalyticsPage /></PageTransition>} />
           <Route path="reviews" element={<PageTransition><ReviewsPage /></PageTransition>} />
           <Route path="support" element={<PageTransition><SupportPage /></PageTransition>} />
+          <Route path="team" element={<PageTransition><TeamPage /></PageTransition>} />
           <Route path="ai" element={<PageTransition><AIAssistant /></PageTransition>} />
           <Route path="settings" element={<PageTransition><SettingsPage /></PageTransition>} />
           <Route path="provider" element={

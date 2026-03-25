@@ -3,7 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Shield, Zap, Settings, ChevronDown, ChevronUp,
-  RefreshCw, LogOut, Users, Hash, Layers, Server
+  RefreshCw, LogOut, Users, Hash, Layers, Server, Search, ScrollText
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { modulesAPI, botAPI } from '../services/api'
@@ -296,8 +296,11 @@ export default function ServerDetail() {
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        <Link to="/dashboard/moderation" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-mono hover:bg-amber-500/20 transition-colors">
-          <Shield className="w-3 h-3" /> {t('serverDetail.quickLinks.moderation')}
+        <Link to="/dashboard/search" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-mono hover:bg-amber-500/20 transition-colors">
+          <Search className="w-3 h-3" /> {t('serverDetail.quickLinks.search', 'Search')}
+        </Link>
+        <Link to="/dashboard/logs" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs font-mono hover:bg-violet-500/20 transition-colors">
+          <ScrollText className="w-3 h-3" /> {t('serverDetail.quickLinks.logs', 'Logs')}
         </Link>
         <Link to="/dashboard/commands" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-mono hover:bg-blue-500/20 transition-colors">
           <Hash className="w-3 h-3" /> {t('serverDetail.quickLinks.commands')}

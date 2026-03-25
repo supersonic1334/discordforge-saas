@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Server, Zap, Shield, Play, Square, RotateCcw, Activity, TrendingUp, Users, AlertTriangle, CheckCircle2, ArrowRight, Unplug } from 'lucide-react'
+import { Server, Zap, Shield, Play, Square, RotateCcw, Activity, TrendingUp, Users, Search, CheckCircle2, ArrowRight, Unplug, ScrollText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { botAPI } from '../services/api'
 import { useAuthStore, useGuildStore, useBotStore } from '../stores'
@@ -40,7 +40,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'cyan', delay = 0 }) 
 
 export default function Dashboard() {
   const { t, locale } = useI18n()
-  const { user } = useAuthStore()
+  const { user, hasOwnBotToken, sharedGuildCount } = useAuthStore()
   const { guilds, selectedGuildId, selectGuild, clearSelectedGuild, fetchGuilds, syncGuilds } = useGuildStore()
   const { status, ping, startedAt, fetchStatus, setStatus } = useBotStore()
   const [actionLoading, setActionLoading] = useState(null)
@@ -104,7 +104,13 @@ export default function Dashboard() {
     error: 'text-red-400',
   }[status] || 'text-white/30'
 
-  const quickLinks = t('dashboard.quickLinks', [])
+  const quickLinks = [
+    { label: t('dashboard.quickLinks.protectionLabel', 'Protection'), desc: t('dashboard.quickLinks.protectionDesc', 'Configure the security modules') },
+    { label: t('dashboard.quickLinks.searchLabel', 'Search'), desc: t('dashboard.quickLinks.searchDesc', 'Find a member and moderate fast') },
+    { label: t('dashboard.quickLinks.logsLabel', 'Logs'), desc: t('dashboard.quickLinks.logsDesc', 'Track website, warning, and Discord events') },
+    { label: t('dashboard.quickLinks.aiLabel', 'Assistant IA'), desc: t('dashboard.quickLinks.aiDesc', 'Configure the server with AI') },
+    { label: t('dashboard.quickLinks.analyticsLabel', 'Analytics'), desc: t('dashboard.quickLinks.analyticsDesc', 'View live stats') },
+  ]
 
   return (
     <div className="px-4 py-5 sm:p-6 max-w-6xl mx-auto space-y-6">
@@ -131,7 +137,7 @@ export default function Dashboard() {
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div>
               <p className="font-display font-700 text-xl text-white">{t('dashboard.serverPickerTitle', 'Choisis ton serveur')}</p>
-              <p className="text-white/45 text-sm mt-1">{t('dashboard.serverPickerBody', 'Selectionne un serveur pour le rendre actif, puis gere ensuite sa protection, sa moderation, ses commandes et ses analytics.')}</p>
+              <p className="text-white/45 text-sm mt-1">{t('dashboard.serverPickerBodyV2', 'Selectionne un serveur pour le rendre actif, puis gere sa protection, sa recherche, ses logs, ses commandes et ses analytics.')}</p>
             </div>
             <Link to="/dashboard/servers" className="inline-flex items-center gap-2 text-sm font-mono text-neon-cyan/70 hover:text-neon-cyan transition-colors">
               {t('dashboard.serverPickerManage', 'Voir tous les serveurs')} <ArrowRight className="w-4 h-4" />
@@ -189,6 +195,11 @@ export default function Dashboard() {
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     {t('dashboard.currentServerTitle', 'Serveur actuel')}
                   </span>
+                  {selectedGuild.is_shared && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-200 text-xs font-mono">
+                      Partage par {selectedGuild.owner_username || 'le proprietaire'}
+                    </span>
+                  )}
                 </div>
                 <p className="font-display font-700 text-white text-lg truncate mt-2">{selectedGuild.name}</p>
                 <p className="text-sm text-white/40">{selectedGuild.member_count?.toLocaleString(locale) || 0} {t('dashboard.members')}</p>
@@ -226,6 +237,12 @@ export default function Dashboard() {
         <StatCard icon={TrendingUp} label={t('dashboard.stats.uptime')} value={status === 'running' ? `${uptime}m` : t('dashboard.stats.unavailable')} sub={t('dashboard.stats.minutes')} color="amber" delay={0.2} />
       </div>
 
+      {!hasOwnBotToken && sharedGuildCount > 0 && (
+        <div className="glass-card p-4 border border-neon-cyan/15 text-sm text-white/55">
+          Tu utilises un acces partage. Les modules et commandes restent synchronises, mais seul le proprietaire du token peut lancer un nouveau bot ou resynchroniser ses serveurs bruts.
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="glass-card p-5">
           <h2 className="font-display font-600 text-sm text-white/60 mb-4 uppercase tracking-wider">{t('dashboard.botControls')}</h2>
@@ -248,7 +265,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => botAction('start')}
-              disabled={status === 'running' || status === 'starting' || !!actionLoading}
+              disabled={!hasOwnBotToken || status === 'running' || status === 'starting' || !!actionLoading}
               className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
             >
               {actionLoading === 'start'
@@ -258,7 +275,7 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => botAction('stop')}
-              disabled={status === 'stopped' || status === 'error' || !!actionLoading}
+              disabled={!hasOwnBotToken || status === 'stopped' || status === 'error' || !!actionLoading}
               className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
             >
               {actionLoading === 'stop'
@@ -268,7 +285,7 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => botAction('restart')}
-              disabled={!!actionLoading}
+              disabled={!hasOwnBotToken || !!actionLoading}
               className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
             >
               {actionLoading === 'restart'
@@ -282,7 +299,11 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lg:col-span-2 glass-card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display font-600 text-sm text-white/60 uppercase tracking-wider">{t('dashboard.serversTitle')}</h2>
-            <button onClick={syncGuilds} className="text-xs font-mono text-neon-cyan/60 hover:text-neon-cyan transition-colors">
+            <button
+              onClick={syncGuilds}
+              disabled={!hasOwnBotToken}
+              className="text-xs font-mono text-neon-cyan/60 hover:text-neon-cyan transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
               {t('dashboard.sync')}
             </button>
           </div>
@@ -314,7 +335,14 @@ export default function Dashboard() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-body text-white group-hover:text-neon-cyan transition-colors truncate">{guild.name}</p>
-                    <p className="text-xs text-white/30 font-mono">{guild.member_count?.toLocaleString(locale)} {t('dashboard.members')}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <p className="text-xs text-white/30 font-mono">{guild.member_count?.toLocaleString(locale)} {t('dashboard.members')}</p>
+                      {guild.is_shared && (
+                        <span className="px-2 py-0.5 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-200 text-[10px] font-mono">
+                          Partage
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {guild.id === selectedGuildId
                     ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
@@ -336,9 +364,10 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { icon: Shield, path: '/dashboard/protection', color: 'cyan' },
-            { icon: AlertTriangle, path: '/dashboard/moderation', color: 'amber' },
+            { icon: Search, path: '/dashboard/search', color: 'amber' },
+            { icon: ScrollText, path: '/dashboard/logs', color: 'green' },
             { icon: Zap, path: '/dashboard/ai', color: 'violet' },
-            { icon: Activity, path: '/dashboard/analytics', color: 'green' },
+            { icon: Activity, path: '/dashboard/analytics', color: 'cyan' },
           ].map(({ icon: Icon, path, color }, index) => {
             const item = quickLinks[index]
             return (

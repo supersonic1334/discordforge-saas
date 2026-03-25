@@ -2,12 +2,13 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Server, Users, Shield, RefreshCw, ArrowRight, CheckCircle2, Unplug, PlusCircle } from 'lucide-react'
-import { useGuildStore, useBotStore } from '../stores'
+import { useAuthStore, useGuildStore, useBotStore } from '../stores'
 import { wsService } from '../services/websocket'
 import { useI18n } from '../i18n'
 
 export default function ServersPage() {
   const { t, locale } = useI18n()
+  const { hasOwnBotToken, sharedGuildCount } = useAuthStore()
   const { guilds, selectedGuildId, selectGuild, clearSelectedGuild, fetchGuilds, syncGuilds, isLoading } = useGuildStore()
   const { status, bot, fetchStatus } = useBotStore()
   const navigate = useNavigate()
@@ -48,7 +49,7 @@ export default function ServersPage() {
           <button
             type="button"
             onClick={inviteBotToServer}
-            disabled={!inviteUrl}
+            disabled={!inviteUrl || !hasOwnBotToken}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-mono hover:bg-green-500/20 transition-all disabled:opacity-40"
           >
             <PlusCircle className="w-4 h-4" />
@@ -56,7 +57,7 @@ export default function ServersPage() {
           </button>
           <button
             onClick={syncGuilds}
-            disabled={status !== 'running' || isLoading}
+            disabled={status !== 'running' || isLoading || !hasOwnBotToken}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm font-mono hover:bg-neon-cyan/20 transition-all disabled:opacity-40"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -64,6 +65,12 @@ export default function ServersPage() {
           </button>
         </div>
       </div>
+
+      {!hasOwnBotToken && sharedGuildCount > 0 && (
+        <div className="glass-card p-4 border border-neon-cyan/15 text-sm text-white/55">
+          Acces partage detecte. Tu pilotes ici les serveurs invites sans jamais recuperer le token d origine.
+        </div>
+      )}
 
       {selectedGuild && (
         <div className="glass-card p-5 border border-green-500/15">
@@ -129,7 +136,7 @@ export default function ServersPage() {
         <div className="space-y-4">
           <div className="glass-card p-5 border border-neon-cyan/10">
             <p className="font-display font-700 text-white text-lg">{t('servers.selectionTitle', 'Choisis le serveur a piloter')}</p>
-            <p className="text-white/40 text-sm mt-1">{t('servers.selectionBody', 'Clique sur un serveur pour le rendre actif, puis gere ensuite sa protection, sa moderation, ses commandes et ses analytics.')}</p>
+            <p className="text-white/40 text-sm mt-1">{t('servers.selectionBodyV2', 'Clique sur un serveur pour le rendre actif, puis gere sa protection, sa recherche, ses logs, ses commandes et ses analytics.')}</p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -151,9 +158,16 @@ export default function ServersPage() {
                   }
                   <div className="flex-1 min-w-0">
                     <p className="font-display font-600 text-white truncate">{guild.name}</p>
-                    <p className="text-xs text-white/30 font-mono flex items-center gap-1">
-                      <Users className="w-3 h-3" />{guild.member_count?.toLocaleString(locale) || 0}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <p className="text-xs text-white/30 font-mono flex items-center gap-1">
+                        <Users className="w-3 h-3" />{guild.member_count?.toLocaleString(locale) || 0}
+                      </p>
+                      {guild.is_shared && (
+                        <span className="px-2 py-0.5 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-200 text-[10px] font-mono">
+                          Partage par {guild.owner_username || 'le proprietaire'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">

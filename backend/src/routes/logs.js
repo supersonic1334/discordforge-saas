@@ -73,6 +73,92 @@ function normalizeRoleLabel(name, fallbackId) {
   return 'Role Discord';
 }
 
+function formatAuditActionLabel(type, changes = []) {
+  const actionType = Number(type || 0);
+  if (actionType === 20) return 'kick';
+  if (actionType === 22) return 'ban';
+  if (actionType === 23) return 'unban';
+  if (actionType === 24) {
+    const isTimeout = changes.some((entry) => entry?.key === 'communication_disabled_until');
+    return isTimeout ? 'timeout' : 'member_update';
+  }
+  if (actionType === 25) return 'role_update';
+  if (actionType === 26) return 'voice_move';
+  if (actionType === 27) return 'voice_disconnect';
+  if (actionType === 28) return 'bot_add';
+  if (actionType === 72) return 'message_delete';
+  if (actionType === 73) return 'message_bulk_delete';
+  if (actionType === 74) return 'message_pin';
+  if (actionType === 75) return 'message_unpin';
+  if (actionType === 145) return 'timeout_remove';
+  return `action_${actionType || 'unknown'}`;
+}
+
+function buildInClause(values) {
+  return values.map(() => '?').join(', ');
+}
+
+async function buildDiscordUserMap(token, userIds) {
+  const uniqueIds = [...new Set((Array.isArray(userIds) ? userIds : []).filter(Boolean).map((value) => String(value)))];
+  if (!uniqueIds.length) return new Map();
+
+  const results = await Promise.allSettled(uniqueIds.map((userId) => discordService.getUser(token, userId)));
+  const userMap = new Map();
+
+  results.forEach((result) => {
+    if (result.status === 'fulfilled' && result.value?.id) {
+      userMap.set(result.value.id, result.value);
+    }
+  });
+
+  return userMap;
+}
+
+function buildBotLogAction(log, metadata) {
+  return metadata.action_label
+    || metadata.action
+    || metadata.event
+    || log.message
+    || log.category
+    || 'Site event';
+}
+
+function buildBotLogActor(log, metadata, siteUserMap, discordUserMap) {
+  const discordUserId = metadata.userId
+    || metadata.user_id
+    || metadata.discord_user_id
+    || metadata.target_user_id
+    || metadata.targetUserId
+    || null;
+
+  if (discordUserId && discordUserMap.has(String(discordUserId))) {
+    const discordUser = discordUserMap.get(String(discordUserId));
+    return {
+      source: 'discord',
+      user_id: discordUser.id,
+      username: discordUser.global_name || discordUser.username || discordUser.id,
+      avatar_url: discordService.getAvatarUrl(discordUser.id, discordUser.avatar),
+    };
+  }
+
+  if (log.user_id && siteUserMap.has(log.user_id)) {
+    const siteUser = siteUserMap.get(log.user_id);
+    return {
+      source: 'site',
+      user_id: siteUser.discord_id || siteUser.id,
+      username: siteUser.username || siteUser.email || siteUser.id,
+      avatar_url: siteUser.avatar_url || null,
+    };
+  }
+
+  return {
+    source: 'system',
+    user_id: String(discordUserId || log.user_id || 'system'),
+    username: metadata.username || metadata.target_username || 'System',
+    avatar_url: null,
+  };
+}
+
 function buildTargetDescriptor(entry, context) {
   const actionType = Number(entry.action_type || 0);
   const options = entry.options && typeof entry.options === 'object' ? entry.options : {};
@@ -173,10 +259,12 @@ function buildTargetDescriptor(entry, context) {
 }
 
 // ── Bot event logs ─────────────────────────────────────────────────────────────
-router.get('/', validateQuery(paginationSchema), (req, res) => {
+router.get('/', validateQuery(paginationSchema), async (req, res, next) => {
+  try {
   const { page, limit } = req.query;
   const { level, category } = req.query;
   const offset = (page - 1) * limit;
+  const token = decrypt(req.botToken.encrypted_token);
 
   let query = 'SELECT * FROM bot_logs WHERE guild_id = ?';
   const params = [req.guild.id];
@@ -193,10 +281,43 @@ router.get('/', validateQuery(paginationSchema), (req, res) => {
     [req.guild.id]
   )[0]?.count ?? 0;
 
+  const parsedLogs = logs.map((log) => ({
+    ...log,
+    metadata: parseJson(log.metadata),
+  }));
+
+  const internalUserIds = [...new Set(parsedLogs.map((log) => log.user_id).filter(Boolean))];
+  const siteUsers = internalUserIds.length
+    ? db.raw(
+        `SELECT id, email, username, avatar_url, discord_id FROM users WHERE id IN (${buildInClause(internalUserIds)})`,
+        internalUserIds
+      )
+    : [];
+  const siteUserMap = new Map(siteUsers.map((user) => [user.id, user]));
+
+  const discordUserIds = [...new Set(parsedLogs.flatMap((log) => {
+    const metadata = log.metadata || {};
+    return [
+      metadata.userId,
+      metadata.user_id,
+      metadata.discord_user_id,
+      metadata.target_user_id,
+      metadata.targetUserId,
+    ].filter(Boolean).map((value) => String(value));
+  }))];
+  const discordUserMap = await buildDiscordUserMap(token, discordUserIds);
+
   res.json({
-    logs: logs.map((l) => ({ ...l, metadata: parseJson(l.metadata) })),
+    logs: parsedLogs.map((log) => ({
+      ...log,
+      actor: buildBotLogActor(log, log.metadata, siteUserMap, discordUserMap),
+      action_performed: buildBotLogAction(log, log.metadata),
+    })),
     total, page, limit,
   });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get('/discord', validateQuery(paginationSchema), async (req, res, next) => {
@@ -246,6 +367,7 @@ router.get('/discord', validateQuery(paginationSchema), async (req, res, next) =
       return {
         id: entry.id,
         action_type: entry.action_type,
+        action_name: formatAuditActionLabel(entry.action_type, Array.isArray(entry.changes) ? entry.changes : []),
         target_id: entry.target_id || null,
         reason: entry.reason || '',
         created_at: snowflakeToIso(entry.id),
