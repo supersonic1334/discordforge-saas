@@ -1,5 +1,5 @@
 const MAX_INPUT_FILE_SIZE = 8 * 1024 * 1024
-const MAX_OUTPUT_LENGTH = 1_200_000
+const MAX_OUTPUT_LENGTH = 850_000
 const MAX_DIMENSION = 512
 const ALLOWED_IMAGE_TYPES = new Set([
   'image/jpeg',
@@ -26,8 +26,8 @@ function loadImage(dataUrl) {
   })
 }
 
-function drawAvatar(image, mimeType, quality) {
-  const ratio = Math.min(MAX_DIMENSION / image.width, MAX_DIMENSION / image.height, 1)
+function drawAvatar(image, mimeType, quality, maxDimension = MAX_DIMENSION) {
+  const ratio = Math.min(maxDimension / image.width, maxDimension / image.height, 1)
   const width = Math.max(1, Math.round(image.width * ratio))
   const height = Math.max(1, Math.round(image.height * ratio))
 
@@ -45,6 +45,17 @@ function drawAvatar(image, mimeType, quality) {
   return canvas.toDataURL(mimeType, quality)
 }
 
+function buildAvatarVariants(image) {
+  return [
+    ['image/webp', 0.86, 512],
+    ['image/webp', 0.8, 448],
+    ['image/webp', 0.74, 384],
+    ['image/jpeg', 0.82, 448],
+    ['image/jpeg', 0.74, 384],
+    ['image/jpeg', 0.68, 320],
+  ]
+}
+
 export async function prepareAvatarDataUrl(file) {
   if (!file) throw new Error('Aucun fichier selectionne.')
   if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
@@ -57,14 +68,12 @@ export async function prepareAvatarDataUrl(file) {
   const sourceDataUrl = await readFileAsDataUrl(file)
   const image = await loadImage(sourceDataUrl)
 
-  let output = drawAvatar(image, 'image/webp', 0.86)
-  if (output.length > MAX_OUTPUT_LENGTH) {
-    output = drawAvatar(image, 'image/jpeg', 0.82)
+  for (const [mimeType, quality, maxDimension] of buildAvatarVariants(image)) {
+    const output = drawAvatar(image, mimeType, quality, maxDimension)
+    if (output.length <= MAX_OUTPUT_LENGTH) {
+      return output
+    }
   }
 
-  if (output.length > MAX_OUTPUT_LENGTH) {
-    throw new Error('Image trop lourde apres compression. Choisis une image plus legere.')
-  }
-
-  return output
+  throw new Error('Image trop lourde apres compression. Choisis une image plus legere.')
 }
