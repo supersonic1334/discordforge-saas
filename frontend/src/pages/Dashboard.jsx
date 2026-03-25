@@ -107,8 +107,8 @@ export default function Dashboard() {
   const quickLinks = t('dashboard.quickLinks', [])
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between">
+    <div className="px-4 py-5 sm:p-6 max-w-6xl mx-auto space-y-6">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="font-display font-800 text-2xl text-white">
             {t('dashboard.welcome')}, <span className="neon-text">{user?.username}</span>
