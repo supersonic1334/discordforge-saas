@@ -41,6 +41,14 @@ function resolveSelectedGuildId(guilds = [], preferredGuildId = null, fallbackGu
   return null
 }
 
+function sanitizePersistedUser(user) {
+  if (!user) return user
+  if (typeof user.avatar_url === 'string' && user.avatar_url.startsWith('data:image/')) {
+    return { ...user, avatar_url: null }
+  }
+  return user
+}
+
 export const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -120,7 +128,7 @@ export const useAuthStore = create(
     }),
     {
       name: 'auth-store',
-      partialize: (s) => ({ token: s.token, user: s.user }),
+      partialize: (s) => ({ token: s.token, user: sanitizePersistedUser(s.user) }),
     }
   )
 )
