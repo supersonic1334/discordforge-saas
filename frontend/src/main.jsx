@@ -17,12 +17,19 @@ function renderEmergencyFallback() {
           Le site a rencontre un probleme de chargement. Recharge la page pour relancer l interface.
         </p>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px;">
-          <button onclick="window.location.reload()" style="flex:1 1 220px;border:0;border-radius:14px;padding:14px 18px;background:linear-gradient(90deg,#00e5ff,#b04eff);color:white;font-weight:700;cursor:pointer;">Recharger</button>
-          <button onclick="window.location.assign('/auth')" style="flex:1 1 220px;border-radius:14px;padding:14px 18px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.88);font-weight:700;cursor:pointer;">Retour connexion</button>
+          <button data-emergency-action="reload" style="flex:1 1 220px;border:0;border-radius:14px;padding:14px 18px;background:linear-gradient(90deg,#00e5ff,#b04eff);color:white;font-weight:700;cursor:pointer;">Recharger</button>
+          <button data-emergency-action="auth" style="flex:1 1 220px;border-radius:14px;padding:14px 18px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.88);font-weight:700;cursor:pointer;">Retour connexion</button>
         </div>
       </div>
     </div>
   `
+
+  rootElement.querySelector('[data-emergency-action="reload"]')?.addEventListener('click', () => {
+    window.location.reload()
+  })
+  rootElement.querySelector('[data-emergency-action="auth"]')?.addEventListener('click', () => {
+    window.location.assign('/auth')
+  })
 }
 
 window.addEventListener('error', renderEmergencyFallback, { once: true })
