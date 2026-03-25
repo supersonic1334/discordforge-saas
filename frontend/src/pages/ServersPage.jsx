@@ -36,7 +36,7 @@ export default function ServersPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="px-4 py-5 sm:p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="font-display font-800 text-2xl text-white">{t('servers.title')}</h1>
