@@ -39,6 +39,10 @@ const UI = {
     assistantEdit: 'Modification guidee',
     editingTarget: 'Commande en cours',
     cancelEdit: 'Annuler',
+    assistantCreateHint: 'Explique simplement ce que tu veux. Exemple: cree une commande bonjour qui repond bonjour {mention}.',
+    assistantCreateEmpty: "Le chat IA va creer la commande automatiquement et l'enregistrer directement.",
+    assistantEditHint: 'Decris seulement la modification a faire. La commande actuelle sera mise a jour directement.',
+    assistantEditEmpty: "Ecris ce que tu veux changer. L'assistant appliquera la modification sur cette commande existante.",
     assistantHint: 'Explique simplement ce que tu veux. Exemple: cree une commande bonjour qui repond bonjour {mention}.',
     assistantEmpty: "Le chat IA va creer la commande automatiquement et l'enregistrer directement.",
     modeLabel: 'Type de commande',
@@ -50,6 +54,7 @@ const UI = {
     slashNameHint: 'Exemple: music',
     promptLabel: 'Ce que tu veux',
     promptPlaceholder: 'Exemple: cree une commande annonce qui repond en embed avec le titre Infos du serveur',
+    promptEditPlaceholder: 'Exemple: remplace la reponse par une version plus courte et plus propre',
     voiceStart: 'Parler',
     voiceStop: 'Stop micro',
     voiceListening: 'Ecoute en cours...',
@@ -88,6 +93,10 @@ const UI = {
     assistantEdit: 'Guided edit',
     editingTarget: 'Current command',
     cancelEdit: 'Cancel',
+    assistantCreateHint: 'Describe what you want. Example: create a hello command that replies hello {mention}.',
+    assistantCreateEmpty: 'The AI chat will create the command automatically and save it directly.',
+    assistantEditHint: 'Only describe the change you want. The current command will be updated in place.',
+    assistantEditEmpty: 'Write what you want to change. The assistant will apply it to this existing command.',
     assistantHint: 'Describe what you want. Example: create a hello command that replies hello {mention}.',
     assistantEmpty: 'The AI chat will create the command automatically and save it directly.',
     modeLabel: 'Command type',
@@ -99,6 +108,7 @@ const UI = {
     slashNameHint: 'Example: music',
     promptLabel: 'What you want',
     promptPlaceholder: 'Example: create an announce command that replies with an embed titled Server info',
+    promptEditPlaceholder: 'Example: replace the response with a shorter and cleaner version',
     voiceStart: 'Speak',
     voiceStop: 'Stop mic',
     voiceListening: 'Listening...',
@@ -137,6 +147,10 @@ const UI = {
     assistantEdit: 'Edicion guiada',
     editingTarget: 'Comando actual',
     cancelEdit: 'Cancelar',
+    assistantCreateHint: 'Describe lo que quieres. Ejemplo: crea un comando hola que responda hola {mention}.',
+    assistantCreateEmpty: 'El chat IA creara el comando automaticamente y lo guardara directamente.',
+    assistantEditHint: 'Describe solo el cambio que quieres. El comando actual se actualizara directamente.',
+    assistantEditEmpty: 'Escribe lo que quieres cambiar. El asistente aplicara el cambio sobre este comando existente.',
     assistantHint: 'Describe lo que quieres. Ejemplo: crea un comando hola que responda hola {mention}.',
     assistantEmpty: 'El chat IA creara el comando automaticamente y lo guardara directamente.',
     modeLabel: 'Tipo de comando',
@@ -148,6 +162,7 @@ const UI = {
     slashNameHint: 'Ejemplo: music',
     promptLabel: 'Lo que quieres',
     promptPlaceholder: 'Ejemplo: crea un comando anuncio que responda con un embed titulado Info del servidor',
+    promptEditPlaceholder: 'Ejemplo: reemplaza la respuesta por una version mas corta y mas limpia',
     voiceStart: 'Hablar',
     voiceStop: 'Detener micro',
     voiceListening: 'Escuchando...',
@@ -186,17 +201,6 @@ function isRouteNotFound(error, fragment) {
 function getUi(locale) {
   const key = String(locale || 'fr').toLowerCase().split('-')[0]
   return UI[key] || UI.fr
-}
-
-function buildEditPrompt(command, locale) {
-  const key = String(locale || 'fr').toLowerCase().split('-')[0]
-  if (key === 'en') {
-    return `Edit this command without deleting it.\nCurrent trigger: ${command.display_trigger}\nCurrent description: ${command.description || '(empty)'}\nCurrent response: ${command.response}\n\nWhat I want to change: `
-  }
-  if (key === 'es') {
-    return `Modifica este comando sin borrarlo.\nTrigger actual: ${command.display_trigger}\nDescripcion actual: ${command.description || '(vacia)'}\nRespuesta actual: ${command.response}\n\nLo que quiero cambiar: `
-  }
-  return `Modifie cette commande sans la supprimer.\nDeclencheur actuel: ${command.display_trigger}\nDescription actuelle: ${command.description || '(vide)'}\nReponse actuelle: ${command.response}\n\nCe que je veux changer: `
 }
 
 function upsertCommand(list, command) {
@@ -488,7 +492,7 @@ export default function CommandsPage() {
     setCommandInput(command.command_type === 'slash'
       ? (command.command_name || '')
       : (command.display_trigger || command.trigger || '!'))
-    setPrompt(buildEditPrompt(command, locale))
+    setPrompt('')
     setMessages([])
   }
 
@@ -824,8 +828,8 @@ export default function CommandsPage() {
           <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 space-y-3 max-h-[340px] overflow-y-auto">
             {messages.length === 0 ? (
               <div className="text-sm text-white/35 leading-relaxed">
-                <p>{ui.assistantHint}</p>
-                <p className="mt-2">{ui.assistantEmpty}</p>
+                <p>{editingCommand ? ui.assistantEditHint : ui.assistantCreateHint}</p>
+                <p className="mt-2">{editingCommand ? ui.assistantEditEmpty : ui.assistantCreateEmpty}</p>
               </div>
             ) : messages.map((message, index) => (
               <div key={`${message.role}-${index}`} className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${message.role === 'user' ? 'bg-neon-cyan/10 border border-neon-cyan/15 text-white/85' : 'bg-white/[0.03] border border-white/8 text-white/70'}`}>
@@ -879,7 +883,7 @@ export default function CommandsPage() {
             <textarea
               ref={promptInputRef}
               className="input-field min-h-[140px] resize-y"
-              placeholder={ui.promptPlaceholder}
+              placeholder={editingCommand ? ui.promptEditPlaceholder : ui.promptPlaceholder}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
             />
