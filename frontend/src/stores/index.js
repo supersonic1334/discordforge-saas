@@ -55,6 +55,9 @@ export const useAuthStore = create(
       token: null,
       user: null,
       hasBotToken: false,
+      hasOwnBotToken: false,
+      accessibleGuildCount: 0,
+      sharedGuildCount: 0,
       botStatus: null,
       isLoading: false,
 
@@ -104,8 +107,15 @@ export const useAuthStore = create(
         fetchMePromise = (async () => {
           try {
             const res = await authAPI.me()
-            const { user, hasBotToken, botStatus } = res.data
-            set({ user, hasBotToken, botStatus })
+            const { user, hasBotToken, hasOwnBotToken, accessibleGuildCount, sharedGuildCount, botStatus } = res.data
+            set({
+              user,
+              hasBotToken: !!hasBotToken,
+              hasOwnBotToken: !!hasOwnBotToken,
+              accessibleGuildCount: Number(accessibleGuildCount || 0),
+              sharedGuildCount: Number(sharedGuildCount || 0),
+              botStatus,
+            })
             return true
           } catch {
             return false
@@ -121,14 +131,29 @@ export const useAuthStore = create(
         localStorage.removeItem('token')
         wsService.disconnect()
         useGuildStore.getState().resetSession()
-        set({ token: null, user: null, hasBotToken: false, botStatus: null })
+        set({
+          token: null,
+          user: null,
+          hasBotToken: false,
+          hasOwnBotToken: false,
+          accessibleGuildCount: 0,
+          sharedGuildCount: 0,
+          botStatus: null,
+        })
       },
 
       updateBotStatus: (status) => set((s) => ({ botStatus: { ...s.botStatus, status } })),
     }),
     {
       name: 'auth-store',
-      partialize: (s) => ({ token: s.token, user: sanitizePersistedUser(s.user) }),
+      partialize: (s) => ({
+        token: s.token,
+        user: sanitizePersistedUser(s.user),
+        hasBotToken: s.hasBotToken,
+        hasOwnBotToken: s.hasOwnBotToken,
+        accessibleGuildCount: s.accessibleGuildCount,
+        sharedGuildCount: s.sharedGuildCount,
+      }),
     }
   )
 )
@@ -176,6 +201,12 @@ export const useGuildStore = create(
             const res = await botAPI.guilds()
             const guilds = res.data.guilds || []
             if (guilds.length > 0) {
+              lastGuildFetchAt = Date.now()
+              get().applyGuilds(guilds)
+              return guilds
+            }
+
+            if (!useAuthStore.getState().hasOwnBotToken) {
               lastGuildFetchAt = Date.now()
               get().applyGuilds(guilds)
               return guilds

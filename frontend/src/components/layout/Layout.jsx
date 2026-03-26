@@ -82,7 +82,7 @@ export default function Layout() {
     { icon: Search, label: t('layout.nav.search', 'Search'), path: '/dashboard/search', needsGuild: true },
     { icon: ScrollText, label: t('layout.nav.logs', 'Logs'), path: '/dashboard/logs', needsGuild: true },
     { icon: Send, label: t('layout.nav.messages', 'Messages'), path: '/dashboard/messages', needsGuild: true },
-    { icon: Ban, label: t('layout.nav.blocked', 'Blocages'), path: '/dashboard/blocked', needsGuild: true },
+    { icon: Ban, label: t('layout.nav.blocked', 'Controle d\'Acces'), path: '/dashboard/blocked', needsGuild: true },
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
@@ -414,7 +414,7 @@ export default function Layout() {
   )
 
   return (
-    <div className="flex min-h-screen md:h-screen max-w-full bg-surface-0 overflow-hidden">
+    <div className="flex min-h-screen min-h-[100dvh] md:h-screen max-w-full bg-surface-0 overflow-hidden">
       <SnowCanvas />
 
       {hasSelectedGuild && (
@@ -451,8 +451,8 @@ export default function Layout() {
                   initial={{ x: -280 }}
                   animate={{ x: 0 }}
                   exit={{ x: -280 }}
-                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                  className="fixed left-0 top-0 bottom-0 w-64 z-40 lg:hidden bg-surface-1 border-r border-white/[0.06]"
+                  transition={{ type: 'spring', damping: 28, stiffness: 280, mass: 0.8 }}
+                  className="fixed left-0 top-0 bottom-0 w-[min(72vw,280px)] z-40 lg:hidden bg-surface-1/95 backdrop-blur-xl border-r border-white/[0.06] shadow-[6px_0_24px_rgba(0,0,0,0.4)]"
                 >
                   <SidebarContent />
                 </motion.aside>
@@ -475,7 +475,7 @@ export default function Layout() {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
           <Outlet />
         </main>
       </div>

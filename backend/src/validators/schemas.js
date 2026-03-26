@@ -124,6 +124,7 @@ const directMessageSchema = z.object({
 const guildAccessInviteSchema = z.object({
   target: z.string().trim().min(2).max(160),
   access_role: z.enum(['admin', 'moderator', 'viewer']).optional().default('admin'),
+  expires_in_hours: z.number().int().min(0).max(8760).optional().default(0),
 });
 
 const guildAccessRoleSchema = z.object({
@@ -132,6 +133,15 @@ const guildAccessRoleSchema = z.object({
 
 const guildSnapshotCreateSchema = z.object({
   label: z.string().trim().max(120).optional().default(''),
+});
+
+const guildAccessSuspendSchema = z.object({
+  is_suspended: z.boolean(),
+});
+
+const collaborationAuditListSchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(30),
 });
 
 // ── Custom Commands ───────────────────────────────────────────────────────────
@@ -313,7 +323,9 @@ module.exports = {
   directMessageSchema,
   guildAccessInviteSchema,
   guildAccessRoleSchema,
+  guildAccessSuspendSchema,
   guildSnapshotCreateSchema,
+  collaborationAuditListSchema,
   customCommandSchema,
   commandAssistantSchema,
   commandToggleSchema,

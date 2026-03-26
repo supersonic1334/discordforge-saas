@@ -24,7 +24,63 @@ function parseJson(value, fallback) {
   }
 }
 
+// ── Audit logging ──────────────────────────────────────────────────────────────
+
+function logCollabAction({ guildId, actorUserId, actorUsername, actionType, target, details }) {
+  db.insert('collaboration_audit_log', {
+    guild_id: guildId,
+    actor_user_id: actorUserId,
+    actor_username: actorUsername || null,
+    action_type: actionType,
+    target: target || null,
+    details: JSON.stringify(details || {}),
+    created_at: new Date().toISOString(),
+  });
+}
+
+function listCollabAuditLog(guildId, { page = 1, limit = 30 } = {}) {
+  const offset = (page - 1) * limit;
+  const total = db.db.prepare('SELECT COUNT(*) AS cnt FROM collaboration_audit_log WHERE guild_id = ?').get(guildId)?.cnt || 0;
+  const rows = db.db.prepare(`
+    SELECT * FROM collaboration_audit_log
+    WHERE guild_id = ?
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(guildId, limit, offset);
+
+  return {
+    items: rows.map((row) => ({
+      ...row,
+      details: parseJson(row.details, {}),
+    })),
+    total,
+    page,
+    limit,
+  };
+}
+
+// ── Expiration check ───────────────────────────────────────────────────────────
+
+function isAccessExpired(member) {
+  if (!member?.expires_at) return false;
+  return new Date(member.expires_at) <= new Date();
+}
+
+function cleanupExpiredAccess(guildId) {
+  const now = new Date().toISOString();
+  const result = db.db.prepare(`
+    DELETE FROM guild_access_members
+    WHERE guild_id = ? AND expires_at IS NOT NULL AND expires_at <= ?
+  `).run(guildId, now);
+  return result.changes || 0;
+}
+
+// ── Core access logic ──────────────────────────────────────────────────────────
+
 function getGuildAccess(userId, guildId) {
+  // Cleanup expired members first
+  cleanupExpiredAccess(guildId);
+
   const row = db.db.prepare(`
     SELECT
       g.*,
@@ -33,6 +89,8 @@ function getGuildAccess(userId, guildId) {
       owner.email AS owner_email,
       gam.id AS member_id,
       gam.access_role AS member_access_role,
+      gam.is_suspended AS member_is_suspended,
+      gam.expires_at AS member_expires_at,
       gam.accepted_at AS member_accepted_at
     FROM guilds g
     JOIN users owner ON owner.id = g.user_id
@@ -48,6 +106,9 @@ function getGuildAccess(userId, guildId) {
 
   const isOwner = row.user_id === userId;
   if (!isOwner && !row.member_id) return null;
+
+  // Suspended members are denied access
+  if (!isOwner && row.member_is_suspended) return null;
 
   return {
     guild: {
@@ -77,6 +138,13 @@ function getGuildAccess(userId, guildId) {
 }
 
 function listAccessibleGuilds(userId) {
+  // Cleanup all expired access for this user
+  const now = new Date().toISOString();
+  db.db.prepare(`
+    DELETE FROM guild_access_members
+    WHERE user_id = ? AND expires_at IS NOT NULL AND expires_at <= ?
+  `).run(userId, now);
+
   return db.db.prepare(`
     SELECT
       g.*,
@@ -93,7 +161,7 @@ function listAccessibleGuilds(userId) {
       ON gam.guild_id = g.id
       AND gam.user_id = ?
     WHERE g.is_active = 1
-      AND (g.user_id = ? OR gam.user_id IS NOT NULL)
+      AND (g.user_id = ? OR (gam.user_id IS NOT NULL AND gam.is_suspended = 0))
     ORDER BY
       CASE WHEN g.user_id = ? THEN 0 ELSE 1 END,
       lower(g.name) ASC
@@ -101,6 +169,9 @@ function listAccessibleGuilds(userId) {
 }
 
 function listGuildCollaborators(guildId) {
+  // Cleanup expired
+  cleanupExpiredAccess(guildId);
+
   const guild = db.findOne('guilds', { id: guildId });
   if (!guild) return [];
 
@@ -136,6 +207,8 @@ function listGuildCollaborators(guildId) {
       discord_id: owner.discord_id || null,
       access_role: 'owner',
       is_owner: true,
+      is_suspended: false,
+      expires_at: null,
       accepted_at: guild.created_at,
       created_at: guild.created_at,
       updated_at: guild.updated_at,
@@ -152,6 +225,8 @@ function listGuildCollaborators(guildId) {
       discord_id: member.discord_id || null,
       access_role: normalizeAccessRole(member.access_role),
       is_owner: false,
+      is_suspended: !!member.is_suspended,
+      expires_at: member.expires_at || null,
       accepted_at: member.accepted_at,
       created_at: member.created_at,
       updated_at: member.updated_at,
@@ -180,7 +255,28 @@ function resolveUserForInvite(target) {
   `).get(normalized, normalized, String(target || '').trim(), String(target || '').trim(), normalized) ?? null;
 }
 
-function inviteGuildCollaborator({ guildId, ownerUserId, actorUserId, target, accessRole }) {
+// ── Auto-backup on first invite ────────────────────────────────────────────────
+
+function ensureAutoBackupOnFirstInvite(guildId, ownerUserId) {
+  // Check if this guild already has any collaborators
+  const existingCount = db.db.prepare(`
+    SELECT COUNT(*) AS cnt FROM guild_access_members WHERE guild_id = ?
+  `).get(guildId)?.cnt || 0;
+
+  // First collaborator → auto-create a backup
+  if (existingCount === 0) {
+    const payload = buildSnapshotPayload(guildId);
+    db.insert('guild_config_snapshots', {
+      guild_id: guildId,
+      created_by_user_id: ownerUserId,
+      label: '🔒 Sauvegarde automatique (premier partage)',
+      payload: JSON.stringify(payload),
+      created_at: new Date().toISOString(),
+    });
+  }
+}
+
+function inviteGuildCollaborator({ guildId, ownerUserId, actorUserId, target, accessRole, expiresInHours }) {
   const guild = db.findOne('guilds', { id: guildId });
   if (!guild || guild.user_id !== ownerUserId) {
     throw Object.assign(new Error('Guild not found'), { status: 404 });
@@ -197,7 +293,14 @@ function inviteGuildCollaborator({ guildId, ownerUserId, actorUserId, target, ac
     throw Object.assign(new Error('Le proprietaire a deja acces a ce serveur'), { status: 400 });
   }
 
+  // Auto-backup on first colaborator invite
+  ensureAutoBackupOnFirstInvite(guildId, ownerUserId);
+
   const now = new Date().toISOString();
+  const expiresAt = (expiresInHours && expiresInHours > 0)
+    ? new Date(Date.now() + expiresInHours * 3600000).toISOString()
+    : null;
+
   const existing = db.db.prepare(`
     SELECT id
     FROM guild_access_members
@@ -208,20 +311,33 @@ function inviteGuildCollaborator({ guildId, ownerUserId, actorUserId, target, ac
   if (existing) {
     db.db.prepare(`
       UPDATE guild_access_members
-      SET access_role = ?, invited_by_user_id = ?, accepted_at = ?, updated_at = ?
+      SET access_role = ?, invited_by_user_id = ?, is_suspended = 0, expires_at = ?, accepted_at = ?, updated_at = ?
       WHERE id = ?
-    `).run(normalizeAccessRole(accessRole), actorUserId, now, now, existing.id);
+    `).run(normalizeAccessRole(accessRole), actorUserId, expiresAt, now, now, existing.id);
   } else {
     db.insert('guild_access_members', {
       guild_id: guildId,
       user_id: user.id,
       access_role: normalizeAccessRole(accessRole),
       invited_by_user_id: actorUserId,
+      is_suspended: 0,
+      expires_at: expiresAt,
       accepted_at: now,
       created_at: now,
       updated_at: now,
     });
   }
+
+  // Audit log
+  const actor = db.findOne('users', { id: actorUserId });
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: actor?.username,
+    actionType: 'invite',
+    target: user.username || user.email,
+    details: { role: accessRole, expires_in_hours: expiresInHours || null },
+  });
 
   return db.findOne('users', { id: user.id });
 }
@@ -244,6 +360,45 @@ function updateGuildCollaboratorRole({ guildId, ownerUserId, memberUserId, acces
   if (!result.changes) {
     throw Object.assign(new Error('Acces introuvable'), { status: 404 });
   }
+
+  const targetUser = db.findOne('users', { id: memberUserId });
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'role_change',
+    target: targetUser?.username,
+    details: { new_role: accessRole },
+  });
+}
+
+function suspendGuildCollaborator({ guildId, ownerUserId, memberUserId, isSuspended }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+  if (memberUserId === ownerUserId) {
+    throw Object.assign(new Error('Le proprietaire principal ne peut pas etre suspendu'), { status: 400 });
+  }
+
+  const result = db.db.prepare(`
+    UPDATE guild_access_members
+    SET is_suspended = ?, updated_at = ?
+    WHERE guild_id = ? AND user_id = ?
+  `).run(isSuspended ? 1 : 0, new Date().toISOString(), guildId, memberUserId);
+
+  if (!result.changes) {
+    throw Object.assign(new Error('Acces introuvable'), { status: 404 });
+  }
+
+  const targetUser = db.findOne('users', { id: memberUserId });
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: isSuspended ? 'suspend' : 'unsuspend',
+    target: targetUser?.username,
+  });
 }
 
 function removeGuildCollaborator({ guildId, ownerUserId, memberUserId }) {
@@ -255,6 +410,8 @@ function removeGuildCollaborator({ guildId, ownerUserId, memberUserId }) {
     throw Object.assign(new Error('Le proprietaire principal ne peut pas etre retire'), { status: 400 });
   }
 
+  const targetUser = db.findOne('users', { id: memberUserId });
+
   const result = db.db.prepare(`
     DELETE FROM guild_access_members
     WHERE guild_id = ? AND user_id = ?
@@ -263,7 +420,17 @@ function removeGuildCollaborator({ guildId, ownerUserId, memberUserId }) {
   if (!result.changes) {
     throw Object.assign(new Error('Acces introuvable'), { status: 404 });
   }
+
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'revoke',
+    target: targetUser?.username,
+  });
 }
+
+// ── Snapshots ──────────────────────────────────────────────────────────────────
 
 function buildSnapshotPayload(guildId) {
   return {
@@ -327,6 +494,14 @@ function createGuildSnapshot({ guildId, ownerUserId, actorUserId, label }) {
     label: String(label || '').trim() || `Snapshot ${new Date().toLocaleString('fr-FR')}`,
     payload: JSON.stringify(payload),
     created_at: new Date().toISOString(),
+  });
+
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: db.findOne('users', { id: actorUserId })?.username,
+    actionType: 'snapshot_create',
+    target: label || 'Sans nom',
   });
 
   return db.findOne('guild_config_snapshots', { id: row.id });
@@ -429,6 +604,14 @@ function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
     }
   });
 
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'snapshot_restore',
+    target: snapshot.label || 'Sans nom',
+  });
+
   return {
     snapshot,
     restored: {
@@ -444,6 +627,8 @@ function deleteGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
     throw Object.assign(new Error('Guild not found'), { status: 404 });
   }
 
+  const snapshot = db.db.prepare('SELECT label FROM guild_config_snapshots WHERE id = ? AND guild_id = ? LIMIT 1').get(snapshotId, guildId);
+
   const result = db.db.prepare(`
     DELETE FROM guild_config_snapshots
     WHERE id = ? AND guild_id = ?
@@ -452,6 +637,14 @@ function deleteGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
   if (!result.changes) {
     throw Object.assign(new Error('Sauvegarde introuvable'), { status: 404 });
   }
+
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'snapshot_delete',
+    target: snapshot?.label || 'Sans nom',
+  });
 }
 
 function getSharedGuildCounts(userId) {
@@ -464,7 +657,7 @@ function getSharedGuildCounts(userId) {
       ON gam.guild_id = g.id
       AND gam.user_id = ?
     WHERE g.is_active = 1
-      AND (g.user_id = ? OR gam.user_id IS NOT NULL)
+      AND (g.user_id = ? OR (gam.user_id IS NOT NULL AND gam.is_suspended = 0))
   `).get(userId, userId, userId);
 
   return {
@@ -481,7 +674,10 @@ module.exports = {
   listGuildCollaborators,
   inviteGuildCollaborator,
   updateGuildCollaboratorRole,
+  suspendGuildCollaborator,
   removeGuildCollaborator,
+  logCollabAction,
+  listCollabAuditLog,
   listGuildSnapshots,
   createGuildSnapshot,
   restoreGuildSnapshot,

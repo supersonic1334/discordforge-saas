@@ -6,6 +6,7 @@ const { requireAuth, requireBotToken, requireGuildOwner } = require('../middlewa
 const { decrypt } = require('../services/encryptionService');
 const discordService = require('../services/discordService');
 const botBlacklistService = require('../services/botBlacklistService');
+const logger = require('../utils/logger').child('BlockedRoutes');
 
 const router = express.Router({ mergeParams: true });
 
@@ -75,7 +76,7 @@ router.get('/', async (req, res, next) => {
     const query = normalizeQuery(req.query.q);
     const [guildBans, blacklistEntries] = await Promise.all([
       discordService.getGuildBans(token, req.guild.guild_id, 1000),
-      Promise.resolve(botBlacklistService.listBlacklistEntries(req.user.id)),
+      Promise.resolve(botBlacklistService.listBlacklistEntries(req.guildOwnerUserId || req.user.id)),
     ]);
 
     const bans = (Array.isArray(guildBans) ? guildBans : [])
@@ -108,6 +109,9 @@ router.get('/', async (req, res, next) => {
       },
     });
   } catch (error) {
+    if (error.httpStatus === 403) {
+      return res.status(403).json({ error: 'Bot lacks permission to view bans' });
+    }
     next(error);
   }
 });
@@ -117,25 +121,50 @@ router.delete('/bans/:discordUserId', async (req, res, next) => {
     const token = decrypt(req.botToken.encrypted_token);
     await discordService.unbanMember(token, req.guild.guild_id, req.params.discordUserId, 'Manual unban from blocked users page');
 
+    logger.info(`User unbanned via blocked page`, {
+      guildId: req.guild.guild_id,
+      targetUserId: req.params.discordUserId,
+      actorUserId: req.user.id,
+    });
+
     res.json({
       message: 'Utilisateur debanni',
       userId: req.params.discordUserId,
     });
   } catch (error) {
+    if (error.httpStatus === 403) {
+      return res.status(403).json({ error: 'Bot lacks permission to unban members' });
+    }
+    if (error.httpStatus === 404) {
+      return res.status(404).json({ error: 'User is not banned or not found' });
+    }
     next(error);
   }
 });
 
 router.delete('/blacklist/:discordUserId', async (req, res, next) => {
   try {
-    const removed = botBlacklistService.removeBlacklistEntry(req.user.id, req.params.discordUserId);
+    const ownerUserId = req.guildOwnerUserId || req.user.id;
+    const targetUserId = req.params.discordUserId;
+
+    const removed = botBlacklistService.removeBlacklistEntry(ownerUserId, targetUserId);
     if (!removed) {
+      logger.warn(`Blacklist removal failed: entry not found`, {
+        ownerUserId,
+        targetUserId,
+      });
       return res.status(404).json({ error: 'Entree de blacklist introuvable' });
     }
 
+    logger.info(`User removed from blacklist`, {
+      ownerUserId,
+      targetUserId,
+      actorUserId: req.user.id,
+    });
+
     res.json({
       message: 'Utilisateur retire de la blacklist',
-      userId: req.params.discordUserId,
+      userId: targetUserId,
     });
   } catch (error) {
     next(error);

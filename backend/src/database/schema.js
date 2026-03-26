@@ -87,10 +87,23 @@ const SCHEMA = [
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     access_role     TEXT NOT NULL DEFAULT 'admin' CHECK(access_role IN ('admin','moderator','viewer')),
     invited_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    is_suspended    INTEGER NOT NULL DEFAULT 0,
+    expires_at      TEXT,
     accepted_at     TEXT NOT NULL DEFAULT (datetime('now')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(guild_id, user_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS collaboration_audit_log (
+    id              TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    actor_user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_username  TEXT,
+    action_type     TEXT NOT NULL,
+    target          TEXT,
+    details         TEXT DEFAULT '{}',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
   `CREATE TABLE IF NOT EXISTS guild_config_snapshots (
@@ -397,6 +410,8 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_guild_access_members_guild_id ON guild_access_members(guild_id)`,
   `CREATE INDEX IF NOT EXISTS idx_guild_access_members_user_id ON guild_access_members(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_guild_config_snapshots_guild_id ON guild_config_snapshots(guild_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_collab_audit_guild_id ON collaboration_audit_log(guild_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_collab_audit_actor ON collaboration_audit_log(actor_user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_modules_guild_id ON modules(guild_id)`,
   `CREATE INDEX IF NOT EXISTS idx_bot_blacklist_owner_target ON bot_blacklist_entries(owner_user_id, target_user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_warnings_guild_id ON warnings(guild_id)`,

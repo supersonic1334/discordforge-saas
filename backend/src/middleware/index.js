@@ -40,6 +40,12 @@ function requireUnblockedClient(req, res, next) {
   const matchedBlock = findMatchingBlock(req);
   if (!matchedBlock) return next();
 
+  logger.warn(`Blocked client access attempt`, {
+    blockType: matchedBlock.block_type,
+    ip: req.ip,
+    path: req.path,
+  });
+
   return res.status(403).json({
     error: 'Access blocked from this device or network',
     code: 'ACCESS_BLOCKED',
@@ -71,14 +77,21 @@ function requireAuth(req, res, next) {
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
+      logger.warn(`Auth failure: expired token`, { ip: req.ip, path: req.path });
       return res.status(401).json({ error: 'Token expired' });
     }
+    logger.warn(`Auth failure: invalid token`, { ip: req.ip, path: req.path });
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
 
 function requireFounder(req, res, next) {
   if (req.user?.role !== 'founder') {
+    logger.warn(`Access violation: non-founder attempted founder route`, {
+      userId: req.user?.id,
+      role: req.user?.role,
+      path: req.path,
+    });
     return res.status(403).json({ error: 'Founder access required' });
   }
   next();
@@ -86,6 +99,11 @@ function requireFounder(req, res, next) {
 
 function requireAdminPanelAccess(req, res, next) {
   if (!['founder', 'admin'].includes(req.user?.role)) {
+    logger.warn(`Access violation: unauthorized admin panel access`, {
+      userId: req.user?.id,
+      role: req.user?.role,
+      path: req.path,
+    });
     return res.status(403).json({ error: 'Admin panel access required' });
   }
   next();
@@ -180,7 +198,7 @@ function requireBotToken(req, res, next) {
 }
 
 function errorHandler(err, req, res, next) {
-  const status = err.status ?? err.statusCode ?? 500;
+  const status = err.status ?? err.statusCode ?? err.httpStatus ?? 500;
   logger.error(`Unhandled error: ${err.message}`, {
     url: req.url,
     method: req.method,

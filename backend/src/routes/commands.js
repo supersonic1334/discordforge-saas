@@ -357,6 +357,24 @@ function extractCommandDraft(text) {
   }
 }
 
+function generateRandomSeed() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let seed = '';
+  for (let i = 0; i < 10; i++) seed += chars[Math.floor(Math.random() * chars.length)];
+  return `${seed}-${Date.now().toString(36)}`;
+}
+
+const VARIETY_OPENERS = [
+  'Start with an emoji and a creative one-liner.',
+  'Begin with a punchy metaphor or analogy.',
+  'Open with a surprising fun fact related to the command.',
+  'Start with a direct, confident statement.',
+  'Begin with a question that you immediately answer.',
+  'Open with a brief compliment about the user\'s idea.',
+  'Start with a short analogy from gaming or pop culture.',
+  'Begin by noting something clever about the command concept.',
+];
+
 function buildAssistantSystemPrompt({ guildName, mode, prefix, requestedTrigger, requestedCommandName, existingCommand }) {
   const existingBlock = existingCommand
     ? `
@@ -373,7 +391,11 @@ Current command being edited:
       ? `\nExact text trigger requested: ${requestedTrigger}`
       : (prefix ? `\nPrefix requested: ${prefix}` : ''));
 
-  return `You are DiscordForger Command Builder.
+  const randomSeed = generateRandomSeed();
+  const varietyOpener = VARIETY_OPENERS[Math.floor(Math.random() * VARIETY_OPENERS.length)];
+  const creativityIndex = Math.floor(Math.random() * 100);
+
+  return `You are DiscordForger Command Builder — an expert, creative assistant.
 You create simple custom Discord commands that work immediately in this product.
 
 Server: ${guildName}
@@ -381,6 +403,10 @@ Command mode requested: ${mode}
 ${mode === 'slash' ? 'Prefix requested: / (real Discord slash command)' : ''}
 ${requestedBlock}
 ${existingBlock}
+
+UNIQUENESS SEED: ${randomSeed}
+CREATIVITY INDEX: ${creativityIndex}
+STYLE DIRECTIVE: ${varietyOpener}
 
 SUPPORTED OUTPUT ONLY:
 - command_name
@@ -392,7 +418,7 @@ SUPPORTED OUTPUT ONLY:
 - mention_user (true | false)
 
 STRICT RULES:
-1. Return a short friendly explanation in the user's language.
+1. Return a short, creative explanation in the user's language. ${varietyOpener} NEVER repeat the same phrasing — be genuinely unique every time.
 2. Then return exactly one \`\`\`command block with valid JSON.
 3. command_name must be short and usable immediately.
 4. For slash mode, command_name must be lowercase and Discord-safe.
@@ -402,6 +428,10 @@ STRICT RULES:
 8. If the user asks for impossible advanced behavior, convert it into the closest working command in this system.
 9. Keep the command clear and production-ready.
 10. If an exact trigger or command name is requested above, you must respect it.
+11. VARIETY IS MANDATORY: Your response text, descriptions, and command responses must be genuinely different from any previous response. Use the uniqueness seed ${randomSeed} to inspire variation.
+12. For content commands (jokes, facts, quotes, tips), the actual content MUST be original and unique — never recycled.
+13. Descriptions should be concise but creative — avoid generic phrasing like "A simple command that...".
+14. Command responses should feel polished, well-formatted, and professional.
 
 JSON shape:
 \`\`\`command
@@ -556,9 +586,12 @@ router.post('/assistant', validate(commandAssistantSchema), async (req, res, nex
       requestedCommandName: mode === 'slash' ? requestedMeta.command_name : '',
       existingCommand: currentCommand,
     });
+
+    // Inject variety seed into user prompt to prevent duplicate AI outputs
+    const varietySuffix = `\n[variety-seed: ${generateRandomSeed()}]`;
     const messages = [
       ...req.body.conversation_history.slice(-8),
-      { role: 'user', content: req.body.prompt },
+      { role: 'user', content: req.body.prompt + varietySuffix },
     ];
     const completion = await aiService.completeConversation(req.user.id, { systemPrompt, messages });
     const draft = extractCommandDraft(completion.text);
@@ -579,10 +612,10 @@ router.post('/assistant', validate(commandAssistantSchema), async (req, res, nex
     enableCommandsModule(req.guild.id);
     const savedId = saveCommand(req.guild.id, payload, currentCommand?.id || null);
     const saved = db.raw('SELECT * FROM custom_commands WHERE id = ?', [savedId])[0];
-    scheduleCommandSync(req.user.id, req.guild.guild_id);
+    scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
 
     res.json({
-      assistant_message: String(completion.text || '').replace(/```command[\s\S]*?```/gi, '').trim(),
+      assistant_message: String(completion.text || '').replace(/```command[\s\S]*?```/gi, '').replace(/\[variety-seed:[^\]]*\]/g, '').trim(),
       command: mapCommandRow(saved),
       quota: completion.quota,
       usage: completion.usage,
@@ -604,7 +637,7 @@ router.post('/', validate(customCommandSchema), async (req, res) => {
   enableCommandsModule(req.guild.id);
   const id = saveCommand(req.guild.id, payload);
   const created = db.raw('SELECT * FROM custom_commands WHERE id = ?', [id])[0];
-  scheduleCommandSync(req.user.id, req.guild.guild_id);
+  scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
 
   res.status(201).json({ message: 'Command created', command: mapCommandRow(created) });
 });
@@ -627,7 +660,7 @@ router.patch('/:id', validate(customCommandSchema.partial()), async (req, res) =
 
   saveCommand(req.guild.id, payload, row.id);
   const updated = db.raw('SELECT * FROM custom_commands WHERE id = ?', [row.id])[0];
-  scheduleCommandSync(req.user.id, req.guild.guild_id);
+  scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
 
   res.json({ message: 'Command updated', command: mapCommandRow(updated) });
 });
@@ -639,7 +672,7 @@ router.delete('/:id', async (req, res) => {
 
   if (!deleted) return res.status(404).json({ error: 'Command not found' });
 
-  scheduleCommandSync(req.user.id, req.guild.guild_id);
+  scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   res.json({ message: 'Command deleted' });
 });
 
@@ -663,7 +696,7 @@ router.patch('/:id/toggle', validate(commandToggleSchema), async (req, res) => {
   db.db.prepare('UPDATE custom_commands SET enabled = ?, updated_at = ? WHERE id = ?')
     .run(newState, new Date().toISOString(), cmd.id);
 
-  scheduleCommandSync(req.user.id, req.guild.guild_id);
+  scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   const updated = db.raw('SELECT * FROM custom_commands WHERE id = ?', [cmd.id])[0];
   res.json({ enabled: !!newState, command: mapCommandRow(updated) });
 });

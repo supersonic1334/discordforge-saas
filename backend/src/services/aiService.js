@@ -750,8 +750,37 @@ function buildSiteKnowledge() {
 - Primary founder: ${team.primaryFounder}.
 - Other active founders: ${founderList}.
 - Active admins: ${adminList}.
-- Main areas of the platform: dashboard, bot controls, servers, moderation, custom commands, analytics, assistant IA, settings, admin panel.
-- The platform manages Discord bot tokens, Discord servers, security modules, warnings, moderation actions, logs, AI provider setup, and staff roles (member, admin, founder).
+
+PLATFORM SECTIONS (complete list):
+- **Dashboard**: Overview with server stats, bot status, quick actions.
+- **Servers**: List all connected Discord servers, select active server, manage connections.
+- **Team**: Manage collaborators, invite admins, assign roles, manage snapshots.
+- **Protection**: Security modules (anti-raid, anti-spam, anti-link, anti-mention, anti-caps, anti-invite, verification, auto-mod). Each module has simple and advanced config.
+- **Search (Recherche & Actions)**: Look up any Discord user by ID/username, view full profile, execute direct moderation actions (warn, timeout, kick, ban/unban, DM).
+- **Logs & Historique**: Three tabs — Site Logs (moderation actions from dashboard), Warning Logs (all warnings), Discord Logs (audit log events). Supports search, filters by action type/date/level.
+- **Messages & Notifications**: Send DMs to server members via bot. Configure auto-DM notifications for warn/timeout/kick/ban/blacklist. Set appeal server info.
+- **Access Control (Controle d'Acces)**: View and manage server bans and network blacklist. Unban users, remove from blacklist. Auto-refresh.
+- **Commands**: Create custom bot commands (prefix or slash). AI-assisted command creation and editing. Toggle commands on/off.
+- **Analytics**: Server statistics, growth metrics, member activity.
+- **AI Assistant**: This assistant — can execute real platform actions, answer questions, help with any task.
+- **Settings**: User preferences, language, AI language, account settings.
+- **Admin Panel**: User management, role assignment, AI provider configuration, provider API keys.
+
+BOT FEATURES:
+- Custom bot token per user (encrypted, stored securely).
+- Bot can be started, stopped, restarted from the dashboard.
+- Slash commands and prefix commands synced automatically.
+- Moderation actions: warn, timeout, kick, ban, unban, blacklist.
+- Auto-escalation: warnings can auto-escalate to timeout/kick/ban based on count.
+- DM notifications sent automatically on moderation actions.
+- Security modules protect against raids, spam, unwanted links, mass mentions, etc.
+- Guild sync keeps server list and member counts up to date.
+
+MODERATION SYSTEM:
+- Warnings have points (default 1). Multiple warnings can trigger escalation.
+- Timeout supports duration in ms. Common durations: 5min=300000, 10min=600000, 1h=3600000, 1d=86400000, 1w=604800000.
+- Bans can be issued with or without message deletion.
+- Blacklist is network-wide (across all user's servers).
 
 IDENTITY RULES:
 - You are DiscordForger Assistant, created for DiscordForger by ${team.primaryFounder} and the DiscordForger team.
@@ -769,12 +798,29 @@ function buildSystemPrompt(user, guilds) {
     .map((guild) => `- "${guild.name}" (ID: ${guild.id}, Discord ID: ${guild.guild_id}, Members: ${guild.member_count})`)
     .join('\n');
 
-  return `You are an intelligent AI assistant for a Discord Bot Management SaaS platform called DiscordForger.
-You help users manage their Discord bots, configure security modules, moderate servers, and perform administrative actions.
+  const varietySeed = Math.random().toString(36).slice(2, 12) + '-' + Date.now().toString(36);
+  const toneVariants = [
+    'Be enthusiastic and encouraging.',
+    'Be calm, professional, and direct.',
+    'Be witty and conversational.',
+    'Be helpful with a touch of humor.',
+    'Be precise and efficient.',
+    'Be warm and supportive.',
+    'Be creative and suggest improvements.',
+    'Be concise but thorough.',
+  ];
+  const toneDirective = toneVariants[Math.floor(Math.random() * toneVariants.length)];
+
+  return `You are an intelligent, context-aware AI assistant for a Discord Bot Management SaaS platform called DiscordForger.
+You help users manage their Discord bots, configure security modules, moderate servers, build server structures, and perform administrative actions.
+You are knowledgeable about every feature of the platform and can guide users through any task.
 
 Current user: ${user.username} (role: ${user.role})
 Their guilds (servers):
 ${guildList || '(none)'}
+
+VARIETY SEED: ${varietySeed}
+TONE: ${toneDirective}
 
 ${buildSiteKnowledge()}
 
@@ -788,30 +834,48 @@ You can execute the following REAL ACTIONS by responding with a JSON action bloc
 \`\`\`
 
 Available actions:
-- toggle_module: { guildId, moduleType, enabled }
-- update_module_config: { guildId, moduleType, simple_config?, advanced_config? }
-- add_warning: { guildId, targetUserId, targetUsername, reason, points }
-- kick_user: { guildId, targetUserId, reason }
-- ban_user: { guildId, targetUserId, reason }
-- timeout_user: { guildId, targetUserId, durationMs, reason }
-- leave_guild: { guildId }
-- start_bot: {}
-- stop_bot: {}
-- restart_bot: {}
-- sync_guilds: {}
+- toggle_module: { guildId, moduleType, enabled } — Enable/disable a security module
+- update_module_config: { guildId, moduleType, simple_config?, advanced_config? } — Update module settings
+- add_warning: { guildId, targetUserId, targetUsername, reason, points } — Issue a warning
+- kick_user: { guildId, targetUserId, reason } — Kick a member
+- ban_user: { guildId, targetUserId, reason } — Ban a member
+- timeout_user: { guildId, targetUserId, durationMs, reason } — Timeout a member
+- leave_guild: { guildId } — Make the bot leave a server
+- start_bot: {} — Start the bot
+- stop_bot: {} — Stop the bot
+- restart_bot: {} — Restart the bot
+- sync_guilds: {} — Synchronize all guild data
+- server_builder: { guildId, structure } — Build a complete server structure. structure is an object with:
+  - categories: array of { name, channels: [{ name, type: "text"|"voice"|"announcement"|"forum"|"stage" }] }
+  - roles: array of { name, color (hex), permissions?: string[], hoist?: boolean, mentionable?: boolean }
+  - cleanup_existing?: boolean (if true, delete ALL existing channels and non-managed roles first, then rebuild from scratch)
+- server_clone: { sourceGuildId, targetGuildId, cleanup_target?: boolean } — Clone server structure (roles, channels, categories, topics, nsfw flags) from source to target. If cleanup_target is true, wipes target first.
+- create_channels: { guildId, channels } — Create specific channels. channels is array of { name, type, category? }
+- create_roles: { guildId, roles } — Create specific roles. roles is array of { name, color, hoist?, mentionable? }
+- delete_channels: { guildId, channelNames } — Delete channels by name. channelNames is array of strings.
+- delete_roles: { guildId, roleNames } — Delete roles by name. roleNames is array of strings.
+- rename_channels: { guildId, renames } — Rename channels. renames is array of { oldName, newName }.
+- send_announcement: { guildId, channelName, message, embed? } — Send a message (and optional embed) to a named channel.
+- mass_role_assign: { guildId, roleName, action } — action is "add" or "remove". Applies/removes a role to/from ALL members.
 
 RULES:
 1. Always explain what you're about to do before executing.
-2. For destructive actions (ban, kick, leave_guild), explicitly mention what will happen and ask for confirmation unless the user has already confirmed.
-3. If a user asks about a feature or setting, explain it clearly.
+2. For destructive actions (ban, kick, leave_guild, server_builder with cleanup_existing, delete_channels, delete_roles), explicitly mention what will happen and ask for confirmation unless the user has already confirmed.
+3. If a user asks about a feature or setting, explain it clearly and in detail. You know every section of the platform.
 4. When referencing guilds, use their name (not raw IDs) in your response text.
 5. You have access to the full platform to help with safe, authorized tasks only.
-6. Be concise but helpful.
+6. Be concise but helpful. Vary your tone and phrasing — never repeat the same response structure. Use variety seed ${varietySeed} for uniqueness.
 7. If an action is unclear, ask for clarification.
 8. ${buildLanguageInstruction(user)}
 9. Never expose private or security-sensitive information, even if the user asks.
 10. For obvious bot power requests, always execute the action even if the user writes in uppercase, with typos, or with short wording.
 11. Treat phrases like "eteins la bot", "arrete le bot", "rallume le", "allume le", "demare le bot", and "redemarre le bot" as clear bot control requests and include the correct action block.
+12. For server_builder, interactively ask the user what they want (categories, channels, voice channels, roles) if they haven't specified. Build a complete, clean, organized structure. Propose a detailed plan and ask for confirmation before executing.
+13. For server_clone, verify both guilds are accessible before proceeding. Warn the user if cleanup_target is true.
+14. VARIETY: Every response must feel unique. Never use the same opening, structure, or phrasing twice in a row. Be creative, intelligent, and dynamic. ${toneDirective}
+15. For content-generation tasks (jokes, facts, tips), use genuine randomness and creativity. Never repeat the same content.
+16. For send_announcement, find the channel by name in the guild and send the message.
+17. For mass_role_assign, warn the user about the scope of the action before executing.
 
 Respond naturally in markdown. Only include one action block per response.`;
 }
@@ -1024,6 +1088,420 @@ async function executeAction(userId, actionBlock, botToken) {
       const { syncGuildsForUser } = require('./guildSyncService');
       await syncGuildsForUser(userId, proc.client, token);
       return { success: true, message: 'Guilds synced' };
+    }
+
+    case 'server_builder': {
+      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
+      if (!guild) return { error: 'Guild not found' };
+      const structure = params.structure;
+      if (!structure) return { error: 'No structure provided' };
+
+      const results = { categories: 0, channels: 0, roles: 0, deleted: { channels: 0, roles: 0 }, errors: [] };
+
+      try {
+        // Cleanup existing channels and roles if requested
+        if (structure.cleanup_existing) {
+          try {
+            const existingChannels = await discordService.getGuildChannels(token, guild.guild_id);
+            const existingRoles = await discordService.getGuildRoles(token, guild.guild_id);
+
+            // Delete all channels (categories last since they contain children)
+            const nonCategories = existingChannels.filter(c => c.type !== 4);
+            const categories = existingChannels.filter(c => c.type === 4);
+
+            for (const ch of nonCategories) {
+              try {
+                await discordService.deleteChannel(token, ch.id, 'Server Builder cleanup');
+                results.deleted.channels++;
+              } catch (err) {
+                results.errors.push(`Delete channel "${ch.name}": ${err.message}`);
+              }
+            }
+            for (const cat of categories) {
+              try {
+                await discordService.deleteChannel(token, cat.id, 'Server Builder cleanup');
+                results.deleted.channels++;
+              } catch (err) {
+                results.errors.push(`Delete category "${cat.name}": ${err.message}`);
+              }
+            }
+
+            // Delete non-managed, non-@everyone roles
+            const deletableRoles = existingRoles.filter(r => !r.managed && r.name !== '@everyone');
+            for (const role of deletableRoles) {
+              try {
+                await discordService.deleteRole(token, guild.guild_id, role.id, 'Server Builder cleanup');
+                results.deleted.roles++;
+              } catch (err) {
+                results.errors.push(`Delete role "${role.name}": ${err.message}`);
+              }
+            }
+          } catch (err) {
+            results.errors.push(`Cleanup phase failed: ${err.message}`);
+          }
+        }
+
+        // Create roles
+        if (structure.roles && Array.isArray(structure.roles)) {
+          for (const role of structure.roles) {
+            try {
+              await discordService.createRole(token, guild.guild_id, {
+                name: role.name,
+                color: role.color ? parseInt(role.color.replace('#', ''), 16) : 0,
+                hoist: role.hoist || false,
+                mentionable: role.mentionable || false,
+              });
+              results.roles++;
+            } catch (err) {
+              results.errors.push(`Role "${role.name}": ${err.message}`);
+            }
+          }
+        }
+
+        // Create categories and their channels
+        if (structure.categories && Array.isArray(structure.categories)) {
+          for (const category of structure.categories) {
+            try {
+              const catChannel = await discordService.createChannel(token, guild.guild_id, {
+                name: category.name,
+                type: 4,
+              });
+              results.categories++;
+
+              if (category.channels && Array.isArray(category.channels)) {
+                for (const ch of category.channels) {
+                  try {
+                    const channelType = ch.type === 'voice' ? 2 : ch.type === 'announcement' ? 5 : ch.type === 'forum' ? 15 : ch.type === 'stage' ? 13 : 0;
+                    await discordService.createChannel(token, guild.guild_id, {
+                      name: ch.name,
+                      type: channelType,
+                      parent_id: catChannel.id,
+                    });
+                    results.channels++;
+                  } catch (err) {
+                    results.errors.push(`Channel "${ch.name}": ${err.message}`);
+                  }
+                }
+              }
+            } catch (err) {
+              results.errors.push(`Category "${category.name}": ${err.message}`);
+            }
+          }
+        }
+      } catch (err) {
+        return { error: `Server builder failed: ${err.message}` };
+      }
+
+      const cleanupInfo = structure.cleanup_existing
+        ? `Cleaned up ${results.deleted.channels} channels and ${results.deleted.roles} roles. `
+        : '';
+      const summary = `${cleanupInfo}Created ${results.roles} roles, ${results.categories} categories, ${results.channels} channels`;
+      if (results.errors.length > 0) {
+        return { success: true, message: `${summary}. ${results.errors.length} error(s): ${results.errors.slice(0, 5).join('; ')}` };
+      }
+      return { success: true, message: summary };
+    }
+
+    case 'server_clone': {
+      const sourceGuild = db.findOne('guilds', { id: params.sourceGuildId, user_id: userId });
+      const targetGuild = db.findOne('guilds', { id: params.targetGuildId, user_id: userId });
+      if (!sourceGuild) return { error: 'Source guild not found' };
+      if (!targetGuild) return { error: 'Target guild not found' };
+
+      const results = { roles: 0, categories: 0, channels: 0, deleted: { channels: 0, roles: 0 }, errors: [] };
+
+      try {
+        // Optional: cleanup target before cloning
+        if (params.cleanup_target) {
+          try {
+            const targetChannels = await discordService.getGuildChannels(token, targetGuild.guild_id);
+            const targetRoles = await discordService.getGuildRoles(token, targetGuild.guild_id);
+
+            for (const ch of targetChannels) {
+              try {
+                await discordService.deleteChannel(token, ch.id, 'Server Clone cleanup');
+                results.deleted.channels++;
+              } catch (err) {
+                results.errors.push(`Delete "${ch.name}": ${err.message}`);
+              }
+            }
+
+            for (const role of targetRoles.filter(r => !r.managed && r.name !== '@everyone')) {
+              try {
+                await discordService.deleteRole(token, targetGuild.guild_id, role.id, 'Server Clone cleanup');
+                results.deleted.roles++;
+              } catch (err) {
+                results.errors.push(`Delete role "${role.name}": ${err.message}`);
+              }
+            }
+          } catch (err) {
+            results.errors.push(`Target cleanup failed: ${err.message}`);
+          }
+        }
+
+        const sourceChannels = await discordService.getGuildChannels(token, sourceGuild.guild_id);
+        const sourceRoles = await discordService.getGuildRoles(token, sourceGuild.guild_id);
+
+        // Clone roles (sorted by position, highest first for hierarchy)
+        const userRoles = sourceRoles.filter(r => !r.managed && r.name !== '@everyone').sort((a, b) => b.position - a.position);
+        for (const role of userRoles) {
+          try {
+            await discordService.createRole(token, targetGuild.guild_id, {
+              name: role.name,
+              color: role.color || 0,
+              hoist: role.hoist || false,
+              mentionable: role.mentionable || false,
+            });
+            results.roles++;
+          } catch (err) {
+            results.errors.push(`Role "${role.name}": ${err.message}`);
+          }
+        }
+
+        // Clone categories first
+        const srcCategories = sourceChannels.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
+        const categoryMap = new Map();
+        for (const cat of srcCategories) {
+          try {
+            const newCat = await discordService.createChannel(token, targetGuild.guild_id, {
+              name: cat.name,
+              type: 4,
+            });
+            categoryMap.set(cat.id, newCat.id);
+            results.categories++;
+          } catch (err) {
+            results.errors.push(`Category "${cat.name}": ${err.message}`);
+          }
+        }
+
+        // Clone non-category channels with topic & nsfw preservation
+        const nonCategories = sourceChannels.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
+        for (const ch of nonCategories) {
+          try {
+            const opts = {
+              name: ch.name,
+              type: ch.type,
+            };
+            if (ch.parent_id && categoryMap.has(ch.parent_id)) {
+              opts.parent_id = categoryMap.get(ch.parent_id);
+            }
+            if (ch.topic) opts.topic = ch.topic;
+            if (ch.nsfw) opts.nsfw = ch.nsfw;
+            if (ch.rate_limit_per_user) opts.rate_limit_per_user = ch.rate_limit_per_user;
+            if (ch.bitrate && ch.type === 2) opts.bitrate = ch.bitrate;
+            if (ch.user_limit && ch.type === 2) opts.user_limit = ch.user_limit;
+            await discordService.createChannel(token, targetGuild.guild_id, opts);
+            results.channels++;
+          } catch (err) {
+            results.errors.push(`Channel "${ch.name}": ${err.message}`);
+          }
+        }
+      } catch (err) {
+        return { error: `Server clone failed: ${err.message}` };
+      }
+
+      const cleanupInfo = params.cleanup_target
+        ? `Cleaned up ${results.deleted.channels} channels and ${results.deleted.roles} roles. `
+        : '';
+      const summary = `${cleanupInfo}Cloned ${results.roles} roles, ${results.categories} categories, ${results.channels} channels`;
+      if (results.errors.length > 0) {
+        return { success: true, message: `${summary}. ${results.errors.length} error(s): ${results.errors.slice(0, 5).join('; ')}` };
+      }
+      return { success: true, message: summary };
+    }
+
+    case 'create_channels': {
+      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
+      if (!guild) return { error: 'Guild not found' };
+      if (!params.channels || !Array.isArray(params.channels)) return { error: 'No channels provided' };
+
+      let created = 0;
+      const errors = [];
+      for (const ch of params.channels) {
+        try {
+          const channelType = ch.type === 'voice' ? 2 : ch.type === 'announcement' ? 5 : ch.type === 'forum' ? 15 : ch.type === 'stage' ? 13 : ch.type === 'category' ? 4 : 0;
+          await discordService.createChannel(token, guild.guild_id, {
+            name: ch.name,
+            type: channelType,
+            parent_id: ch.parent_id || undefined,
+          });
+          created++;
+        } catch (err) {
+          errors.push(`"${ch.name}": ${err.message}`);
+        }
+      }
+
+      return { success: true, message: `Created ${created}/${params.channels.length} channels${errors.length ? `. Errors: ${errors.slice(0, 3).join('; ')}` : ''}` };
+    }
+
+    case 'create_roles': {
+      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
+      if (!guild) return { error: 'Guild not found' };
+      if (!params.roles || !Array.isArray(params.roles)) return { error: 'No roles provided' };
+
+      let created = 0;
+      const errors = [];
+      for (const role of params.roles) {
+        try {
+          await discordService.createRole(token, guild.guild_id, {
+            name: role.name,
+            color: role.color ? parseInt(String(role.color).replace('#', ''), 16) : 0,
+            hoist: role.hoist || false,
+            mentionable: role.mentionable || false,
+          });
+          created++;
+        } catch (err) {
+          errors.push(`"${role.name}": ${err.message}`);
+        }
+      }
+
+      return { success: true, message: `Created ${created}/${params.roles.length} roles${errors.length ? `. Errors: ${errors.slice(0, 3).join('; ')}` : ''}` };
+    }
+
+    case 'delete_channels': {
+      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
+      if (!guild) return { error: 'Guild not found' };
+      if (!params.channelNames || !Array.isArray(params.channelNames)) return { error: 'No channel names provided' };
+
+      const existingChannels = await discordService.getGuildChannels(token, guild.guild_id);
+      const nameLower = params.channelNames.map(n => String(n).toLowerCase());
+      const toDelete = existingChannels.filter(ch => nameLower.includes(ch.name.toLowerCase()));
+
+      let deleted = 0;
+      const errors = [];
+      for (const ch of toDelete) {
+        try {
+          await discordService.deleteChannel(token, ch.id, 'AI Agent action');
+          deleted++;
+        } catch (err) {
+          errors.push(`"${ch.name}": ${err.message}`);
+        }
+      }
+
+      return { success: true, message: `Deleted ${deleted}/${params.channelNames.length} channels${errors.length ? `. Errors: ${errors.slice(0, 3).join('; ')}` : ''}` };
+    }
+
+    case 'delete_roles': {
+      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
+      if (!guild) return { error: 'Guild not found' };
+      if (!params.roleNames || !Array.isArray(params.roleNames)) return { error: 'No role names provided' };
+
+      const existingRoles = await discordService.getGuildRoles(token, guild.guild_id);
+      const nameLower = params.roleNames.map(n => String(n).toLowerCase());
+      const toDelete = existingRoles.filter(r => !r.managed && r.name !== '@everyone' && nameLower.includes(r.name.toLowerCase()));
+
+      let deleted = 0;
+      const errors = [];
+      for (const role of toDelete) {
+        try {
+          await discordService.deleteRole(token, guild.guild_id, role.id, 'AI Agent action');
+          deleted++;
+        } catch (err) {
+          errors.push(`"${role.name}": ${err.message}`);
+        }
+      }
+
+      return { success: true, message: `Deleted ${deleted}/${params.roleNames.length} roles${errors.length ? `. Errors: ${errors.slice(0, 3).join('; ')}` : ''}` };
+    }
+
+    case 'rename_channels': {
+      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
+      if (!guild) return { error: 'Guild not found' };
+      if (!params.renames || !Array.isArray(params.renames)) return { error: 'No renames provided' };
+
+      const existingChannels = await discordService.getGuildChannels(token, guild.guild_id);
+      let renamed = 0;
+      const errors = [];
+
+      for (const { oldName, newName } of params.renames) {
+        const channel = existingChannels.find(ch => ch.name.toLowerCase() === String(oldName || '').toLowerCase());
+        if (!channel) {
+          errors.push(`Channel "${oldName}" not found`);
+          continue;
+        }
+        try {
+          await discordService.modifyChannel(token, channel.id, { name: newName }, 'AI Agent rename');
+          renamed++;
+        } catch (err) {
+          errors.push(`"${oldName}": ${err.message}`);
+        }
+      }
+
+      return { success: true, message: `Renamed ${renamed}/${params.renames.length} channels${errors.length ? `. Errors: ${errors.slice(0, 3).join('; ')}` : ''}` };
+    }
+
+    case 'send_announcement': {
+      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
+      if (!guild) return { error: 'Guild not found' };
+      if (!params.channelName && !params.channelId) return { error: 'No channel specified' };
+
+      let channelId = params.channelId;
+      if (!channelId && params.channelName) {
+        const existingChannels = await discordService.getGuildChannels(token, guild.guild_id);
+        const found = existingChannels.find(ch => ch.name.toLowerCase() === String(params.channelName).toLowerCase());
+        if (!found) return { error: `Channel "${params.channelName}" not found` };
+        channelId = found.id;
+      }
+
+      const payload = {};
+      if (params.message) payload.content = params.message;
+      if (params.embed) {
+        payload.embeds = [{
+          title: params.embed.title || undefined,
+          description: params.embed.description || params.message || undefined,
+          color: params.embed.color ? parseInt(String(params.embed.color).replace('#', ''), 16) : 0x22d3ee,
+          footer: params.embed.footer ? { text: params.embed.footer } : undefined,
+          timestamp: new Date().toISOString(),
+        }];
+        if (payload.embeds[0] && payload.content) delete payload.content;
+      }
+
+      try {
+        await discordService.sendMessage(token, channelId, payload);
+        return { success: true, message: `Announcement sent to #${params.channelName || channelId}` };
+      } catch (err) {
+        return { error: `Failed to send announcement: ${err.message}` };
+      }
+    }
+
+    case 'mass_role_assign': {
+      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
+      if (!guild) return { error: 'Guild not found' };
+      if (!params.roleName) return { error: 'No role name provided' };
+
+      const existingRoles = await discordService.getGuildRoles(token, guild.guild_id);
+      const targetRole = existingRoles.find(r => r.name.toLowerCase() === String(params.roleName).toLowerCase());
+      if (!targetRole) return { error: `Role "${params.roleName}" not found` };
+
+      // Fetch members (limited to first batch for safety)
+      const members = await discordService.getGuildMembers(token, guild.guild_id, 1000);
+      let affected = 0;
+      const errors = [];
+      const action = params.action === 'remove' ? 'remove' : 'add';
+
+      for (const member of members) {
+        if (member.user?.bot) continue;
+        const hasRole = member.roles?.includes(targetRole.id);
+
+        if (action === 'add' && !hasRole) {
+          try {
+            await discordService.addRole(token, guild.guild_id, member.user.id, targetRole.id, 'AI Agent mass assign');
+            affected++;
+          } catch (err) {
+            errors.push(`${member.user?.username || member.user?.id}: ${err.message}`);
+          }
+        }
+        if (action === 'remove' && hasRole) {
+          try {
+            await discordService.removeRole(token, guild.guild_id, member.user.id, targetRole.id, 'AI Agent mass remove');
+            affected++;
+          } catch (err) {
+            errors.push(`${member.user?.username || member.user?.id}: ${err.message}`);
+          }
+        }
+      }
+
+      return { success: true, message: `${action === 'add' ? 'Added' : 'Removed'} role "${params.roleName}" for ${affected} members${errors.length ? `. ${errors.length} issue(s)` : ''}` };
     }
 
     default:

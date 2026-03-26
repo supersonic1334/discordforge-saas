@@ -135,10 +135,38 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
 router.get('/me', requireAuth, (req, res) => {
   // Attach bot token info
   const tokenRow = db.findOne('bot_tokens', { user_id: req.user.id });
-  const botStatus = botManager.getBotStatus(req.user.id);
+  const accessibleGuildCounts = db.db.prepare(`
+    SELECT
+      COUNT(DISTINCT g.id) AS total_count,
+      COUNT(DISTINCT CASE WHEN g.user_id != ? THEN g.id END) AS shared_count
+    FROM guilds g
+    LEFT JOIN guild_access_members gam
+      ON gam.guild_id = g.id
+      AND gam.user_id = ?
+    WHERE g.is_active = 1
+      AND (g.user_id = ? OR gam.user_id IS NOT NULL)
+  `).get(req.user.id, req.user.id, req.user.id);
+  const totalAccessibleGuilds = Number(accessibleGuildCounts?.total_count || 0);
+  const sharedGuildCount = Number(accessibleGuildCounts?.shared_count || 0);
+  const botOwnerUserId = tokenRow ? req.user.id : (
+    db.db.prepare(`
+      SELECT g.user_id
+      FROM guild_access_members gam
+      JOIN guilds g ON g.id = gam.guild_id
+      JOIN bot_tokens bt ON bt.user_id = g.user_id AND bt.is_valid = 1
+      WHERE gam.user_id = ?
+        AND g.is_active = 1
+      ORDER BY lower(g.name) ASC
+      LIMIT 1
+    `).get(req.user.id)?.user_id || req.user.id
+  );
+  const botStatus = botManager.getBotStatus(botOwnerUserId);
   res.json({
     user: authService.safeUser(req.user),
-    hasBotToken: !!tokenRow,
+    hasBotToken: !!tokenRow || totalAccessibleGuilds > 0,
+    hasOwnBotToken: !!tokenRow,
+    accessibleGuildCount: totalAccessibleGuilds,
+    sharedGuildCount,
     botStatus: botStatus ?? null,
   });
 });

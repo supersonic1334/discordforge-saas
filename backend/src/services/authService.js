@@ -104,12 +104,24 @@ async function register({ email, username, password }) {
 async function login({ email, password }) {
   const normalizedEmail = normalizeEmail(email);
   const user = findUserByEmail(normalizedEmail);
-  if (!user) throw Object.assign(new Error('Invalid credentials'), { status: 401 });
-  if (!user.is_active) throw Object.assign(new Error('Account deactivated'), { status: 403 });
-  if (!user.password_hash) throw Object.assign(new Error('Use OAuth to login'), { status: 400 });
+  if (!user) {
+    logger.warn(`Failed login: unknown email attempted`, { email: normalizedEmail });
+    throw Object.assign(new Error('Invalid credentials'), { status: 401 });
+  }
+  if (!user.is_active) {
+    logger.warn(`Failed login: deactivated account`, { userId: user.id, email: normalizedEmail });
+    throw Object.assign(new Error('Account deactivated'), { status: 403 });
+  }
+  if (!user.password_hash) {
+    logger.warn(`Failed login: OAuth-only account attempted password login`, { userId: user.id });
+    throw Object.assign(new Error('Use OAuth to login'), { status: 400 });
+  }
 
   const valid = await bcrypt.compare(password, user.password_hash);
-  if (!valid) throw Object.assign(new Error('Invalid credentials'), { status: 401 });
+  if (!valid) {
+    logger.warn(`Failed login: wrong password`, { userId: user.id, email: normalizedEmail });
+    throw Object.assign(new Error('Invalid credentials'), { status: 401 });
+  }
 
   db.update('users', { last_login_at: new Date().toISOString() }, { id: user.id });
 

@@ -363,9 +363,12 @@ function buildAssistantFallbackPrompt({ mode, commandInput, prompt, currentComma
 `
     : ''
 
-  return `Tu es un generateur de commandes DiscordForger.
+  const randomSeed = Math.random().toString(36).slice(2, 8)
+
+  return `Tu es un generateur de commandes DiscordForger expert et creatif.
 Ne fais aucune action d'administration.
 Reponds en ${language}.
+Seed aleatoire: ${randomSeed} (utilise cette seed pour varier tes reponses — ne genere JAMAIS la meme reponse deux fois).
 ${existingBlock}
 Mode demande: ${mode === 'slash' ? 'slash Discord' : 'prefixe texte'}
 ${requestedInstruction}
@@ -374,7 +377,7 @@ Tache utilisateur:
 ${prompt}
 
 Retour obligatoire:
-1. Une courte explication.
+1. Une courte explication creative et variee (change ton style a chaque fois).
 2. Puis exactement un bloc \`\`\`command avec du JSON valide.
 
 Champs autorises dans le JSON:
@@ -391,6 +394,9 @@ Regles:
 - pour slash, nom en minuscules compatible Discord
 - pas de JavaScript, pas de webhook, pas d'alias, pas d'options avancees
 - placeholders autorises: {mention} {username} {server} {channel} {memberCount} {args} {arg1} {arg2}
+- VARIETE OBLIGATOIRE: chaque reponse de commande doit etre unique et creative. Pour les commandes de contenu (blagues, faits, citations), utilise du contenu genuinement different a chaque fois.
+- Les descriptions doivent etre concises mais engageantes.
+- Les reponses doivent etre riches, bien formatees, et professionnelles.
 
 Format attendu:
 \`\`\`command

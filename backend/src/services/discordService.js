@@ -224,10 +224,63 @@ async function deleteAutoModerationRule(token, guildId, ruleId, reason = '') {
 }
 
 /**
+ * Create a channel in a guild.
+ */
+async function createChannel(token, guildId, payload, reason = '') {
+  return discordFetch(`/guilds/${guildId}/channels`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: reason ? { 'X-Audit-Log-Reason': encodeURIComponent(reason) } : {},
+  });
+}
+
+/**
+ * Create a role in a guild.
+ */
+async function createRole(token, guildId, payload, reason = '') {
+  return discordFetch(`/guilds/${guildId}/roles`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: reason ? { 'X-Audit-Log-Reason': encodeURIComponent(reason) } : {},
+  });
+}
+
+/**
  * Leave a guild.
  */
 async function leaveGuild(token, guildId) {
   return discordFetch(`/users/@me/guilds/${guildId}`, token, { method: 'DELETE' });
+}
+
+/**
+ * Delete a channel.
+ */
+async function deleteChannel(token, channelId, reason = '') {
+  return discordFetch(`/channels/${channelId}`, token, {
+    method: 'DELETE',
+    headers: reason ? { 'X-Audit-Log-Reason': encodeURIComponent(reason) } : {},
+  });
+}
+
+/**
+ * Delete a role.
+ */
+async function deleteRole(token, guildId, roleId, reason = '') {
+  return discordFetch(`/guilds/${guildId}/roles/${roleId}`, token, {
+    method: 'DELETE',
+    headers: reason ? { 'X-Audit-Log-Reason': encodeURIComponent(reason) } : {},
+  });
+}
+
+/**
+ * Modify a channel (e.g. move to category, rename).
+ */
+async function modifyChannel(token, channelId, payload, reason = '') {
+  return discordFetch(`/channels/${channelId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    headers: reason ? { 'X-Audit-Log-Reason': encodeURIComponent(reason) } : {},
+  });
 }
 
 /**
@@ -287,6 +340,16 @@ async function addRole(token, guildId, userId, roleId, reason = '') {
   return discordFetch(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, token, {
     method: 'PUT',
     headers: { 'X-Audit-Log-Reason': encodeURIComponent(reason) },
+  });
+}
+
+/**
+ * Remove a role from a member.
+ */
+async function removeRole(token, guildId, userId, roleId, reason = '') {
+  return discordFetch(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, token, {
+    method: 'DELETE',
+    headers: reason ? { 'X-Audit-Log-Reason': encodeURIComponent(reason) } : {},
   });
 }
 
@@ -374,6 +437,11 @@ module.exports = {
   createAutoModerationRule,
   modifyAutoModerationRule,
   deleteAutoModerationRule,
+  createChannel,
+  createRole,
+  deleteChannel,
+  deleteRole,
+  modifyChannel,
   leaveGuild,
   deleteMessage,
   timeoutMember,
@@ -381,6 +449,7 @@ module.exports = {
   banMember,
   unbanMember,
   addRole,
+  removeRole,
   sendMessage,
   createDmChannel,
   sendDirectMessage,

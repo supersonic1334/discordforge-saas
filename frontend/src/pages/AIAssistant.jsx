@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bot, User, CheckCircle, AlertCircle, Sparkles, Mic } from 'lucide-react'
+import { Send, Bot, User, CheckCircle, AlertCircle, Sparkles, Mic, MicOff, Zap, Server, Shield, Terminal, MessageCircle, Search, ScrollText, Settings, HelpCircle } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
 import { aiAPI } from '../services/api'
@@ -23,7 +23,7 @@ function Message({ msg, locale, actionLabel }) {
       className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
     >
       {!isUser && (
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/20 border border-neon-violet/30 flex items-center justify-center shrink-0 mt-0.5">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/20 border border-neon-violet/30 flex items-center justify-center shrink-0 mt-0.5">
           <Bot className="w-4 h-4 text-neon-violet" />
         </div>
       )}
@@ -43,8 +43,12 @@ function Message({ msg, locale, actionLabel }) {
                 code: ({ children }) => <code className="bg-white/10 px-1.5 py-0.5 rounded font-mono text-neon-cyan text-xs">{children}</code>,
                 pre: ({ children }) => <pre className="bg-white/[0.06] border border-white/[0.08] rounded-xl p-3 mt-2 overflow-x-auto">{children}</pre>,
                 ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 text-white/80">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 text-white/80">{children}</ol>,
                 li: ({ children }) => <li className="text-sm">{children}</li>,
                 strong: ({ children }) => <strong className="text-white font-600">{children}</strong>,
+                h3: ({ children }) => <h3 className="text-white font-display font-700 text-base mt-3 mb-1">{children}</h3>,
+                h4: ({ children }) => <h4 className="text-white font-display font-600 text-sm mt-2 mb-1">{children}</h4>,
+                blockquote: ({ children }) => <blockquote className="border-l-2 border-neon-violet/30 pl-3 my-2 text-white/70 italic">{children}</blockquote>,
               }}
             >
               {msg.content}
@@ -56,33 +60,47 @@ function Message({ msg, locale, actionLabel }) {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className={`flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg text-xs font-mono ${
+            className={`flex items-center gap-2 mt-2 px-3 py-2 rounded-xl text-xs font-mono ${
               msg.actionExecuted.result?.error
                 ? 'bg-red-500/10 border border-red-500/20 text-red-400'
-                : 'bg-green-500/10 border border-green-500/20 text-green-400'
+                : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
             }`}
           >
             {msg.actionExecuted.result?.error
-              ? <AlertCircle className="w-3 h-3" />
-              : <CheckCircle className="w-3 h-3" />}
-            <span className="opacity-60">{actionLabel}:</span> {msg.actionExecuted.action}
-            {msg.actionExecuted.result?.error && <span className="text-red-400/80"> - {msg.actionExecuted.result.error}</span>}
+              ? <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              : <CheckCircle className="w-3.5 h-3.5 shrink-0" />}
+            <span className="opacity-60">{actionLabel}:</span>
+            <span className="font-600">{msg.actionExecuted.action}</span>
+            {msg.actionExecuted.result?.message && !msg.actionExecuted.result?.error && (
+              <span className="text-emerald-400/70"> — {msg.actionExecuted.result.message}</span>
+            )}
+            {msg.actionExecuted.result?.error && (
+              <span className="text-red-400/80"> — {msg.actionExecuted.result.error}</span>
+            )}
           </motion.div>
         )}
 
-        <p className="text-xs text-white/20 font-mono mt-1 px-1">
+        <p className="text-[10px] text-white/15 font-mono mt-1 px-1">
           {new Date(msg.ts).toLocaleTimeString(locale)}
         </p>
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-xl bg-neon-cyan/10 border border-neon-cyan/20 flex items-center justify-center shrink-0 mt-0.5">
+        <div className="w-9 h-9 rounded-xl bg-neon-cyan/10 border border-neon-cyan/20 flex items-center justify-center shrink-0 mt-0.5">
           <User className="w-4 h-4 text-neon-cyan" />
         </div>
       )}
     </motion.div>
   )
 }
+
+const QUICK_ACTIONS = [
+  { icon: Zap, label: 'Start bot', action: 'Demarre le bot' },
+  { icon: Server, label: 'Build server', action: 'Construis un serveur pour moi' },
+  { icon: Shield, label: 'Protection', action: 'Active tous les modules de protection' },
+  { icon: Terminal, label: 'Commands', action: 'Cree une commande bonjour qui dit bonjour' },
+  { icon: HelpCircle, label: 'Help', action: 'Explique moi toutes les fonctionnalites de la plateforme' },
+]
 
 export default function AIAssistant() {
   const { t, locale } = useI18n()
@@ -98,8 +116,9 @@ export default function AIAssistant() {
   const [aiStatus, setAiStatus] = useState(null)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
-  const { selectedGuildId } = useGuildStore()
+  const { selectedGuildId, guilds } = useGuildStore()
   const suggestions = t('assistant.suggestions', [])
+  const selectedGuild = useMemo(() => guilds.find(g => g.id === selectedGuildId), [guilds, selectedGuildId])
   const speech = useSpeechToText({
     value: input,
     onChange: setInput,
@@ -153,7 +172,7 @@ export default function AIAssistant() {
     } catch (err) {
       setMessages((prev) => [...prev, {
         role: 'assistant',
-        content: 'X ' + getAssistantErrorMessage(err, t('assistant.unavailable')),
+        content: '⚠️ ' + getAssistantErrorMessage(err, t('assistant.unavailable')),
         ts: Date.now(),
       }])
     }
@@ -163,18 +182,26 @@ export default function AIAssistant() {
 
   return (
     <div className="flex flex-col h-full max-h-screen overflow-x-hidden">
-      <div className="flex items-center gap-3 p-4 sm:p-6 border-b border-white/[0.06] shrink-0">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/20 border border-neon-violet/30 flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-neon-violet" />
+      <div className="flex items-center justify-between gap-3 p-4 sm:p-6 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/20 border border-neon-violet/30 flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-neon-violet" />
+          </div>
+          <div>
+            <h1 className="font-display font-700 text-lg text-white">{t('assistant.title')}</h1>
+            <p className="text-xs text-white/40">
+              {aiStatus?.configured
+                ? <span className="text-emerald-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" /> {t('assistant.ready')}</span>
+                : <span className="text-amber-400">! {t('assistant.notConfigured')}</span>}
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="font-display font-700 text-lg text-white">{t('assistant.title')}</h1>
-          <p className="text-xs text-white/40">
-            {aiStatus?.configured
-              ? <span className="text-green-400">● {t('assistant.ready')}</span>
-              : <span className="text-amber-400">! {t('assistant.notConfigured')}</span>}
-          </p>
-        </div>
+        {selectedGuild && (
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-white/8 bg-white/[0.02] text-white/40 text-xs font-mono">
+            <Server className="w-3 h-3" />
+            {selectedGuild.name}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none p-4 sm:p-6 space-y-4">
@@ -184,7 +211,7 @@ export default function AIAssistant() {
 
         {loading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
-            <div className="w-8 h-8 rounded-xl bg-neon-violet/10 border border-neon-violet/20 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-neon-violet/10 border border-neon-violet/20 flex items-center justify-center shrink-0">
               <Bot className="w-4 h-4 text-neon-violet" />
             </div>
             <div className="px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
@@ -205,26 +232,64 @@ export default function AIAssistant() {
       </div>
 
       {messages.length <= 1 && (
-        <div className="px-4 sm:px-6 pb-2 flex gap-2 flex-wrap">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              onClick={() => send(suggestion)}
-              className="px-3 py-1.5 rounded-lg text-xs font-mono text-neon-cyan/60 hover:text-neon-cyan border border-neon-cyan/10 hover:border-neon-cyan/30 hover:bg-neon-cyan/5 transition-all duration-200"
-            >
-              {suggestion}
-            </button>
-          ))}
+        <div className="px-4 sm:px-6 pb-3 space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            {suggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                onClick={() => send(suggestion)}
+                className="px-3 py-1.5 rounded-lg text-xs font-mono text-neon-cyan/60 hover:text-neon-cyan border border-neon-cyan/10 hover:border-neon-cyan/30 hover:bg-neon-cyan/5 transition-all duration-200"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            {QUICK_ACTIONS.map((qa) => {
+              const Icon = qa.icon
+              return (
+                <button
+                  key={qa.label}
+                  onClick={() => send(qa.action)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-violet-300/60 hover:text-violet-300 border border-violet-500/10 hover:border-violet-500/25 hover:bg-violet-500/5 transition-all duration-200"
+                >
+                  <Icon className="w-3 h-3" />
+                  {qa.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 
       <div className="p-3 sm:p-4 border-t border-white/[0.06] shrink-0">
         <div className="space-y-2">
-          {(speech.isListening || speech.isRequestingPermission) && (
-            <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/70'}`}>
-              {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
-            </p>
-          )}
+          <AnimatePresence>
+            {(speech.isListening || speech.isRequestingPermission) && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                  <VoiceMeter
+                    bars={speech.audioBars}
+                    active={speech.isListening}
+                    processing={speech.isRequestingPermission}
+                    accent={speech.isRequestingPermission ? 'amber' : 'violet'}
+                  />
+                  <p className={`text-xs font-mono flex-1 ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-violet/70'}`}>
+                    {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
+                  </p>
+                  {speech.interimTranscript && (
+                    <p className="text-xs text-white/40 truncate max-w-[200px]">{speech.interimTranscript}</p>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="relative">
             <textarea
@@ -243,13 +308,6 @@ export default function AIAssistant() {
               style={{ height: 'auto' }}
             />
             <div className="absolute right-3 bottom-3 flex items-center gap-2">
-              {(speech.isListening || speech.isRequestingPermission) && (
-                <VoiceMeter
-                  bars={speech.audioBars}
-                  active={speech.isListening}
-                  accent={speech.isRequestingPermission ? 'amber' : 'violet'}
-                />
-              )}
               <motion.button
                 type="button"
                 onClick={() => (speech.isListening ? speech.stop() : speech.start())}
@@ -258,14 +316,14 @@ export default function AIAssistant() {
                 whileTap={{ scale: 0.96 }}
                 className={`h-11 w-11 rounded-full border flex items-center justify-center transition-all shrink-0 disabled:opacity-70 ${
                   speech.isListening
-                    ? 'border-red-500/35 bg-red-500/14 text-red-200 shadow-[0_0_20px_rgba(248,113,113,0.2)]'
+                    ? 'border-red-500/35 bg-red-500/14 text-red-200 shadow-[0_0_20px_rgba(248,113,113,0.2)] animate-pulse'
                     : speech.isRequestingPermission
                       ? 'border-amber-400/35 bg-amber-400/12 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.18)]'
-                      : 'border-white/12 bg-white/[0.06] text-white/85 hover:border-neon-cyan/35 hover:bg-neon-cyan/10 hover:text-neon-cyan'
+                      : 'border-white/12 bg-white/[0.06] text-white/85 hover:border-neon-violet/35 hover:bg-neon-violet/10 hover:text-neon-violet'
                 }`}
                 title={speech.isListening ? t('assistant.voiceStop') : t('assistant.voiceStart')}
               >
-                <Mic className="w-4 h-4" />
+                {speech.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </motion.button>
               <motion.button
                 onClick={() => send()}

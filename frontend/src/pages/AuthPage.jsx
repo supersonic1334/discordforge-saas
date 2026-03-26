@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Bot, Shield, Zap, AlertCircle, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -28,6 +27,41 @@ function GoogleMark(props) {
   )
 }
 
+// Floating orbs for auth page background
+function FloatingOrbs() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <motion.div
+        animate={{
+          x: [0, 40, -20, 30, 0],
+          y: [0, -30, 20, -10, 0],
+          scale: [1, 1.15, 0.95, 1.08, 1],
+        }}
+        transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute top-[15%] left-[12%] w-[clamp(12rem,35vw,28rem)] aspect-square rounded-full bg-neon-cyan/[0.04] blur-[80px] md:blur-[120px]"
+      />
+      <motion.div
+        animate={{
+          x: [0, -30, 25, 0],
+          y: [0, 25, -35, 0],
+          scale: [1, 1.1, 0.92, 1],
+        }}
+        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute bottom-[20%] right-[8%] w-[clamp(10rem,30vw,24rem)] aspect-square rounded-full bg-neon-violet/[0.04] blur-[80px] md:blur-[120px]"
+      />
+      <motion.div
+        animate={{
+          x: [0, 15, -10, 0],
+          y: [0, -20, 15, 0],
+          opacity: [0.03, 0.06, 0.03],
+        }}
+        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute top-[55%] left-[45%] w-[clamp(8rem,20vw,16rem)] aspect-square rounded-full bg-neon-green/[0.03] blur-[80px]"
+      />
+    </div>
+  )
+}
+
 export default function AuthPage() {
   const { t } = useI18n()
   const [mode, setMode] = useState('login')
@@ -42,6 +76,7 @@ export default function AuthPage() {
   const location = useLocation()
   const { login, register, isLoading } = useAuthStore()
   const blockedHint = useMemo(() => new URLSearchParams(location.search).get('blocked') === '1', [location.search])
+  const formRef = useRef(null)
 
   const featureCards = [
     {
@@ -76,6 +111,17 @@ export default function AuthPage() {
     },
   ]
   const activeFeatureCard = featureCards.find((feature) => feature.key === activeFeature) || featureCards[0]
+
+  // Auto-rotate features
+  useEffect(() => {
+    const keys = featureCards.map((f) => f.key)
+    let idx = keys.indexOf(activeFeature)
+    const interval = window.setInterval(() => {
+      idx = (idx + 1) % keys.length
+      setActiveFeature(keys[idx])
+    }, 5000)
+    return () => window.clearInterval(interval)
+  }, [activeFeature])
 
   useEffect(() => {
     let cancelled = false
@@ -168,37 +214,37 @@ export default function AuthPage() {
       key: 'discord',
       label: t('auth.discordButton', 'Discord'),
       onClick: startDiscordLogin,
-      className: 'bg-[#5865F2] hover:bg-[#6773f6] shadow-[0_12px_30px_rgba(88,101,242,0.28)]',
+      className: 'bg-[#5865F2] hover:bg-[#6773f6] shadow-[0_12px_30px_rgba(88,101,242,0.28)] hover:shadow-[0_16px_38px_rgba(88,101,242,0.36)]',
       icon: DiscordMark,
     } : null,
     oauthProviders.google ? {
       key: 'google',
       label: t('auth.googleButton', 'Google'),
       onClick: startGoogleLogin,
-      className: 'bg-white text-[#111827] hover:bg-white/90 shadow-[0_12px_30px_rgba(255,255,255,0.12)]',
+      className: 'bg-white text-[#111827] hover:bg-white/90 shadow-[0_12px_30px_rgba(255,255,255,0.12)] hover:shadow-[0_16px_38px_rgba(255,255,255,0.18)]',
       icon: GoogleMark,
     } : null,
   ].filter(Boolean)
 
   return (
-    <div className="min-h-screen bg-surface-0 relative overflow-x-hidden p-4 md:px-6 md:py-8">
+    <div className="min-h-screen min-h-[100dvh] bg-surface-0 relative overflow-x-hidden p-4 md:px-6 md:py-8">
       <SnowCanvas />
-      <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-neon-cyan/5 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-1/3 right-1/4 w-96 h-96 bg-neon-violet/5 rounded-full blur-[120px] pointer-events-none" />
+      <FloatingOrbs />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-8 md:gap-10">
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:gap-10">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="w-full max-w-md pt-6 md:pt-10"
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-[min(28rem,100%)] pt-4 sm:pt-6 md:pt-10"
         >
-          <div className="text-center mb-8">
+          {/* Logo section */}
+          <div className="text-center mb-6 sm:mb-8">
             <motion.div
               initial={{ opacity: 0, scale: 0.92, y: 18 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ duration: 0.7, ease: 'easeOut' }}
-              className="relative mx-auto mb-5 w-full max-w-[440px]"
+              className="relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,85vw)]"
             >
               <motion.div
                 aria-hidden="true"
@@ -232,6 +278,7 @@ export default function AuthPage() {
                   }}
                   transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
                   className="relative z-10 w-full h-auto object-contain"
+                  loading="eager"
                 />
               </motion.div>
 
@@ -248,9 +295,10 @@ export default function AuthPage() {
             <p className="text-white/40 text-sm">{t('auth.tagline')}</p>
           </div>
 
+          {/* Access check / Blocked / Form */}
           {!accessChecked ? (
             <div className="gradient-border">
-              <div className="bg-surface-1 rounded-2xl p-8 text-center space-y-4">
+              <div className="bg-surface-1 rounded-2xl p-6 sm:p-8 text-center space-y-4">
                 <div className="mx-auto w-10 h-10 border-2 border-white/15 border-t-neon-cyan rounded-full animate-spin" />
                 <p className="text-sm text-white/45 font-mono">
                   {t('auth.blockedChecking', 'Verification de l acces...')}
@@ -259,10 +307,14 @@ export default function AuthPage() {
             </div>
           ) : (blocked || blockedHint) ? (
             <div className="gradient-border">
-              <div className="bg-surface-1 rounded-2xl p-8 text-center space-y-5">
-                <div className="mx-auto w-16 h-16 rounded-2xl border border-red-500/25 bg-red-500/10 text-red-400 flex items-center justify-center shadow-[0_0_30px_rgba(248,113,113,0.12)]">
+              <div className="bg-surface-1 rounded-2xl p-6 sm:p-8 text-center space-y-5">
+                <motion.div
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  className="mx-auto w-16 h-16 rounded-2xl border border-red-500/25 bg-red-500/10 text-red-400 flex items-center justify-center shadow-[0_0_30px_rgba(248,113,113,0.12)]"
+                >
                   <Ban className="w-8 h-8" />
-                </div>
+                </motion.div>
                 <div>
                   <h2 className="font-display font-700 text-2xl text-white">{t('auth.blockedTitle', 'Acces bloque')}</h2>
                   <p className="text-white/45 text-sm mt-2">
@@ -277,9 +329,15 @@ export default function AuthPage() {
               </div>
             </div>
           ) : (
-          <div className="gradient-border">
-            <div className="bg-surface-1 rounded-2xl p-8">
-              <div className="flex bg-white/[0.04] rounded-xl p-1 mb-6 border border-white/[0.06]">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            className="gradient-border"
+          >
+            <div className="bg-surface-1 rounded-2xl p-5 sm:p-8">
+              {/* Tab switcher */}
+              <div className="flex bg-white/[0.04] rounded-xl p-1 mb-5 sm:mb-6 border border-white/[0.06]">
                 {[
                   ['login', t('auth.tabs.login')],
                   ['register', t('auth.tabs.register')],
@@ -287,9 +345,9 @@ export default function AuthPage() {
                   <button
                     key={currentMode}
                     onClick={() => { setMode(currentMode); setError('') }}
-                    className={`flex-1 py-2.5 rounded-lg text-sm font-display font-600 transition-all duration-200 ${
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-display font-600 transition-all duration-250 ${
                       mode === currentMode
-                        ? 'bg-gradient-to-r from-neon-cyan/20 to-neon-violet/20 text-white border border-neon-cyan/30'
+                        ? 'bg-gradient-to-r from-neon-cyan/20 to-neon-violet/20 text-white border border-neon-cyan/30 shadow-[0_0_16px_rgba(0,229,255,0.08)]'
                         : 'text-white/40 hover:text-white/60'
                     }`}
                   >
@@ -298,10 +356,16 @@ export default function AuthPage() {
                 ))}
               </div>
 
-              <form onSubmit={submit} className="space-y-4" autoComplete="on">
+              {/* Auth form */}
+              <form ref={formRef} onSubmit={submit} className="space-y-4" autoComplete="on">
                 <AnimatePresence mode="wait">
                   {mode === 'register' && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25 }}
+                    >
                       <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
                       <input
                         className="input-field"
@@ -313,6 +377,7 @@ export default function AuthPage() {
                         maxLength={32}
                         name="username"
                         autoComplete="nickname"
+                        inputMode="text"
                       />
                     </motion.div>
                   )}
@@ -329,6 +394,7 @@ export default function AuthPage() {
                     required
                     name="email"
                     autoComplete={mode === 'login' ? 'username' : 'email'}
+                    inputMode="email"
                   />
                 </div>
 
@@ -348,7 +414,8 @@ export default function AuthPage() {
                     <button
                       type="button"
                       onClick={() => setShowPass((value) => !value)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors p-1"
+                      aria-label={showPass ? 'Hide password' : 'Show password'}
                     >
                       {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -368,10 +435,11 @@ export default function AuthPage() {
                   )}
                 </AnimatePresence>
 
-                <button
+                <motion.button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-200 shadow-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                  whileTap={{ scale: 0.97 }}
+                  className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 hover:shadow-[0_0_28px_rgba(0,229,255,0.3),0_0_56px_rgba(0,229,255,0.1)]"
                 >
                   {isLoading ? (
                     <span className="flex items-center justify-center gap-2">
@@ -379,7 +447,7 @@ export default function AuthPage() {
                       {mode === 'login' ? t('auth.loginLoading') : t('auth.registerLoading')}
                     </span>
                   ) : mode === 'login' ? t('auth.loginSubmit') : t('auth.registerSubmit')}
-                </button>
+                </motion.button>
 
                 {oauthButtons.length > 0 && (
                   <div className="space-y-3 pt-1">
@@ -395,15 +463,17 @@ export default function AuthPage() {
                       {oauthButtons.map((provider) => {
                         const Icon = provider.icon
                         return (
-                          <button
+                          <motion.button
                             key={provider.key}
                             type="button"
                             onClick={provider.onClick}
-                            className={`w-full py-3 rounded-xl font-display font-600 text-sm transition-all duration-200 flex items-center justify-center gap-2 ${provider.className}`}
+                            whileHover={{ y: -1 }}
+                            whileTap={{ scale: 0.97 }}
+                            className={`w-full py-3 rounded-xl font-display font-600 text-sm transition-all duration-250 flex items-center justify-center gap-2 ${provider.className}`}
                           >
                             <Icon className="w-4 h-4 shrink-0" />
                             {provider.label}
-                          </button>
+                          </motion.button>
                         )
                       })}
                     </div>
@@ -411,7 +481,8 @@ export default function AuthPage() {
                 )}
               </form>
 
-              <div className="mt-6 space-y-3">
+              {/* Feature cards */}
+              <div className="mt-5 sm:mt-6 space-y-3">
                 <div className="grid grid-cols-3 gap-2">
                   {featureCards.map((feature) => {
                     const active = feature.key === activeFeature
@@ -426,7 +497,7 @@ export default function AuthPage() {
                         onClick={() => setActiveFeature(feature.key)}
                         whileHover={{ y: -3, scale: 1.01 }}
                         whileTap={{ scale: 0.98 }}
-                        className={`group relative overflow-hidden rounded-xl border px-3 py-3.5 text-left transition-all duration-300 ${
+                        className={`group relative overflow-hidden rounded-xl border px-2 sm:px-3 py-3 sm:py-3.5 text-left transition-all duration-300 ${
                           active
                             ? feature.activeClass
                             : 'border-white/[0.04] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.05]'
@@ -437,13 +508,13 @@ export default function AuthPage() {
                           <motion.div
                             animate={active ? { scale: [1, 1.08, 1] } : { scale: 1 }}
                             transition={{ duration: 0.35 }}
-                            className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
+                            className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl border transition-all ${
                               active ? feature.iconBgClass : 'border-white/[0.06] bg-white/[0.03]'
                             }`}
                           >
-                            <Icon className={`w-4 h-4 ${feature.iconClass}`} />
+                            <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${feature.iconClass}`} />
                           </motion.div>
-                          <span className={`text-xs font-mono transition-colors ${active ? 'text-white' : 'text-white/35 group-hover:text-white/65'}`}>
+                          <span className={`text-[10px] sm:text-xs font-mono transition-colors leading-tight ${active ? 'text-white' : 'text-white/35 group-hover:text-white/65'}`}>
                             {feature.label}
                           </span>
                         </div>
@@ -458,6 +529,7 @@ export default function AuthPage() {
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
                     className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3"
                   >
                     <div className="flex items-center gap-2 mb-1.5">
@@ -469,7 +541,7 @@ export default function AuthPage() {
                 </AnimatePresence>
               </div>
             </div>
-          </div>
+          </motion.div>
           )}
         </motion.div>
 

@@ -434,7 +434,7 @@ async function issueWarning(req, token, payload) {
   });
 
   const total = getWarningCount(req.guild.guild_id, target_user_id);
-  const botProcess = require('../services/botManager').getProcess(req.user.id);
+  const botProcess = require('../services/botManager').getProcess(req.guildOwnerUserId || req.user.id);
   if (botProcess?.client) {
     const discordGuild = botProcess.client.guilds.cache.get(req.guild.guild_id);
     if (discordGuild) {

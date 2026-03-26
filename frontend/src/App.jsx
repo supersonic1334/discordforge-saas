@@ -17,7 +17,7 @@ import ProtectionPage from './pages/ProtectionPage'
 import SearchPage from './pages/SearchPage'
 import LogsPage from './pages/LogsPage'
 import MessagesPage from './pages/MessagesPage'
-import BlockedPage from './pages/BlockedPage'
+import AccessControlPage from './pages/AccessControlPage'
 import CommandsPage from './pages/CommandsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import ReviewsPage from './pages/ReviewsPage'
@@ -38,11 +38,6 @@ function getAccessFingerprint(snapshot) {
     snapshot?.accessibleGuildCount || 0,
     snapshot?.sharedGuildCount || 0,
   ].join('|')
-}
-
-function isEditableTarget(target) {
-  if (!(target instanceof HTMLElement)) return false
-  return !!target.closest('input, textarea, select, [contenteditable="true"], [data-allow-copy], [data-allow-context-menu], [data-allow-select]')
 }
 
 function RequireAuth({ children }) {
@@ -97,70 +92,9 @@ function AppRoot() {
   const { token, fetchMe, logout } = useAuthStore()
 
   useEffect(() => {
-    if (!import.meta.env.PROD) return undefined
-
-    document.body.classList.add('app-protected')
-
-    const preventIfNeeded = (event, condition = true) => {
-      if (!condition) return
-      event.preventDefault()
-      event.stopPropagation()
-    }
-
-    const onContextMenu = (event) => {
-      preventIfNeeded(event, !isEditableTarget(event.target))
-    }
-
-    const onDragStart = (event) => {
-      preventIfNeeded(event, !isEditableTarget(event.target))
-    }
-
-    const onSelectStart = (event) => {
-      preventIfNeeded(event, !isEditableTarget(event.target))
-    }
-
-    const onCopyCut = (event) => {
-      preventIfNeeded(event, !isEditableTarget(event.target))
-    }
-
-    const onKeyDown = (event) => {
-      const key = String(event.key || '').toLowerCase()
-      const combo = event.ctrlKey || event.metaKey
-      const isEditable = isEditableTarget(event.target)
-      const blockedShortcuts = (
-        key === 'f12'
-        || (combo && key === 'u')
-        || (combo && key === 's')
-        || (combo && key === 'p')
-        || (combo && event.shiftKey && ['i', 'j', 'c', 'k'].includes(key))
-      )
-
-      if (blockedShortcuts) {
-        preventIfNeeded(event)
-        return
-      }
-
-      if (!isEditable && combo && ['c', 'x'].includes(key)) {
-        preventIfNeeded(event)
-      }
-    }
-
-    document.addEventListener('contextmenu', onContextMenu, true)
-    document.addEventListener('dragstart', onDragStart, true)
-    document.addEventListener('selectstart', onSelectStart, true)
-    document.addEventListener('copy', onCopyCut, true)
-    document.addEventListener('cut', onCopyCut, true)
-    window.addEventListener('keydown', onKeyDown, true)
-
-    return () => {
-      document.body.classList.remove('app-protected')
-      document.removeEventListener('contextmenu', onContextMenu, true)
-      document.removeEventListener('dragstart', onDragStart, true)
-      document.removeEventListener('selectstart', onSelectStart, true)
-      document.removeEventListener('copy', onCopyCut, true)
-      document.removeEventListener('cut', onCopyCut, true)
-      window.removeEventListener('keydown', onKeyDown, true)
-    }
+    // Intentionally empty — client-side blocking (right-click, DevTools,
+    // copy/paste) was removed because it provides zero real security and
+    // only degrades user experience.
   }, [])
 
   useEffect(() => {
@@ -281,7 +215,7 @@ function AppRoot() {
           <Route path="logs" element={<PageTransition><LogsPage /></PageTransition>} />
           <Route path="moderation" element={<Navigate to="/dashboard/search" replace />} />
           <Route path="messages" element={<PageTransition><MessagesPage /></PageTransition>} />
-          <Route path="blocked" element={<PageTransition><BlockedPage /></PageTransition>} />
+          <Route path="blocked" element={<PageTransition><AccessControlPage /></PageTransition>} />
           <Route path="commands" element={<PageTransition><CommandsPage /></PageTransition>} />
           <Route path="analytics" element={<PageTransition><AnalyticsPage /></PageTransition>} />
           <Route path="reviews" element={<PageTransition><ReviewsPage /></PageTransition>} />

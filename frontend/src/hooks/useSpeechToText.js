@@ -36,7 +36,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   const [isListening, setIsListening] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
   const [interimTranscript, setInterimTranscript] = useState('')
-  const [audioBars, setAudioBars] = useState([0.14, 0.22, 0.18, 0.24, 0.16])
+  const [audioBars, setAudioBars] = useState([0.12, 0.18, 0.14, 0.22, 0.16, 0.2, 0.13])
 
   const isSupported = useMemo(() => !!getRecognitionConstructor(), [])
 
@@ -66,7 +66,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       streamRef.current = null
     }
 
-    setAudioBars([0.14, 0.22, 0.18, 0.24, 0.16])
+    setAudioBars([0.12, 0.18, 0.14, 0.22, 0.16, 0.2, 0.13])
   }, [])
 
   const startAudioMeter = useCallback(async (stream) => {
@@ -98,8 +98,8 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       if (!analyserRef.current) return
 
       analyserRef.current.getByteFrequencyData(dataArray)
-      const bucketSize = Math.max(1, Math.floor(dataArray.length / 5))
-      const nextBars = Array.from({ length: 5 }, (_, index) => {
+      const bucketSize = Math.max(1, Math.floor(dataArray.length / 7))
+      const nextBars = Array.from({ length: 7 }, (_, index) => {
         const start = index * bucketSize
         const end = Math.min(dataArray.length, start + bucketSize)
         let sum = 0
@@ -158,7 +158,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       recognition.lang = normalizeLocale(locale)
       recognition.continuous = true
       recognition.interimResults = true
-      recognition.maxAlternatives = 1
+      recognition.maxAlternatives = 3
 
       baseValueRef.current = String(value || '').trim()
       finalTranscriptRef.current = ''

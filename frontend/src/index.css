@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+
 @layer base {
   html,
   body,
@@ -15,7 +17,9 @@
   body {
     font-family: 'DM Sans', sans-serif;
     min-height: 100vh;
+    min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
   *,
@@ -38,15 +42,38 @@
   }
 }
 
+/* ── Components ────────────────────────────────────────────────────────────── */
+
 @layer components {
   .glass-card {
-    @apply bg-white/[0.04] border border-white/[0.08] backdrop-blur-md rounded-2xl shadow-glass;
+    @apply bg-white/[0.04] border border-white/[0.08] backdrop-blur-md rounded-2xl;
+    box-shadow:
+      0 8px 32px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 0 0 0.5px rgba(255,255,255,0.04);
   }
   .glass-card-hover {
-    @apply glass-card transition-all duration-300 hover:bg-white/[0.07] hover:border-white/[0.12] hover:shadow-glass-hover hover:-translate-y-0.5;
+    @apply glass-card transition-all duration-300 ease-out;
+  }
+  .glass-card-hover:hover {
+    @apply bg-white/[0.07] border-white/[0.12];
+    transform: translateY(-2px);
+    box-shadow:
+      0 18px 48px rgba(0,0,0,0.45),
+      inset 0 1px 0 rgba(255,255,255,0.1),
+      0 0 0 0.5px rgba(0,229,255,0.08);
   }
   .btn-primary {
-    @apply relative px-6 py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-cyan-500 to-violet-500 text-white overflow-hidden transition-all duration-200 hover:scale-[1.02] hover:shadow-neon-cyan active:scale-[0.98];
+    @apply relative px-6 py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-cyan-500 to-violet-500 text-white overflow-hidden transition-all duration-200;
+  }
+  .btn-primary:hover {
+    transform: scale(1.02) translateY(-1px);
+    box-shadow:
+      0 0 24px rgba(0,229,255,0.25),
+      0 0 48px rgba(0,229,255,0.08);
+  }
+  .btn-primary:active {
+    transform: scale(0.98);
   }
   .btn-ghost {
     @apply px-4 py-2 rounded-xl text-sm text-white/60 hover:text-white hover:bg-white/[0.06] transition-all duration-200;
@@ -55,14 +82,22 @@
     @apply px-4 py-2 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-200;
   }
   .input-field {
-    @apply w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 font-body text-sm outline-none transition-all duration-200 focus:border-neon-cyan/50 focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(0,229,255,0.1)];
+    @apply w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 font-body text-sm outline-none transition-all duration-200;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+  .input-field:focus {
+    @apply border-neon-cyan/50 bg-white/[0.06];
+    box-shadow:
+      0 0 0 3px rgba(0,229,255,0.1),
+      0 0 16px rgba(0,229,255,0.06);
   }
   .secret-field {
     -webkit-text-security: disc;
     text-security: disc;
   }
   .select-field {
-    @apply input-field cursor-pointer pr-11;
+    @apply input-field cursor-pointer;
+    padding-right: 2.75rem;
     appearance: none;
     color-scheme: dark;
     background-color: rgba(255,255,255,0.04);
@@ -77,9 +112,11 @@
     color: #f4f7fb;
   }
   .select-compact {
-    @apply rounded-lg border border-white/[0.08] bg-white/[0.04] text-white/70 font-mono text-xs outline-none cursor-pointer transition-all px-2 py-1 pr-8;
+    @apply rounded-lg border border-white/[0.08] bg-white/[0.04] text-white/70 font-mono text-xs outline-none cursor-pointer transition-all px-2 py-1;
+    padding-right: 2rem;
     appearance: none;
     color-scheme: dark;
+    font-size: 16px;
     background-color: rgba(255,255,255,0.04);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.7)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-position: right 0.55rem center;
@@ -115,6 +152,8 @@
   }
 }
 
+/* ── Utilities ─────────────────────────────────────────────────────────────── */
+
 @layer utilities {
   .font-600 { font-weight: 600; }
   .text-gradient-cyan { @apply text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan to-cyan-400; }
@@ -128,7 +167,8 @@
   .scrollbar-none::-webkit-scrollbar { display: none; }
 }
 
-/* Animated gradient border */
+/* ── Animated gradient border ──────────────────────────────────────────────── */
+
 .gradient-border {
   position: relative;
   background: rgba(255,255,255,0.04);
@@ -146,7 +186,25 @@
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
+  animation: gradient-border-rotate 8s linear infinite;
 }
+
+@keyframes gradient-border-rotate {
+  0% {
+    background: linear-gradient(135deg, rgba(0,229,255,0.4), rgba(176,78,255,0.4), rgba(0,229,255,0.1));
+  }
+  33% {
+    background: linear-gradient(225deg, rgba(0,229,255,0.3), rgba(176,78,255,0.5), rgba(0,229,255,0.15));
+  }
+  66% {
+    background: linear-gradient(315deg, rgba(0,229,255,0.35), rgba(176,78,255,0.35), rgba(0,229,255,0.2));
+  }
+  100% {
+    background: linear-gradient(135deg, rgba(0,229,255,0.4), rgba(176,78,255,0.4), rgba(0,229,255,0.1));
+  }
+}
+
+/* ── Modal & popup animations ──────────────────────────────────────────────── */
 
 @keyframes danger-modal-pop {
   0% {
@@ -171,12 +229,82 @@
 }
 
 .danger-confirm-shell {
-  animation: danger-modal-pop 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: danger-modal-pop 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .danger-confirm-pulse {
   animation: danger-modal-pulse 2.1s ease-in-out infinite;
 }
+
+/* ── CSS Snow particles (fallback) ─────────────────────────────────────────── */
+
+@keyframes snow-fall {
+  0% {
+    transform: translateY(-5vh) translateX(0) scale(1);
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(105vh) translateX(var(--drift, 15px)) scale(0.7);
+    opacity: 0;
+  }
+}
+
+.snow-particle {
+  position: absolute;
+  top: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(220,240,255,0.9) 0%, rgba(200,225,250,0.5) 40%, transparent 70%);
+  pointer-events: none;
+  animation: snow-fall linear infinite;
+  will-change: transform, opacity;
+}
+
+/* ── Toggle switch ─────────────────────────────────────────────────────────── */
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 24px;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.toggle-slider:before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 50%;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+input:checked + .toggle-slider {
+  background: rgba(0,229,255,0.2);
+  border-color: rgba(0,229,255,0.5);
+}
+input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+  background: #00e5ff;
+  box-shadow: 0 0 12px rgba(0,229,255,0.6), 0 0 24px rgba(0,229,255,0.2);
+}
+
+/* ── User selection rules ──────────────────────────────────────────────────── */
 
 body.app-protected {
   -webkit-touch-callout: none;
@@ -205,56 +333,71 @@ select,
   -webkit-touch-callout: default;
 }
 
-/* Module toggle switch */
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-}
-.toggle-switch input { opacity: 0; width: 0; height: 0; }
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 24px;
-  transition: 0.3s;
-}
-.toggle-slider:before {
-  content: '';
-  position: absolute;
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background: rgba(255,255,255,0.5);
-  border-radius: 50%;
-  transition: 0.3s;
-}
-input:checked + .toggle-slider {
-  background: rgba(0,229,255,0.2);
-  border-color: rgba(0,229,255,0.5);
-}
-input:checked + .toggle-slider:before {
-  transform: translateX(20px);
-  background: #00e5ff;
-  box-shadow: 0 0 10px rgba(0,229,255,0.6);
+/* ── Shimmer loading ───────────────────────────────────────────────────────── */
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── Premium focus ring ────────────────────────────────────────────────────── */
+
+*:focus-visible {
+  outline: 2px solid rgba(0,229,255,0.35);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ── Smooth scrolling (respect preferences) ────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MOBILE & RESPONSIVE OPTIMIZATION
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* -- Small phones (iPhone SE, small Android) ---- */
+@media (max-width: 374px) {
+  html { font-size: 14px; }
+
+  .glass-card {
+    border-radius: 14px;
+    padding: clamp(0.75rem, 3vw, 1.25rem);
+  }
+
+  .btn-primary {
+    padding: 0.625rem 1rem;
+  }
+
+  h1 { font-size: clamp(1.15rem, 5vw, 1.5rem) !important; }
+  h2 { font-size: clamp(1rem, 4.5vw, 1.25rem) !important; }
+}
+
+/* -- All phones ---- */
 @media (max-width: 767px) {
   html,
   body,
   #root,
   main {
     overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
   }
 
   body {
     position: relative;
   }
 
+  /* Prevent iOS zoom on focus */
   input,
   textarea,
   select,
@@ -266,11 +409,89 @@ input:checked + .toggle-slider:before {
   .gradient-border {
     max-width: 100%;
   }
+
+  /* Ensure touch targets are at least 44px */
+  button,
+  a,
+  [role="button"],
+  .toggle-switch {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Fluid card padding */
+  .stat-card {
+    padding: clamp(0.875rem, 3.5vw, 1.25rem);
+  }
+
+  /* Stack grid layouts */
+  .grid {
+    gap: clamp(0.5rem, 2vw, 1rem);
+  }
 }
 
-/* Shimmer loading */
-.skeleton {
-  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+/* -- Tablets ---- */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .glass-card {
+    border-radius: 18px;
+  }
+
+  /* 2-col grids on tablet */
+  .md\:grid-cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* -- Large desktop ---- */
+@media (min-width: 1440px) {
+  .max-w-7xl {
+    max-width: 88rem;
+  }
+}
+
+/* ── Fluid typography ──────────────────────────────────────────────────────── */
+
+h1 {
+  font-size: clamp(1.35rem, 2.5vw + 0.5rem, 2rem);
+}
+
+h2 {
+  font-size: clamp(1.15rem, 2vw + 0.4rem, 1.5rem);
+}
+
+/* ── Safe areas (iPhone notch) ─────────────────────────────────────────────── */
+
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ── Toast (react-hot-toast) overrides ─────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  [data-sonner-toaster],
+  div[style*="position: fixed"][style*="z-index: 9999"] {
+    left: 8px !important;
+    right: 8px !important;
+    max-width: calc(100vw - 16px) !important;
+  }
+}
+
+/* ── Performance: reduce motion ────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .snow-particle {
+    display: none !important;
+  }
 }

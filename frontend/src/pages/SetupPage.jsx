@@ -12,6 +12,11 @@ function getErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback
 }
 
+function getMaskedQuickToken(token) {
+  if (!token) return ''
+  return '••••••••••••••••••••••••'
+}
+
 export default function SetupPage() {
   const { t } = useI18n()
   const [token, setToken] = useState('')
@@ -43,9 +48,20 @@ export default function SetupPage() {
   ]
 
   useEffect(() => {
-    const savedToken = getQuickBotToken(quickTokenOwner)
-    setSavedQuickToken(savedToken)
-    setToken((currentToken) => currentToken || savedToken)
+    let active = true
+
+    const loadQuickToken = async () => {
+      const savedToken = await getQuickBotToken(quickTokenOwner)
+      if (!active) return
+      setSavedQuickToken(savedToken)
+      setToken((currentToken) => currentToken || savedToken)
+    }
+
+    loadQuickToken()
+
+    return () => {
+      active = false
+    }
   }, [quickTokenOwner])
 
   const submit = async (event) => {
@@ -56,8 +72,9 @@ export default function SetupPage() {
     try {
       const normalizedToken = token.trim()
       const response = await authAPI.setBotToken(normalizedToken)
-      setQuickBotToken(quickTokenOwner, normalizedToken)
+      await setQuickBotToken(quickTokenOwner, normalizedToken)
       setSavedQuickToken(normalizedToken)
+      setToken('')
       setBotInfo(response.data.bot)
       setStatus('success')
       await fetchMe()
@@ -130,9 +147,9 @@ export default function SetupPage() {
                     {quickToken ? (
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input
-                          type="text"
+                          type="password"
                           className="input-field secret-field sm:flex-1"
-                          value={quickToken}
+                          value={getMaskedQuickToken(quickToken)}
                           readOnly
                           name="saved-discord-bot-token"
                           autoComplete="off"
@@ -168,7 +185,7 @@ export default function SetupPage() {
                     <div className="relative">
                       <Bot className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                       <input
-                        type="text"
+                        type="password"
                         className="input-field secret-field pl-10"
                         placeholder={t('settings.botTokenPlaceholder')}
                         value={token}

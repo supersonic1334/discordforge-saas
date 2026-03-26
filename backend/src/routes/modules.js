@@ -209,7 +209,7 @@ router.patch('/:moduleType/toggle', validate(moduleToggleSchema), async (req, re
   }
 
   // Invalidate bot's in-memory module cache
-  botManager.invalidateModuleCache(req.user.id, req.guild.guild_id);
+  botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
 
   res.json({ type, enabled, message: `Module ${enabled ? 'enabled' : 'disabled'}` });
@@ -255,7 +255,7 @@ router.patch('/:moduleType/config', validate(moduleConfigSchema), async (req, re
     });
   }
 
-  botManager.invalidateModuleCache(req.user.id, req.guild.guild_id);
+  botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
 
   res.json({
@@ -297,7 +297,7 @@ router.post('/:moduleType/reset', async (req, res) => {
     });
   }
 
-  botManager.invalidateModuleCache(req.user.id, req.guild.guild_id);
+  botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
   res.json({ message: 'Module reset to defaults', type });
 });
