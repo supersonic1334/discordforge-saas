@@ -150,6 +150,72 @@
   .stat-card {
     @apply glass-card p-5 flex flex-col gap-2;
   }
+  .feature-hero {
+    @apply relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.04] backdrop-blur-md;
+    box-shadow:
+      0 24px 70px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .feature-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at top left, rgba(0,229,255,0.16), transparent 34%),
+      radial-gradient(circle at top right, rgba(176,78,255,0.14), transparent 38%),
+      linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+    pointer-events: none;
+  }
+  .feature-hero::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border-radius: 27px;
+    border: 1px solid rgba(255,255,255,0.04);
+    pointer-events: none;
+  }
+  .feature-chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .feature-metric {
+    @apply rounded-2xl border border-white/10 bg-black/15 px-4 py-3;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .spotlight-card {
+    @apply relative overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm;
+    box-shadow:
+      0 20px 48px rgba(0,0,0,0.28),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .spotlight-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), transparent 35%),
+      radial-gradient(circle at top right, rgba(0,229,255,0.10), transparent 30%);
+    pointer-events: none;
+  }
+  .spotlight-ring {
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 16px 44px rgba(0,0,0,0.32),
+      0 0 30px rgba(0,229,255,0.06);
+  }
+  .timeline-shell {
+    position: relative;
+  }
+  .timeline-shell::before {
+    content: '';
+    position: absolute;
+    left: 18px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: linear-gradient(180deg, rgba(0,229,255,0.22), rgba(176,78,255,0.18), transparent);
+    pointer-events: none;
+  }
 }
 
 /* ── Utilities ─────────────────────────────────────────────────────────────── */

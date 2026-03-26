@@ -140,6 +140,15 @@ function SummaryCard({ title, value, hint, tone = 'cyan' }) {
   )
 }
 
+function HeaderPill({ icon: Icon, label }) {
+  return (
+    <span className="feature-chip">
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </span>
+  )
+}
+
 const AUDIT_ACTION_LABELS = {
   invite: { label: 'Invitation', icon: UserPlus, tone: 'text-emerald-300' },
   revoke: { label: 'Revocation', icon: Trash2, tone: 'text-red-300' },
@@ -385,40 +394,37 @@ export default function TeamPage() {
 
   return (
     <div className="px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="font-display font-800 text-2xl text-white">Equipe & sauvegardes</h1>
-          <p className="text-white/40 text-sm mt-1">Acces partage securise sans donner le token. Toute la config reste synchronisee sur {guild?.name}.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isOwner && (
-            <div className="flex rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setActiveTab('team')}
-                className={`px-4 py-2.5 text-sm font-mono transition-all ${activeTab === 'team' ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-white/50 hover:text-white'}`}
-              >
-                <Users className="w-4 h-4 inline mr-2" />
-                Equipe
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('audit')}
-                className={`px-4 py-2.5 text-sm font-mono transition-all ${activeTab === 'audit' ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-white/50 hover:text-white'}`}
-              >
-                <ScrollText className="w-4 h-4 inline mr-2" />
-                Activite
-              </button>
+      <div className="feature-hero p-6 sm:p-7">
+        <div className="relative z-[1] flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <HeaderPill icon={Users} label="Team" />
+              <HeaderPill icon={ShieldCheck} label="token prive" />
+              <HeaderPill icon={History} label={guild?.name || 'serveur'} />
             </div>
-          )}
-          <button
-            type="button"
-            onClick={() => loadOverview()}
-            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.03] text-white/70 text-sm font-mono hover:border-white/20 hover:text-white transition-all"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Recharger
-          </button>
+            <div>
+              <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">Equipe & sauvegardes</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55 sm:text-[15px]">Partage le dashboard proprement, garde le token cote serveur et pilote les retours arriere sans perdre la synchro.</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            {isOwner && (
+              <div className="flex rounded-2xl border border-white/10 bg-white/[0.03] p-1 overflow-hidden">
+                <button type="button" onClick={() => setActiveTab('team')} className={`px-4 py-2.5 text-sm font-mono transition-all rounded-xl ${activeTab === 'team' ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-white/50 hover:text-white'}`}>
+                  <Users className="w-4 h-4 inline mr-2" />
+                  Equipe
+                </button>
+                <button type="button" onClick={() => setActiveTab('audit')} className={`px-4 py-2.5 text-sm font-mono transition-all rounded-xl ${activeTab === 'audit' ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-white/50 hover:text-white'}`}>
+                  <ScrollText className="w-4 h-4 inline mr-2" />
+                  Activite
+                </button>
+              </div>
+            )}
+            <button type="button" onClick={() => loadOverview()} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:text-white">
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Recharger
+            </button>
+          </div>
         </div>
       </div>
 
@@ -471,7 +477,7 @@ export default function TeamPage() {
 function TeamTab({ isOwner, collaborators, snapshots, saving, inviteForm, setInviteForm, snapshotLabel, setSnapshotLabel, overview, ownerEntry, locale, onInvite, onMemberRole, onSuspend, onRemoveMember, onCreateSnapshot, onRestoreSnapshot, onDeleteSnapshot }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_380px]">
-      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 space-y-5">
+      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="spotlight-card p-6 space-y-5">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 flex items-center justify-center shrink-0">
             <Users className="w-5 h-5 text-neon-cyan" />
@@ -483,45 +489,38 @@ function TeamTab({ isOwner, collaborators, snapshots, saving, inviteForm, setInv
         </div>
 
         {isOwner && (
-          <div className="rounded-3xl border border-white/8 bg-white/[0.02] p-5 space-y-4">
-            <div className="flex items-center gap-2 text-white">
-              <UserPlus className="w-4 h-4 text-emerald-300" />
-              <p className="font-display font-700">Inviter une personne</p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_140px_auto]">
-              <input
-                className="input-field"
-                placeholder="Pseudo, email, ID du site ou ID Discord"
-                value={inviteForm.target}
-                onChange={(event) => setInviteForm((current) => ({ ...current, target: event.target.value }))}
-              />
-              <select
-                className="select-field"
-                value={inviteForm.access_role}
-                onChange={(event) => setInviteForm((current) => ({ ...current, access_role: event.target.value }))}
-              >
-                <option value="admin">Admin partage</option>
-                <option value="moderator">Moderateur partage</option>
-                <option value="viewer">Lecture</option>
-              </select>
-              <select
-                className="select-field"
-                value={inviteForm.expires_in_hours}
-                onChange={(event) => setInviteForm((current) => ({ ...current, expires_in_hours: Number(event.target.value) }))}
-              >
-                {EXPIRY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={onInvite}
-                disabled={saving === 'invite' || !inviteForm.target.trim()}
-                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/15 transition-all disabled:opacity-50"
-              >
-                <Plus className="w-4 h-4" />
-                {saving === 'invite' ? 'Ajout...' : 'Inviter'}
-              </button>
+          <div className="feature-hero p-5">
+            <div className="relative z-[1] grid gap-4 xl:grid-cols-[minmax(0,1fr)_250px]">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-white">
+                  <UserPlus className="w-4 h-4 text-emerald-300" />
+                  <p className="font-display font-700">Inviter une personne</p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_140px_auto]">
+                  <input className="input-field" placeholder="Pseudo, email, ID du site ou ID Discord" value={inviteForm.target} onChange={(event) => setInviteForm((current) => ({ ...current, target: event.target.value }))} />
+                  <select className="select-field" value={inviteForm.access_role} onChange={(event) => setInviteForm((current) => ({ ...current, access_role: event.target.value }))}>
+                    <option value="admin">Admin partage</option>
+                    <option value="moderator">Moderateur partage</option>
+                    <option value="viewer">Lecture</option>
+                  </select>
+                  <select className="select-field" value={inviteForm.expires_in_hours} onChange={(event) => setInviteForm((current) => ({ ...current, expires_in_hours: Number(event.target.value) }))}>
+                    {EXPIRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                  <button type="button" onClick={onInvite} disabled={saving === 'invite' || !inviteForm.target.trim()} className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/15 transition-all disabled:opacity-50">
+                    <Plus className="w-4 h-4" />
+                    {saving === 'invite' ? 'Ajout...' : 'Inviter'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-[22px] border border-white/8 bg-black/15 p-4">
+                <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30">Flux simple</p>
+                <div className="mt-3 space-y-2 text-sm text-white/55">
+                  <p>1. Tu invites.</p>
+                  <p>2. Le compte recoit le meme dashboard.</p>
+                  <p>3. Tout reste synchro en direct.</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -539,7 +538,7 @@ function TeamTab({ isOwner, collaborators, snapshots, saving, inviteForm, setInv
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(index * 0.04, 0.18) }}
-              className={`rounded-3xl border p-5 ${entry.is_suspended ? 'border-red-500/15 bg-red-500/[0.03]' : 'border-white/8 bg-white/[0.02]'}`}
+              className={`spotlight-card p-5 ${entry.is_suspended ? 'border-red-500/15 bg-red-500/[0.03]' : ''}`}
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
@@ -606,7 +605,7 @@ function TeamTab({ isOwner, collaborators, snapshots, saving, inviteForm, setInv
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="space-y-5">
-        <div className="glass-card p-6 space-y-4">
+        <div className="feature-hero p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl border border-amber-500/20 bg-amber-500/10 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-5 h-5 text-amber-300" />
@@ -632,7 +631,7 @@ function TeamTab({ isOwner, collaborators, snapshots, saving, inviteForm, setInv
           </div>
         </div>
 
-        <div className="glass-card p-6 space-y-5">
+        <div className="spotlight-card p-6 space-y-5">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl border border-violet-500/20 bg-violet-500/10 flex items-center justify-center shrink-0">
               <History className="w-5 h-5 text-violet-200" />
@@ -731,7 +730,8 @@ function TeamTab({ isOwner, collaborators, snapshots, saving, inviteForm, setInv
           )}
         </div>
 
-        <div className="rounded-3xl border border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 to-cyan-500/6 p-5">
+        <div className="feature-hero p-5">
+          <div className="relative z-[1]">
           <div className="flex items-center gap-2 text-emerald-200">
             <CheckCircle2 className="w-4 h-4" />
             <p className="font-display font-700">Synchronisation live</p>
@@ -739,6 +739,7 @@ function TeamTab({ isOwner, collaborators, snapshots, saving, inviteForm, setInv
           <p className="mt-3 text-sm leading-6 text-white/60">
             Les invites recuperent automatiquement les memes commandes IA, les memes protections et les memes reglages. Si tu restaures une sauvegarde, tout revient ensemble comme avant.
           </p>
+          </div>
         </div>
       </motion.div>
     </div>
@@ -752,7 +753,7 @@ function AuditTab({ auditData, locale, onPageChange }) {
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
   return (
-    <div className="glass-card p-6 space-y-5">
+    <div className="spotlight-card p-6 space-y-5">
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 flex items-center justify-center shrink-0">
           <ScrollText className="w-5 h-5 text-neon-cyan" />
