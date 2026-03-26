@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Environment (NEVER commit secrets)
+backend/.env
+.env
+.env.local
+.env.*.local
+
+# Database
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+
+# Build output
+frontend/dist/
+
+# Logs
+logs/
+backend/logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Debug payloads
+debug-*.json
+deploy_payloads_logo/
+
+# Backup folder (keep safe)
+# backup_before_upgrade/ is intentionally NOT ignored — it should be preserved

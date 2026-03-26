@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\33675\\OneDrive\\Bureau\\disco\\logs\\.73fab90ad970b0ea2d5cfbdb8372da05e6ce0fd0-audit.json",
+    "files": [
+        {
+            "date": 1774201448481,
+            "name": "C:\\Users\\33675\\OneDrive\\Bureau\\disco\\logs\\combined-2026-03-22.log",
+            "hash": "bb1c0f4b07f446d8a009809f4f96cbeec8c2da2de498418cfe1c9c2702ae3b6e"
+        },
+        {
+            "date": 1774262800679,
+            "name": "C:\\Users\\33675\\OneDrive\\Bureau\\disco\\logs\\combined-2026-03-23.log",
+            "hash": "e2b11ce853a78ae9679ce7cbb43efd4c2582d86762769f5ecf9acc70b2570cb6"
+        }
+    ],
+    "hashType": "sha256"
+}
