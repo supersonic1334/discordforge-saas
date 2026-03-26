@@ -342,15 +342,16 @@ export default function SettingsPage() {
           {quickToken ? (
             <div className="flex flex-col sm:flex-row gap-2">
               <input
-                type="password"
+                type="text"
                 className="input-field secret-field sm:flex-1"
                 value={getMaskedQuickToken(quickToken)}
                 readOnly
-                name="saved-discord-bot-token"
-                autoComplete="off"
+                name="saved-bot-secret-preview"
+                autoComplete="one-time-code"
                 autoCorrect="off"
                 autoCapitalize="none"
                 spellCheck={false}
+                inputMode="text"
                 data-lpignore="true"
                 data-1p-ignore="true"
                 data-bwignore="true"
@@ -373,13 +374,13 @@ export default function SettingsPage() {
         <div className="relative">
           <Key className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
           <input
-            type="password"
+            type="text"
             className="input-field secret-field pl-10"
             placeholder={t('settings.botTokenPlaceholder')}
             value={botToken}
             onChange={e => setBotToken(e.target.value)}
-            name="discord-bot-token"
-            autoComplete="off"
+            name="bot-secret-entry"
+            autoComplete="one-time-code"
             autoCorrect="off"
             autoCapitalize="none"
             spellCheck={false}
