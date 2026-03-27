@@ -74,6 +74,7 @@ const SCHEMA = [
     owner_id        TEXT,                   -- Discord owner snowflake
     features        TEXT DEFAULT '[]',      -- JSON array of guild features
     is_active       INTEGER NOT NULL DEFAULT 1,
+    discord_logs_cleared_before TEXT,
     bot_joined_at   TEXT,
     last_synced_at  TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),

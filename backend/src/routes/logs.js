@@ -94,6 +94,27 @@ function formatAuditActionLabel(type, changes = []) {
   return `action_${actionType || 'unknown'}`;
 }
 
+const DISCORD_ACTION_LABELS = {
+  kick: 'Kick',
+  ban: 'Ban',
+  unban: 'Deban',
+  timeout: 'Timeout',
+  timeout_remove: 'Retrait timeout',
+  member_update: 'Membre modifie',
+  role_update: 'Role modifie',
+  voice_move: 'Deplacement vocal',
+  voice_disconnect: 'Deconnexion vocale',
+  bot_add: 'Ajout du bot',
+  message_delete: 'Message supprime',
+  message_bulk_delete: 'Suppression multiple',
+  message_pin: 'Message epingle',
+  message_unpin: 'Message desepingle',
+};
+
+function getDiscordActionLabel(actionName) {
+  return DISCORD_ACTION_LABELS[actionName] || actionName || 'Evenement Discord';
+}
+
 function buildInClause(values) {
   return values.map(() => '?').join(', ');
 }
@@ -258,6 +279,29 @@ function buildTargetDescriptor(entry, context) {
   };
 }
 
+function buildDiscordLogMessage(entry, target, executorName) {
+  const parts = [];
+
+  if (executorName && executorName !== 'System') {
+    parts.push(`Par ${executorName}`);
+  }
+
+  if (target?.label) {
+    parts.push(`Cible: ${target.label}`);
+  }
+
+  if (entry.reason) {
+    parts.push(`Raison: ${entry.reason}`);
+  }
+
+  const changesCount = Array.isArray(entry.changes) ? entry.changes.length : 0;
+  if (changesCount > 0) {
+    parts.push(`${changesCount} changement${changesCount > 1 ? 's' : ''}`);
+  }
+
+  return parts.join(' · ');
+}
+
 // ── Bot event logs ─────────────────────────────────────────────────────────────
 router.get('/', validateQuery(paginationSchema), async (req, res, next) => {
   try {
@@ -324,6 +368,9 @@ router.get('/discord', validateQuery(paginationSchema), async (req, res, next) =
   try {
     const { limit } = req.query;
     const token = decrypt(req.botToken.encrypted_token);
+    const clearedBeforeTs = req.guild.discord_logs_cleared_before
+      ? new Date(req.guild.discord_logs_cleared_before).getTime()
+      : 0;
     const [auditLogPayload, channels, roles] = await Promise.all([
       discordService.getGuildAuditLogs(token, req.guild.guild_id, { limit }),
       discordService.getGuildChannels(token, req.guild.guild_id).catch(() => []),
@@ -363,29 +410,44 @@ router.get('/discord', validateQuery(paginationSchema), async (req, res, next) =
         guildId: req.guild.guild_id,
         guildName: req.guild.name,
       });
+      const actionName = formatAuditActionLabel(entry.action_type, Array.isArray(entry.changes) ? entry.changes : []);
+      const createdAt = snowflakeToIso(entry.id);
+      const executorName = executor?.global_name || executor?.username || entry.user_id || 'System';
+      const actor = {
+        id: executor?.id || entry.user_id || null,
+        username: executor?.username || null,
+        global_name: executor?.global_name || null,
+        avatar_url: executor ? discordService.getAvatarUrl(executor.id, executor.avatar) : null,
+      };
 
       return {
         id: entry.id,
         action_type: entry.action_type,
-        action_name: formatAuditActionLabel(entry.action_type, Array.isArray(entry.changes) ? entry.changes : []),
+        action_name: actionName,
         target_id: entry.target_id || null,
         reason: entry.reason || '',
-        created_at: snowflakeToIso(entry.id),
-        executor: executor ? {
-          id: executor.id,
-          username: executor.username,
-          global_name: executor.global_name || null,
-          avatar_url: discordService.getAvatarUrl(executor.id, executor.avatar),
-        } : {
-          id: entry.user_id || null,
-          username: null,
-          global_name: null,
-          avatar_url: null,
-        },
+        created_at: createdAt,
+        timestamp: createdAt,
+        level: 'info',
+        event_type: getDiscordActionLabel(actionName),
+        guild_name: req.guild.name || 'Discord',
+        executor: actor,
+        actor,
         target,
         options: entry.options || {},
         changes: Array.isArray(entry.changes) ? entry.changes : [],
+        message: buildDiscordLogMessage(entry, target, executorName),
+        metadata: {
+          actor_name: executorName,
+          target_label: target?.label || null,
+          target_subtitle: target?.subtitle || null,
+          changes_count: Array.isArray(entry.changes) ? entry.changes.length : 0,
+        },
       };
+    }).filter((entry) => {
+      if (!clearedBeforeTs) return true;
+      const entryTs = new Date(entry.created_at).getTime();
+      return Number.isFinite(entryTs) && entryTs > clearedBeforeTs;
     });
 
     res.json({
@@ -393,6 +455,20 @@ router.get('/discord', validateQuery(paginationSchema), async (req, res, next) =
       total: logs.length,
       page: req.query.page,
       limit,
+      cleared_before: req.guild.discord_logs_cleared_before || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/discord', async (req, res, next) => {
+  try {
+    const clearedBefore = new Date().toISOString();
+    db.update('guilds', { discord_logs_cleared_before: clearedBefore }, { id: req.guild.id });
+    res.json({
+      message: 'Discord logs cleared',
+      cleared_before: clearedBefore,
     });
   } catch (err) {
     next(err);

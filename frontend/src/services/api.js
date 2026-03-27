@@ -132,6 +132,7 @@ export const commandsAPI = {
 export const logsAPI = {
   list:       (guildId, params) => api.get(`/bot/guilds/${guildId}/logs`, { params }),
   discord:    (guildId, params) => api.get(`/bot/guilds/${guildId}/logs/discord`, { params }),
+  clearDiscord: (guildId)       => api.delete(`/bot/guilds/${guildId}/logs/discord`),
   analytics:  (guildId)         => api.get(`/bot/guilds/${guildId}/logs/analytics`),
   channel:    (guildId)         => api.get(`/bot/guilds/${guildId}/logs/channel`),
   setChannel: (guildId, data)   => api.put(`/bot/guilds/${guildId}/logs/channel`, data),

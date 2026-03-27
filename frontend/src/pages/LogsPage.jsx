@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, AlertTriangle, ArrowRight, Bot, RefreshCw, ShieldOff, Search, Filter, Calendar, User, Zap, FileText, ChevronDown } from 'lucide-react'
+import { Activity, AlertTriangle, ArrowRight, Bot, RefreshCw, ShieldOff, Search, Filter, Calendar, User, Zap, FileText, ChevronDown, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { logsAPI, modAPI } from '../services/api'
@@ -46,6 +46,7 @@ export default function LogsPage() {
   const [filterLevel, setFilterLevel] = useState('')
   const [filterDate, setFilterDate] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [clearingDiscord, setClearingDiscord] = useState(false)
 
   async function loadSiteLogs({ silent = false } = {}) {
     if (!selectedGuildId) return
@@ -86,6 +87,23 @@ export default function LogsPage() {
     }
   }
 
+  async function handleClearDiscordLogs() {
+    if (!selectedGuildId || clearingDiscord) return
+    if (!window.confirm('Vider les logs Discord affiches ? Les anciens logs ne reviendront plus apres refresh.')) return
+
+    setClearingDiscord(true)
+    try {
+      await logsAPI.clearDiscord(selectedGuildId)
+      setDiscordLogs([])
+      toast.success('Logs Discord vides')
+      await loadDiscordLogs({ silent: true })
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setClearingDiscord(false)
+    }
+  }
+
   async function loadLogs() {
     setRefreshing(true)
     await Promise.all([loadSiteLogs(), loadWarnings(), loadDiscordLogs()])
@@ -109,8 +127,8 @@ export default function LogsPage() {
   const summaries = useMemo(() => {
     const warnCount = warnLogs.length
     const actionCount = siteLogs.length
-    const errorCount = discordLogs.filter((entry) => entry.level === 'error').length
-    return { warnCount, actionCount, errorCount }
+    const discordCount = discordLogs.length
+    return { warnCount, actionCount, discordCount }
   }, [siteLogs, warnLogs, discordLogs])
 
   const filteredLogs = useMemo(() => {
@@ -130,12 +148,21 @@ export default function LogsPage() {
           log.reason?.toLowerCase().includes(searchLower) ||
           log.message?.toLowerCase().includes(searchLower) ||
           log.action_type?.toLowerCase().includes(searchLower) ||
-          log.event_type?.toLowerCase().includes(searchLower)
+          log.event_type?.toLowerCase().includes(searchLower) ||
+          log.action_name?.toLowerCase().includes(searchLower) ||
+          log.executor?.username?.toLowerCase().includes(searchLower) ||
+          log.executor?.global_name?.toLowerCase().includes(searchLower) ||
+          log.metadata?.actor_name?.toLowerCase().includes(searchLower) ||
+          log.metadata?.target_label?.toLowerCase().includes(searchLower) ||
+          log.target?.label?.toLowerCase().includes(searchLower)
         if (!matchesSearch) return false
       }
 
-      if (filterAction && log.action_type !== filterAction) return false
-      if (filterLevel && log.level !== filterLevel) return false
+      if (filterAction) {
+        const currentAction = String(activeTab === 'discord' ? (log.action_name || '') : (log.action_type || '')).toLowerCase()
+        if (currentAction !== filterAction) return false
+      }
+      if (filterLevel && log.level && log.level !== filterLevel) return false
       if (filterDate) {
         const logDate = new Date(log.created_at || log.timestamp).toISOString().split('T')[0]
         if (logDate !== filterDate) return false
@@ -180,14 +207,26 @@ export default function LogsPage() {
           <h1 className="font-display font-800 text-2xl text-white">Logs & Historique</h1>
           <p className="text-white/40 text-sm mt-1">Historique complet des actions de moderation et evenements du bot. - {guild?.name}</p>
         </div>
-        <button
-          onClick={() => loadLogs()}
-          disabled={refreshing}
-          className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.03] text-white/70 text-sm font-mono hover:border-white/20 hover:text-white transition-all disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Recharger
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => loadLogs()}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.03] text-white/70 text-sm font-mono hover:border-white/20 hover:text-white transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Recharger
+          </button>
+          {activeTab === 'discord' && (
+            <button
+              onClick={handleClearDiscordLogs}
+              disabled={clearingDiscord}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-red-500/20 bg-red-500/10 text-red-300 text-sm font-mono hover:bg-red-500/15 transition-all disabled:opacity-50"
+            >
+              <Trash2 className={`w-4 h-4 ${clearingDiscord ? 'animate-pulse' : ''}`} />
+              {clearingDiscord ? 'Vidage...' : 'Vider Discord'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="glass-card p-1 flex gap-1 overflow-x-auto">
@@ -221,7 +260,7 @@ export default function LogsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <SummaryCard label="Actions site" value={summaries.actionCount} tone="border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan" />
         <SummaryCard label="Avertissements" value={summaries.warnCount} tone="border-amber-500/20 bg-amber-500/10 text-amber-300" />
-        <SummaryCard label="Erreurs Discord" value={summaries.errorCount} tone="border-red-500/20 bg-red-500/10 text-red-300" />
+        <SummaryCard label="Evenements Discord" value={summaries.discordCount} tone="border-violet-500/20 bg-violet-500/10 text-violet-300" />
       </div>
 
       <div className="glass-card p-5 space-y-4">
@@ -444,22 +483,37 @@ export default function LogsPage() {
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center shrink-0 ${LOG_LEVEL_COLORS[log.level] || 'border-white/10 bg-white/[0.04]'}`}>
-                    <Bot className="w-6 h-6" />
-                  </div>
+                  {renderAvatar(
+                    log.executor?.avatar_url || log.target?.avatar_url || null,
+                    log.executor?.global_name || log.executor?.username || log.metadata?.actor_name || log.target?.label || 'Discord',
+                    'from-violet-500/25 to-fuchsia-500/25'
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-display font-700 text-white truncate">{log.event_type || 'Event'}</p>
                       <span className={`px-2.5 py-1 rounded-full border text-xs font-mono uppercase ${LOG_LEVEL_COLORS[log.level] || 'border-white/10 bg-white/[0.04] text-white/55'}`}>
                         {log.level}
                       </span>
+                      {log.target?.label ? (
+                        <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/[0.04] text-xs font-mono text-white/60">
+                          {log.target.label}
+                        </span>
+                      ) : null}
                     </div>
-                    <p className="text-sm text-white/55 truncate mt-1">{log.guild_name || 'System'}</p>
+                    <p className="text-sm text-white/55 truncate mt-1">
+                      {log.executor?.global_name || log.executor?.username || log.metadata?.actor_name || 'System'}
+                    </p>
                     <div className="flex flex-wrap gap-3 mt-3 text-xs text-white/35 font-mono">
                       <span className="flex items-center gap-1.5">
                         <Calendar className="w-3 h-3" />
                         {formatDate(locale, log.timestamp)}
                       </span>
+                      {log.target?.subtitle ? (
+                        <span className="flex items-center gap-1.5">
+                          <Bot className="w-3 h-3" />
+                          {log.target.subtitle}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -467,15 +521,8 @@ export default function LogsPage() {
 
               {log.message && (
                 <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Message</p>
-                  <p className="text-white/80 text-sm font-mono">{log.message}</p>
-                </div>
-              )}
-
-              {log.metadata && Object.keys(log.metadata).length > 0 && (
-                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Metadata</p>
-                  <pre className="text-white/60 text-xs font-mono overflow-x-auto">{JSON.stringify(log.metadata, null, 2)}</pre>
+                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Details</p>
+                  <p className="text-white/80 text-sm">{log.message}</p>
                 </div>
               )}
             </motion.div>

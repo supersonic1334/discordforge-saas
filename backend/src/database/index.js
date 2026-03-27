@@ -219,6 +219,7 @@ function runMigrations() {
   ensureColumn('users', 'last_seen_device_hash', 'TEXT');
   ensureColumn('users', 'last_seen_user_agent', 'TEXT');
   ensureColumn('users', 'last_seen_at', 'TEXT');
+  ensureColumn('guilds', 'discord_logs_cleared_before', 'TEXT');
   ensureColumn('support_tickets', 'claimed_once_at', 'TEXT');
   db.exec(`
     UPDATE support_tickets
