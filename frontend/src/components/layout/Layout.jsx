@@ -57,6 +57,7 @@ export default function Layout() {
   const mainRef = useRef(null)
   const scrollPositionsRef = useRef(new Map())
   const scrollRestoreTimeoutRef = useRef(null)
+  const scrollRestoreFrameRef = useRef(null)
   const restoringScrollRef = useRef(false)
   const lastManualScrollAtRef = useRef(Date.now())
   const { user, logout } = useAuthStore()
@@ -206,18 +207,68 @@ export default function Layout() {
 
     const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
     restoringScrollRef.current = true
+    window.cancelAnimationFrame(scrollRestoreFrameRef.current)
     container.scrollTop = savedPosition
+    scrollRestoreFrameRef.current = window.requestAnimationFrame(() => {
+      container.scrollTop = savedPosition
+    })
     window.clearTimeout(scrollRestoreTimeoutRef.current)
     scrollRestoreTimeoutRef.current = window.setTimeout(() => {
       restoringScrollRef.current = false
-    }, 120)
+    }, 180)
   }, [location.pathname])
 
   useEffect(() => {
     return () => {
       window.clearTimeout(scrollRestoreTimeoutRef.current)
+      window.cancelAnimationFrame(scrollRestoreFrameRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    const container = mainRef.current
+    if (!container || typeof MutationObserver === 'undefined') return undefined
+
+    const restoreIfNeeded = () => {
+      const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
+      if (!savedPosition || restoringScrollRef.current) return
+      if (Date.now() - lastManualScrollAtRef.current < 450) return
+
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+      const targetScrollTop = Math.min(savedPosition, maxScrollTop)
+      if (targetScrollTop <= 0) return
+
+      const droppedTooFar = container.scrollTop < Math.max(32, targetScrollTop * 0.35)
+      if (!droppedTooFar) return
+
+      restoringScrollRef.current = true
+      window.cancelAnimationFrame(scrollRestoreFrameRef.current)
+      scrollRestoreFrameRef.current = window.requestAnimationFrame(() => {
+        container.scrollTop = targetScrollTop
+        window.clearTimeout(scrollRestoreTimeoutRef.current)
+        scrollRestoreTimeoutRef.current = window.setTimeout(() => {
+          restoringScrollRef.current = false
+        }, 180)
+      })
+    }
+
+    const observer = new MutationObserver(() => {
+      restoreIfNeeded()
+    })
+
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    })
+
+    window.addEventListener('resize', restoreIfNeeded)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', restoreIfNeeded)
+    }
+  }, [location.pathname])
 
   const handleLogout = () => {
     setStatus({
@@ -264,23 +315,8 @@ export default function Layout() {
 
   const handleMainScroll = (event) => {
     const scrollTop = event.currentTarget.scrollTop
-    const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
 
     if (restoringScrollRef.current) return
-
-    if (scrollTop === 0 && savedPosition > 24 && Date.now() - lastManualScrollAtRef.current > 700) {
-      restoringScrollRef.current = true
-      window.requestAnimationFrame(() => {
-        if (mainRef.current) {
-          mainRef.current.scrollTop = savedPosition
-        }
-        window.clearTimeout(scrollRestoreTimeoutRef.current)
-        scrollRestoreTimeoutRef.current = window.setTimeout(() => {
-          restoringScrollRef.current = false
-        }, 120)
-      })
-      return
-    }
 
     scrollPositionsRef.current.set(location.pathname, scrollTop)
   }
