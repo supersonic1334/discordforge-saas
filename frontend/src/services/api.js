@@ -49,26 +49,68 @@ api.interceptors.response.use(
 )
 
 function deleteNoBody(url, config = {}) {
-  return api.request({
-    ...config,
-    url,
-    method: 'delete',
-    data: undefined,
-    headers: {
-      ...(config.headers || {}),
-      'Content-Type': undefined,
-    },
-    transformRequest: [
-      (data, headers) => {
-        if (headers) {
-          delete headers['Content-Type']
-          if (headers.common) delete headers.common['Content-Type']
-          if (headers.delete) delete headers.delete['Content-Type']
+  const token = localStorage.getItem('token')
+  const deviceId = getDeviceId()
+  const headers = {
+    Accept: 'application/json',
+    'X-App-Client': 'discordforger-web',
+    'X-Requested-With': 'XMLHttpRequest',
+    ...(config.headers || {}),
+  }
+
+  if (token) headers.Authorization = `Bearer ${token}`
+  if (deviceId) headers['X-Device-ID'] = deviceId
+  delete headers['Content-Type']
+
+  const requestUrl = new URL(`${api.defaults.baseURL}${url}`, window.location.origin)
+  if (config.params) {
+    Object.entries(config.params).forEach(([key, value]) => {
+      if (typeof value !== 'undefined' && value !== null && value !== '') {
+        requestUrl.searchParams.set(key, value)
+      }
+    })
+  }
+
+  return fetch(requestUrl.toString(), {
+    method: 'DELETE',
+    headers,
+    credentials: 'same-origin',
+  }).then(async (response) => {
+    const raw = await response.text()
+    let payload = null
+
+    if (raw) {
+      try {
+        payload = JSON.parse(raw)
+      } catch {
+        payload = raw
+      }
+    }
+
+    if (!response.ok) {
+      if (response.status === 403 && payload?.code === 'ACCESS_BLOCKED' && !window.location.search.includes('blocked=1')) {
+        window.location.href = '/auth?blocked=1'
+      }
+      if (response.status === 401) {
+        localStorage.removeItem('token')
+        if (window.location.pathname !== '/auth') {
+          window.location.href = '/auth'
         }
-        return data
-      },
-      ...(config.transformRequest || []),
-    ],
+      }
+
+      const error = new Error(payload?.error || response.statusText || 'Request failed')
+      error.response = {
+        status: response.status,
+        data: payload,
+      }
+      throw error
+    }
+
+    return {
+      data: payload,
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+    }
   })
 }
 

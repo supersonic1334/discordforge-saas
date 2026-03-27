@@ -145,6 +145,21 @@ app.use(cors((req, cb) => {
 }));
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  const contentType = String(req.headers['content-type'] || '').toLowerCase();
+  const contentLength = String(req.headers['content-length'] || '').trim();
+
+  if (
+    req.method === 'DELETE'
+    && contentType.includes('application/json')
+    && (!contentLength || contentLength === '0')
+  ) {
+    delete req.headers['content-type'];
+  }
+
+  next();
+});
+
 app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true, limit: '8mb' }));
 
