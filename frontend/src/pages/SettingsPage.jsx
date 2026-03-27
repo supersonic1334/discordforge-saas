@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Save, Key, User, Lock, Languages, ImagePlus, Trash2 } from 'lucide-react'
+import { Save, Key, User, Lock, Languages, ImagePlus, Trash2, ChevronDown, Check } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { authAPI } from '../services/api'
 import { useAuthStore, useBotStore } from '../stores'
@@ -40,6 +41,137 @@ function SettingsPanel({ icon: Icon, iconTone, title, hint, children }) {
           </div>
         </div>
         {children}
+      </div>
+    </div>
+  )
+}
+
+function PreferenceSelect({ label, value, options, locale, accent = 'cyan', onChange }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+  const selectedOption = options.find((option) => option.value === value) || options[0]
+  const autoDetectLabel = locale === 'fr' ? 'Detection auto' : locale === 'es' ? 'Deteccion auto' : 'Auto detect'
+  const accentTone = accent === 'violet'
+    ? {
+        frame: 'border-neon-violet/25 bg-[linear-gradient(135deg,rgba(140,92,255,0.18),rgba(255,255,255,0.03))] shadow-[0_22px_46px_rgba(118,91,255,0.18)]',
+        panel: 'border-neon-violet/20 bg-[linear-gradient(180deg,rgba(20,18,34,0.98),rgba(10,9,18,0.98))] shadow-[0_26px_80px_rgba(107,72,255,0.28)]',
+        chip: 'border-neon-violet/25 bg-neon-violet/12 text-neon-violet',
+        active: 'border-neon-violet/35 bg-neon-violet/14',
+        hover: 'hover:border-neon-violet/25 hover:bg-neon-violet/10',
+        dot: 'bg-neon-violet',
+        text: 'text-neon-violet',
+      }
+    : {
+        frame: 'border-neon-cyan/25 bg-[linear-gradient(135deg,rgba(0,224,255,0.16),rgba(255,255,255,0.03))] shadow-[0_22px_46px_rgba(0,224,255,0.16)]',
+        panel: 'border-neon-cyan/20 bg-[linear-gradient(180deg,rgba(13,22,28,0.98),rgba(8,12,17,0.98))] shadow-[0_26px_80px_rgba(0,214,255,0.24)]',
+        chip: 'border-neon-cyan/25 bg-neon-cyan/12 text-neon-cyan',
+        active: 'border-neon-cyan/35 bg-neon-cyan/14',
+        hover: 'hover:border-neon-cyan/25 hover:bg-neon-cyan/10',
+        dot: 'bg-neon-cyan',
+        text: 'text-neon-cyan',
+      }
+
+  useEffect(() => {
+    if (!open) return undefined
+
+    const closeOnOutside = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false)
+    }
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('mousedown', closeOnOutside)
+    document.addEventListener('keydown', closeOnEscape)
+
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+
+  return (
+    <div ref={rootRef} className="space-y-2">
+      <label className="text-xs font-mono text-white/40 block">{label}</label>
+
+      <div className="relative">
+        <motion.button
+          type="button"
+          whileHover={{ y: -2, scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={() => setOpen((current) => !current)}
+          className={`group relative flex w-full items-center justify-between overflow-hidden rounded-[24px] border px-4 py-3.5 text-left transition-all duration-300 ${accentTone.frame}`}
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_48%)] opacity-60 transition-opacity duration-300 group-hover:opacity-90" />
+          <div className="relative z-[1] min-w-0">
+            <div className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full shadow-[0_0_16px_currentColor] ${accentTone.dot}`} />
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.22em] ${accentTone.chip}`}>
+                {selectedOption.value === 'auto' ? 'AUTO' : selectedOption.value.toUpperCase()}
+              </span>
+            </div>
+            <p className="mt-2 truncate font-display text-base font-700 text-white">
+              {getOptionLabel(selectedOption, locale)}
+            </p>
+          </div>
+
+          <motion.span
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={{ duration: 0.24, ease: 'easeOut' }}
+            className={`relative z-[1] ml-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${accentTone.text}`}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </motion.span>
+        </motion.button>
+
+        <AnimatePresence>
+          {open ? (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className={`absolute left-0 right-0 z-30 mt-3 overflow-hidden rounded-[28px] border p-2 backdrop-blur-xl ${accentTone.panel}`}
+            >
+              <div className="space-y-2">
+                {options.map((option) => {
+                  const active = option.value === value
+
+                  return (
+                    <motion.button
+                      key={option.value}
+                      type="button"
+                      whileHover={{ x: 4 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => {
+                        onChange(option.value)
+                        setOpen(false)
+                      }}
+                      className={`group flex w-full items-center justify-between rounded-[22px] border px-4 py-3 text-left transition-all duration-200 ${active ? accentTone.active : 'border-white/8 bg-white/[0.03]'} ${accentTone.hover}`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2.5 w-2.5 rounded-full ${active ? accentTone.dot : 'bg-white/20'}`} />
+                          <span className="truncate font-display text-sm font-700 text-white">
+                            {getOptionLabel(option, locale)}
+                          </span>
+                        </div>
+                        <p className="mt-1 pl-4 text-[11px] font-mono uppercase tracking-[0.2em] text-white/32">
+                          {option.value === 'auto' ? autoDetectLabel : option.value.toUpperCase()}
+                        </p>
+                      </div>
+
+                      <span className={`ml-4 flex h-9 w-9 items-center justify-center rounded-2xl border transition-all ${active ? `border-white/12 bg-white/[0.08] ${accentTone.text}` : 'border-white/8 bg-white/[0.03] text-white/28 group-hover:text-white/60'}`}>
+                        <Check className="h-4 w-4" />
+                      </span>
+                    </motion.button>
+                  )
+                })}
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -406,22 +538,22 @@ export default function SettingsPage() {
             hint={t('settings.preferencesHint')}
           >
             <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-mono text-white/40 mb-1.5 block">{t('settings.siteLanguage')}</label>
-                <select className="select-field" value={preferences.site_language} onChange={e => setPreferences((prev) => ({ ...prev, site_language: normalizePreference(e.target.value) }))}>
-                  {SITE_LANGUAGE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{getOptionLabel(option, locale)}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-mono text-white/40 mb-1.5 block">{t('settings.aiLanguage')}</label>
-                <select className="select-field" value={preferences.ai_language} onChange={e => setPreferences((prev) => ({ ...prev, ai_language: normalizePreference(e.target.value) }))}>
-                  {AI_LANGUAGE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{getOptionLabel(option, locale)}</option>
-                  ))}
-                </select>
-              </div>
+              <PreferenceSelect
+                label={t('settings.siteLanguage')}
+                value={preferences.site_language}
+                options={SITE_LANGUAGE_OPTIONS}
+                locale={locale}
+                accent="cyan"
+                onChange={(nextValue) => setPreferences((prev) => ({ ...prev, site_language: normalizePreference(nextValue) }))}
+              />
+              <PreferenceSelect
+                label={t('settings.aiLanguage')}
+                value={preferences.ai_language}
+                options={AI_LANGUAGE_OPTIONS}
+                locale={locale}
+                accent="violet"
+                onChange={(nextValue) => setPreferences((prev) => ({ ...prev, ai_language: normalizePreference(nextValue) }))}
+              />
             </div>
           </SettingsPanel>
 
