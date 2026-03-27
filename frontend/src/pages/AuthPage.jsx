@@ -27,19 +27,6 @@ function GoogleMark(props) {
   )
 }
 
-const AUTH_PARTICLES = [
-  { left: '8%', top: '16%', size: 10, alpha: 0.22, duration: 8.6, delay: 0.2 },
-  { left: '18%', top: '28%', size: 6, alpha: 0.16, duration: 7.4, delay: 1.4 },
-  { left: '28%', top: '12%', size: 8, alpha: 0.18, duration: 9.1, delay: 0.8 },
-  { left: '72%', top: '18%', size: 9, alpha: 0.18, duration: 8.2, delay: 0.6 },
-  { left: '84%', top: '26%', size: 7, alpha: 0.14, duration: 7.8, delay: 1.8 },
-  { left: '74%', top: '64%', size: 8, alpha: 0.16, duration: 9.4, delay: 1.1 },
-  { left: '16%', top: '72%', size: 7, alpha: 0.14, duration: 8.7, delay: 0.9 },
-  { left: '34%', top: '78%', size: 10, alpha: 0.15, duration: 9.8, delay: 1.6 },
-  { left: '58%', top: '14%', size: 5, alpha: 0.2, duration: 7.1, delay: 0.4 },
-  { left: '62%', top: '76%', size: 6, alpha: 0.17, duration: 8.9, delay: 1.2 },
-]
-
 function AuthAtmosphere({ pointerX, pointerY }) {
   const driftX = useSpring(useTransform(pointerX, [0, 100], [-36, 36]), { stiffness: 120, damping: 18, mass: 0.6 })
   const driftY = useSpring(useTransform(pointerY, [0, 100], [-26, 26]), { stiffness: 120, damping: 18, mass: 0.6 })
@@ -86,32 +73,6 @@ function AuthAtmosphere({ pointerX, pointerY }) {
         className="absolute right-[8%] top-[24%] h-[16rem] w-[20rem] rounded-full bg-[radial-gradient(circle,rgba(176,78,255,0.16),rgba(176,78,255,0.07)_36%,transparent_74%)] blur-[76px]"
       />
 
-      {AUTH_PARTICLES.map((particle, index) => (
-        <motion.span
-          key={`${particle.left}-${particle.top}-${index}`}
-          animate={{
-            y: [0, -18, 0],
-            x: [0, index % 2 === 0 ? 10 : -10, 0],
-            opacity: [particle.alpha * 0.55, particle.alpha, particle.alpha * 0.45],
-            scale: [1, 1.18, 0.94, 1],
-          }}
-          transition={{
-            duration: particle.duration,
-            delay: particle.delay,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-          className="absolute rounded-full bg-white"
-          style={{
-            left: particle.left,
-            top: particle.top,
-            width: particle.size,
-            height: particle.size,
-            opacity: particle.alpha,
-            boxShadow: `0 0 ${particle.size * 2.4}px rgba(130,220,255,0.24), 0 0 ${particle.size * 4.5}px rgba(176,78,255,0.12)`,
-          }}
-        />
-      ))}
     </div>
   )
 }
