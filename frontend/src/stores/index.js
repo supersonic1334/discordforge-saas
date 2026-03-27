@@ -20,10 +20,23 @@ function extractError(err) {
   }
   // Network error (backend not running, CORS, etc.)
   if (err?.code === 'ERR_NETWORK' || !err?.response) {
-    return 'Impossible de joindre le serveur. Vérifiez que le backend tourne sur le port 4000.'
+    return 'Connexion impossible. Reessaie dans quelques secondes.'
   }
   // Axios message or plain message
   return err?.message || 'Une erreur inattendue est survenue'
+}
+
+function extractAuthError(err, mode = 'login') {
+  const status = Number(err?.response?.status || 0)
+  const backendError = String(err?.response?.data?.error || '').trim()
+
+  if (mode === 'login') {
+    if (status === 401) return 'Email ou mot de passe incorrect.'
+    if (status === 403 && backendError) return backendError
+    if (status === 400 && backendError) return backendError
+  }
+
+  return extractError(err)
 }
 
 function getGuildSelectionOwner() {
@@ -83,7 +96,7 @@ export const useAuthStore = create(
           return { success: true }
         } catch (err) {
           set({ isLoading: false })
-          return { success: false, error: extractError(err) }
+          return { success: false, error: extractAuthError(err, 'login') }
         }
       },
 
@@ -97,7 +110,7 @@ export const useAuthStore = create(
           return { success: true }
         } catch (err) {
           set({ isLoading: false })
-          return { success: false, error: extractError(err) }
+          return { success: false, error: extractAuthError(err, 'register') }
         }
       },
 
