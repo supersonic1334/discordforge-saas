@@ -87,6 +87,7 @@ function ResultRow({ entry, active, onClick }) {
 
 function HistoryRow({ entry, locale }) {
   const color = ACTION_COLORS[entry.action] || 'border-white/10 bg-white/[0.04] text-white/60'
+  const detail = entry.reason || 'Aucune raison precisee.'
 
   return (
     <div className="relative ml-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4 backdrop-blur-sm">
@@ -98,7 +99,7 @@ function HistoryRow({ entry, locale }) {
       <div className="mt-3 flex items-start gap-3">
         {renderAvatar(entry.moderator?.avatar_url, entry.moderator?.name || 'Staff', 'from-violet-500/25 to-fuchsia-500/25', 'w-10 h-10')}
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-white">{entry.reason || 'Aucune raison precisee.'}</p>
+          <p className="whitespace-pre-line text-sm leading-6 text-white">{detail}</p>
           <p className="mt-1 text-xs text-white/40">Par {entry.moderator?.name || 'Staff'}{entry.points ? ` - ${entry.points} point${entry.points > 1 ? 's' : ''}` : ''}{entry.duration_ms ? ` - ${Math.round(entry.duration_ms / 60000)} min` : ''}</p>
         </div>
       </div>

@@ -116,6 +116,93 @@ function getChangeValue(changes, key) {
   return change.new_value ?? change.old_value ?? null;
 }
 
+function translateAuditReason(reason) {
+  const raw = String(reason || '').trim();
+  if (!raw) return '';
+
+  const lowered = raw.toLowerCase();
+  if (lowered.includes('message contained keyword defined in automod rule')) {
+    return 'Message contenant un mot-cle defini dans une regle AutoMod.';
+  }
+  if (lowered.includes('keyword defined in automod rule')) {
+    return 'Mot-cle detecte par une regle AutoMod.';
+  }
+  if (lowered.includes('mention spam')) {
+    return 'Spam de mentions detecte par AutoMod.';
+  }
+  if (lowered.includes('spam')) {
+    return 'Spam detecte automatiquement.';
+  }
+  if (lowered.includes('harmful link')) {
+    return 'Lien potentiellement dangereux detecte.';
+  }
+
+  return raw;
+}
+
+function formatRoleList(roles) {
+  if (!Array.isArray(roles) || roles.length === 0) return '';
+  return roles
+    .map((role) => `@${role?.name || role?.id || 'Role inconnu'}`)
+    .join(', ');
+}
+
+function buildDiscordAuditSummary(entry) {
+  const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+  const actionType = Number(entry?.action_type || 0);
+  const translatedReason = translateAuditReason(entry?.reason);
+
+  if (actionType === 25) {
+    const addedRoles = changes.find((change) => change?.key === '$add')?.new_value || [];
+    const removedRoles = changes.find((change) => change?.key === '$remove')?.new_value || [];
+    const lines = [];
+    const addedLabel = formatRoleList(addedRoles);
+    const removedLabel = formatRoleList(removedRoles);
+
+    if (addedLabel) lines.push(`Roles ajoutes : ${addedLabel}`);
+    if (removedLabel) lines.push(`Roles retires : ${removedLabel}`);
+    if (translatedReason) lines.push(`Contexte : ${translatedReason}`);
+
+    return lines.join('\n') || 'Mise a jour des roles detectee.';
+  }
+
+  if (actionType === 24) {
+    const timeoutChange = changes.find((change) => change?.key === 'communication_disabled_until');
+    const nickChange = changes.find((change) => change?.key === 'nick');
+    const lines = [];
+
+    if (timeoutChange?.new_value) {
+      lines.push(`Restriction de parole jusqu'au ${new Date(timeoutChange.new_value).toLocaleString('fr-FR')}.`);
+    } else if (timeoutChange && timeoutChange.old_value && !timeoutChange.new_value) {
+      lines.push('Restriction de parole retiree.');
+    }
+
+    if (nickChange) {
+      const before = nickChange.old_value || 'aucun';
+      const after = nickChange.new_value || 'aucun';
+      lines.push(`Surnom : ${before} -> ${after}`);
+    }
+
+    if (translatedReason) lines.push(`Contexte : ${translatedReason}`);
+
+    return lines.join('\n') || translatedReason || 'Mise a jour du membre detectee.';
+  }
+
+  if (actionType === 145) {
+    return translatedReason || 'Le timeout a ete retire.';
+  }
+
+  if (actionType === 26) {
+    return translatedReason || 'Deplacement vocal detecte.';
+  }
+
+  if (actionType === 27) {
+    return translatedReason || 'Deconnexion vocale detectee.';
+  }
+
+  return translatedReason || '';
+}
+
 function buildRoleSummary(member, guildRoleMap, guildId) {
   if (!member || !Array.isArray(member.roles)) return [];
 
@@ -514,6 +601,7 @@ function discordActionHistoryEntry(entry, executorMap, userId) {
   const changes = Array.isArray(entry.changes) ? entry.changes : [];
   const action = formatAuditActionLabel(entry.action_type, changes);
   const timeoutUntil = getChangeValue(changes, 'communication_disabled_until');
+  const summary = buildDiscordAuditSummary(entry);
 
   return {
     id: `discord-${entry.id}`,
@@ -521,7 +609,7 @@ function discordActionHistoryEntry(entry, executorMap, userId) {
     action,
     label: action,
     created_at: snowflakeToIso(entry.id),
-    reason: entry.reason || '',
+    reason: summary || entry.reason || '',
     duration_ms: timeoutUntil ? Math.max(0, new Date(timeoutUntil).getTime() - Date.now()) : null,
     target_user_id: userId,
     moderator: {

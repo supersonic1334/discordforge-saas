@@ -8,8 +8,8 @@ export const ACTION_LABELS = {
   kick: 'Kick',
   ban: 'Ban',
   unban: 'Deban',
-  member_update: 'Mise a jour membre',
-  role_update: 'Mise a jour role',
+  member_update: 'Mise a jour du membre',
+  role_update: 'Mise a jour des roles',
   voice_move: 'Deplacement vocal',
   voice_disconnect: 'Deconnexion vocale',
   bot_add: 'Ajout du bot',
@@ -17,7 +17,7 @@ export const ACTION_LABELS = {
   message_bulk_delete: 'Suppression messages',
   message_pin: 'Message epingle',
   message_unpin: 'Message desepingle',
-  timeout_remove: 'Fin de mute',
+  timeout_remove: 'Fin du mute',
 }
 
 export const ACTION_COLORS = {
