@@ -393,14 +393,16 @@ export default function AuthPage() {
               </div>
 
               {/* Auth form */}
-              <form ref={formRef} onSubmit={submit} className="space-y-4" autoComplete="on">
-                <AnimatePresence mode="wait">
+              <motion.form layout ref={formRef} onSubmit={submit} className="space-y-4" autoComplete="on">
+                <AnimatePresence initial={false} mode="wait">
                   {mode === 'register' && (
                     <motion.div
+                      layout
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.25 }}
+                      className="overflow-hidden"
                     >
                       <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
                       <input
@@ -419,7 +421,7 @@ export default function AuthPage() {
                   )}
                 </AnimatePresence>
 
-                <div>
+                <motion.div layout>
                   <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.email')}</label>
                   <input
                     type="email"
@@ -432,9 +434,9 @@ export default function AuthPage() {
                     autoComplete={mode === 'login' ? 'username' : 'email'}
                     inputMode="email"
                   />
-                </div>
+                </motion.div>
 
-                <div>
+                <motion.div layout>
                   <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.password')}</label>
                   <div className="relative">
                     <input
@@ -456,7 +458,7 @@ export default function AuthPage() {
                       {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                </div>
+                </motion.div>
 
                 <AnimatePresence>
                   {error && (
@@ -515,7 +517,7 @@ export default function AuthPage() {
                     </div>
                   </div>
                 )}
-              </form>
+              </motion.form>
 
               {/* Feature cards */}
               <div className="mt-5 sm:mt-6 space-y-3">
