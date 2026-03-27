@@ -166,8 +166,8 @@ export const modAPI = {
 
 export const blockedAPI = {
   list:         (guildId, params) => api.get(`/bot/guilds/${guildId}/blocked`, { params }),
-  unban:        (guildId, userId) => api.post(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`),
-  unblacklist:  (guildId, userId) => api.post(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`),
+  unban:        (guildId, userId) => api.post(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`, {}),
+  unblacklist:  (guildId, userId) => api.post(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`, {}),
 }
 
 export const messagesAPI = {
