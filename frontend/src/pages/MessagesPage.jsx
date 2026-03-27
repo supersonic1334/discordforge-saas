@@ -2,60 +2,40 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
-  BellRing,
+  Calendar,
+  Copy,
+  Mail,
   MessageCircleMore,
-  RefreshCw,
   Search,
   Send,
-  ShieldCheck,
-  CheckCircle2,
-  Clock,
   Sparkles,
-  Mail,
   User,
-  Calendar,
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { messagesAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 
-const DEFAULT_CONFIG = {
-  auto_dm_warn: true,
-  auto_dm_timeout: true,
-  auto_dm_kick: true,
-  auto_dm_ban: true,
-  auto_dm_blacklist: true,
-  appeal_server_name: '',
-  appeal_server_url: '',
-}
-
-const AUTO_OPTIONS = [
-  { key: 'auto_dm_warn', title: 'Warn', hint: 'MP propre quand un avertissement est pose.', icon: BellRing, color: 'amber' },
-  { key: 'auto_dm_timeout', title: 'Mute temporaire', hint: 'Explique la duree et la raison automatiquement.', icon: Clock, color: 'orange' },
-  { key: 'auto_dm_kick', title: 'Kick', hint: 'Le bot previens avant de sortir la personne.', icon: ArrowRight, color: 'red' },
-  { key: 'auto_dm_ban', title: 'Ban', hint: 'Le bot envoie aussi la passerelle de recours si tu la configures.', icon: ShieldCheck, color: 'red' },
-  { key: 'auto_dm_blacklist', title: 'Blacklist reseau', hint: 'Notification speciale si l\'acces global est coupe.', icon: ShieldCheck, color: 'violet' },
+const QUICK_TEMPLATES = [
+  {
+    id: 'staff',
+    label: 'Staff',
+    title: 'Message du staff',
+    message: 'Bonjour,\n\nJe te contacte au sujet du serveur. Merci de prendre en compte ce message et de revenir vers nous si besoin.\n\nCordialement,\nLe staff',
+  },
+  {
+    id: 'followup',
+    label: 'Suivi',
+    title: 'Suivi moderation',
+    message: 'Bonjour,\n\nNous faisons un suivi concernant ta situation sur le serveur. Merci de nous repondre calmement si tu souhaites apporter des precisions.\n\nLe staff',
+  },
+  {
+    id: 'support',
+    label: 'Support',
+    title: 'Besoin de te joindre',
+    message: 'Bonjour,\n\nNous avons besoin de te contacter en message prive pour clarifier un point. Reponds simplement a ce MP des que possible.\n\nMerci.',
+  },
 ]
-
-const AUTO_OPTION_TONES = {
-  amber: {
-    shell: 'border-amber-500/20 bg-amber-500/10',
-    icon: 'text-amber-300',
-  },
-  orange: {
-    shell: 'border-orange-500/20 bg-orange-500/10',
-    icon: 'text-orange-300',
-  },
-  red: {
-    shell: 'border-red-500/20 bg-red-500/10',
-    icon: 'text-red-300',
-  },
-  violet: {
-    shell: 'border-violet-500/20 bg-violet-500/10',
-    icon: 'text-violet-300',
-  },
-}
 
 function getErrorMessage(error) {
   return error?.response?.data?.error || error?.message || 'Erreur inattendue'
@@ -91,31 +71,6 @@ function HeaderPill({ icon: Icon, label }) {
   )
 }
 
-function TogglePill({ enabled, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`relative inline-flex h-8 w-[74px] items-center rounded-full border transition-all ${
-        enabled
-          ? 'border-emerald-500/30 bg-emerald-500/12 shadow-[0_0_24px_rgba(52,211,153,0.16)]'
-          : 'border-white/10 bg-white/[0.04]'
-      }`}
-    >
-      <span
-        className={`absolute top-1 h-6 w-6 rounded-full transition-all ${
-          enabled
-            ? 'left-[42px] bg-emerald-300 shadow-[0_8px_20px_rgba(52,211,153,0.35)]'
-            : 'left-1 bg-white/25'
-        }`}
-      />
-      <span className={`w-full px-3 text-[11px] font-mono uppercase tracking-[0.2em] ${enabled ? 'text-emerald-200 text-left' : 'text-white/45 text-right'}`}>
-        {enabled ? 'On' : 'Off'}
-      </span>
-    </button>
-  )
-}
-
 export default function MessagesPage() {
   const { guilds, selectedGuildId } = useGuildStore()
   const guild = guilds.find((entry) => entry.id === selectedGuildId)
@@ -123,20 +78,10 @@ export default function MessagesPage() {
   const [results, setResults] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
   const [composer, setComposer] = useState({ title: '', message: '' })
-  const [config, setConfig] = useState(DEFAULT_CONFIG)
-  const [loadingConfig, setLoadingConfig] = useState(false)
   const [searching, setSearching] = useState(false)
-  const [savingConfig, setSavingConfig] = useState(false)
   const [sending, setSending] = useState(false)
 
-  const appealGuilds = useMemo(
-    () => guilds.filter((entry) => entry.id !== selectedGuildId),
-    [guilds, selectedGuildId]
-  )
-  const enabledAutoCount = useMemo(
-    () => AUTO_OPTIONS.filter((entry) => !!config[entry.key]).length,
-    [config]
-  )
+  const messageLength = composer.message.trim().length
 
   useEffect(() => {
     setQuery('')
@@ -144,24 +89,6 @@ export default function MessagesPage() {
     setSelectedUser(null)
     setComposer({ title: '', message: '' })
   }, [selectedGuildId])
-
-  useEffect(() => {
-    if (!selectedGuildId) return
-    loadConfig()
-  }, [selectedGuildId])
-
-  async function loadConfig() {
-    if (!selectedGuildId) return
-    setLoadingConfig(true)
-    try {
-      const response = await messagesAPI.config(selectedGuildId)
-      setConfig({ ...DEFAULT_CONFIG, ...(response.data?.settings || {}) })
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    } finally {
-      setLoadingConfig(false)
-    }
-  }
 
   async function handleSearch() {
     if (!selectedGuildId || !query.trim()) return
@@ -175,20 +102,6 @@ export default function MessagesPage() {
       toast.error(getErrorMessage(error))
     } finally {
       setSearching(false)
-    }
-  }
-
-  async function handleSaveConfig() {
-    if (!selectedGuildId || savingConfig) return
-    setSavingConfig(true)
-    try {
-      const response = await messagesAPI.saveConfig(selectedGuildId, config)
-      setConfig({ ...DEFAULT_CONFIG, ...(response.data?.settings || {}) })
-      toast.success('Configuration MP enregistree')
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    } finally {
-      setSavingConfig(false)
     }
   }
 
@@ -209,6 +122,23 @@ export default function MessagesPage() {
     } finally {
       setSending(false)
     }
+  }
+
+  async function handleCopyId() {
+    if (!selectedUser?.id) return
+    try {
+      await navigator.clipboard.writeText(selectedUser.id)
+      toast.success('ID copie')
+    } catch {
+      toast.error('Copie impossible')
+    }
+  }
+
+  function applyTemplate(template) {
+    setComposer({
+      title: template.title,
+      message: template.message,
+    })
   }
 
   if (!selectedGuildId) {
@@ -234,19 +164,13 @@ export default function MessagesPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <HeaderPill icon={MessageCircleMore} label="messages prives" />
-              <HeaderPill icon={BellRing} label="notifications auto" />
-              <HeaderPill icon={ShieldCheck} label={guild?.name || 'serveur'} />
+              <HeaderPill icon={Sparkles} label="templates rapides" />
+              <HeaderPill icon={Mail} label={guild?.name || 'serveur'} />
             </div>
             <div>
-              <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">Messages & notifications</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55 sm:text-[15px]">Interface plus visuelle pour rechercher un membre, preparer un MP propre et piloter les notifications automatiques du site.</p>
+              <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">Messages</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55 sm:text-[15px]">Recherche un membre, ouvre sa fiche en un clic et prepare un MP propre avec apercu direct, templates rapides et envoi simplifie.</p>
             </div>
-          </div>
-          <div className="flex flex-wrap gap-3 xl:justify-end">
-            <button onClick={loadConfig} disabled={loadingConfig} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:opacity-50">
-              <RefreshCw className={`w-4 h-4 ${loadingConfig ? 'animate-spin' : ''}`} />
-              Recharger
-            </button>
           </div>
         </div>
 
@@ -256,12 +180,12 @@ export default function MessagesPage() {
             <p className="mt-2 font-display text-2xl font-800 text-white">{results.length}</p>
           </div>
           <div className="feature-metric">
-            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Notifications actives</p>
-            <p className="mt-2 font-display text-2xl font-800 text-white">{enabledAutoCount}</p>
-          </div>
-          <div className="feature-metric">
             <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Cible ouverte</p>
             <p className="mt-2 font-display text-2xl font-800 text-white">{selectedUser ? '1' : '0'}</p>
+          </div>
+          <div className="feature-metric">
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Longueur</p>
+            <p className="mt-2 font-display text-2xl font-800 text-white">{messageLength}</p>
           </div>
         </div>
       </div>
@@ -270,40 +194,40 @@ export default function MessagesPage() {
         <div className="space-y-4">
           <div className="spotlight-card p-5 sm:p-6">
             <div className="relative z-[1] space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 flex items-center justify-center shrink-0">
-                <Search className="w-5 h-5 text-neon-cyan" />
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 flex items-center justify-center shrink-0">
+                  <Search className="w-5 h-5 text-neon-cyan" />
+                </div>
+                <div>
+                  <p className="font-display font-700 text-white text-lg">Recherche membre</p>
+                  <p className="text-white/40 text-sm mt-1">Pseudo, surnom ou ID Discord.</p>
+                </div>
               </div>
-              <div>
-                <p className="font-display font-700 text-white text-lg">Recherche membre</p>
-                <p className="text-white/40 text-sm mt-1">Pseudo, surnom ou ID Discord.</p>
+
+              <div className="relative">
+                <Search className="w-4 h-4 text-white/25 absolute left-4 top-1/2 -translate-y-1/2" />
+                <input
+                  className="input-field pl-11"
+                  placeholder="Exemple: Dream ou 123456789"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      handleSearch()
+                    }
+                  }}
+                />
               </div>
-            </div>
 
-            <div className="relative">
-              <Search className="w-4 h-4 text-white/25 absolute left-4 top-1/2 -translate-y-1/2" />
-              <input
-                className="input-field pl-11"
-                placeholder="Exemple: Dream ou 123456789"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    handleSearch()
-                  }
-                }}
-              />
-            </div>
-
-            <button
-              onClick={handleSearch}
-              disabled={!query.trim() || searching}
-              className="inline-flex w-full items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/15 transition-all disabled:opacity-50"
-            >
-              <Search className={`w-4 h-4 ${searching ? 'animate-pulse' : ''}`} />
-              Rechercher
-            </button>
+              <button
+                onClick={handleSearch}
+                disabled={!query.trim() || searching}
+                className="inline-flex w-full items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/15 transition-all disabled:opacity-50"
+              >
+                <Search className={`w-4 h-4 ${searching ? 'animate-pulse' : ''}`} />
+                Rechercher
+              </button>
             </div>
           </div>
 
@@ -351,9 +275,9 @@ export default function MessagesPage() {
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Avatar src={entry.avatar_url} label={entry.display_name} />
+                      <Avatar src={entry.avatar_url} label={entry.display_name || entry.username || entry.id} />
                       <div className="min-w-0">
-                        <p className="text-white font-display font-700 truncate">{entry.display_name}</p>
+                        <p className="text-white font-display font-700 truncate">{entry.display_name || entry.username || entry.id}</p>
                         <p className="text-sm text-white/55 truncate mt-1">@{entry.username || entry.id}</p>
                         <p className="text-[11px] text-white/30 font-mono mt-2">{entry.id}</p>
                       </div>
@@ -366,195 +290,137 @@ export default function MessagesPage() {
         </div>
 
         <div className="space-y-5">
-          <div className="spotlight-card p-6 space-y-5">
+          <div className="spotlight-card p-6">
             <div className="relative z-[1] space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl border border-violet-500/20 bg-violet-500/10 flex items-center justify-center shrink-0">
-                <Send className="w-5 h-5 text-violet-300" />
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl border border-violet-500/20 bg-violet-500/10 flex items-center justify-center shrink-0">
+                  <Send className="w-5 h-5 text-violet-300" />
+                </div>
+                <div>
+                  <p className="font-display font-700 text-white text-lg">Composer un message</p>
+                  <p className="text-white/40 text-sm mt-1">Page reservee uniquement a l'envoi manuel de MP.</p>
+                </div>
               </div>
-              <div>
-                <p className="font-display font-700 text-white text-lg">Composer un message</p>
-                <p className="text-white/40 text-sm mt-1">Le bot enverra un MP direct avec un rendu plus propre qu'un texte brut.</p>
-              </div>
-            </div>
 
-            {!selectedUser && (
-              <div className="rounded-3xl border border-white/8 bg-black/15 p-8 text-center text-white/40 text-sm">
-                Selectionne une personne a gauche pour ouvrir la composition.
-              </div>
-            )}
+              {!selectedUser && (
+                <div className="rounded-3xl border border-white/8 bg-black/15 p-8 text-center text-white/40 text-sm">
+                  Selectionne une personne a gauche pour ouvrir la composition.
+                </div>
+              )}
 
-            {selectedUser && (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={selectedUser.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-5"
-                >
-                  <div className="rounded-3xl border border-white/8 bg-black/15 p-5 flex items-center gap-4">
-                    <Avatar src={selectedUser.avatar_url} label={selectedUser.display_name} size="w-16 h-16" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <p className="font-display font-800 text-white text-2xl truncate">{selectedUser.display_name}</p>
-                        {selectedUser.banned && <span className="px-2.5 py-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-300 text-xs font-mono">Banni</span>}
-                        {selectedUser.in_server && <span className="px-2.5 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 text-xs font-mono">Dans le serveur</span>}
+              {selectedUser && (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={selectedUser.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-5"
+                  >
+                    <div className="rounded-3xl border border-white/8 bg-black/15 p-5 flex items-center gap-4">
+                      <Avatar src={selectedUser.avatar_url} label={selectedUser.display_name || selectedUser.username || selectedUser.id} size="w-16 h-16" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <p className="font-display font-800 text-white text-2xl truncate">{selectedUser.display_name || selectedUser.username || selectedUser.id}</p>
+                          {selectedUser.banned && <span className="px-2.5 py-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-300 text-xs font-mono">Banni</span>}
+                          {selectedUser.in_server && <span className="px-2.5 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 text-xs font-mono">Dans le serveur</span>}
+                        </div>
+                        <p className="text-white/55 text-sm mt-1 flex items-center gap-2">
+                          <User className="w-3 h-3" />
+                          @{selectedUser.username || selectedUser.id}
+                        </p>
+                        <p className="text-[11px] text-white/30 font-mono mt-2 flex items-center gap-2">
+                          <Mail className="w-3 h-3" />
+                          {selectedUser.id}
+                        </p>
                       </div>
-                      <p className="text-white/55 text-sm mt-1 flex items-center gap-2">
-                        <User className="w-3 h-3" />
-                        @{selectedUser.username || selectedUser.id}
-                      </p>
-                      <p className="text-[11px] text-white/30 font-mono mt-2 flex items-center gap-2">
-                        <Mail className="w-3 h-3" />
-                        {selectedUser.id}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-                    <div className="space-y-4">
-                      <label className="block space-y-2">
-                        <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Titre du message</span>
-                        <input
-                          className="input-field"
-                          placeholder="Exemple: Message du staff"
-                          value={composer.title}
-                          onChange={(event) => setComposer((current) => ({ ...current, title: event.target.value }))}
-                        />
-                      </label>
-
-                      <label className="block space-y-2">
-                        <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Contenu du message</span>
-                        <textarea
-                          className="input-field min-h-[240px] resize-y"
-                          placeholder="Ecris ici le message prive a envoyer..."
-                          value={composer.message}
-                          onChange={(event) => setComposer((current) => ({ ...current, message: event.target.value }))}
-                        />
-                      </label>
-
                       <button
-                        onClick={handleSendMessage}
-                        disabled={sending || !composer.message.trim()}
-                        className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/15 transition-all disabled:opacity-50"
+                        type="button"
+                        onClick={handleCopyId}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-white/60 transition-all hover:border-white/20 hover:text-white"
                       >
-                        <Send className={`w-4 h-4 ${sending ? 'animate-pulse' : ''}`} />
-                        {sending ? 'Envoi...' : 'Envoyer le MP'}
+                        <Copy className="w-4 h-4" />
+                        ID
                       </button>
                     </div>
 
-                    <div className="depth-panel-static rounded-3xl border border-white/8 bg-gradient-to-br from-white/[0.04] to-white/[0.02] p-5 space-y-4">
-                      <div className="flex items-center gap-2 text-white">
-                        <Sparkles className="w-4 h-4 text-violet-300" />
-                        <p className="font-display font-700">Apercu du rendu</p>
+                    <div className="flex flex-wrap gap-2">
+                      {QUICK_TEMPLATES.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => applyTemplate(template)}
+                          className="feature-chip transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          {template.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+                      <div className="space-y-4">
+                        <label className="block space-y-2">
+                          <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Titre du message</span>
+                          <input
+                            className="input-field"
+                            placeholder="Exemple: Message du staff"
+                            value={composer.title}
+                            onChange={(event) => setComposer((current) => ({ ...current, title: event.target.value }))}
+                          />
+                        </label>
+
+                        <label className="block space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Contenu du message</span>
+                            <span className="text-[11px] font-mono text-white/30">{messageLength} caracteres</span>
+                          </div>
+                          <textarea
+                            className="input-field min-h-[240px] resize-y"
+                            placeholder="Ecris ici le message prive a envoyer..."
+                            value={composer.message}
+                            onChange={(event) => setComposer((current) => ({ ...current, message: event.target.value }))}
+                          />
+                        </label>
+
+                        <button
+                          onClick={handleSendMessage}
+                          disabled={sending || !composer.message.trim()}
+                          className="inline-flex w-full items-center justify-center gap-2 px-5 py-3 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/15 transition-all disabled:opacity-50"
+                        >
+                          <Send className={`w-4 h-4 ${sending ? 'animate-pulse' : ''}`} />
+                          {sending ? 'Envoi...' : 'Envoyer le MP'}
+                        </button>
                       </div>
-                      <div className="rounded-2xl border border-white/8 bg-black/20 p-4 space-y-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar src={guild?.iconUrl} label={guild?.name} tone="from-cyan-500/25 to-violet-500/25" size="w-11 h-11" />
+
+                      <div className="depth-panel-static rounded-3xl border border-white/8 bg-gradient-to-br from-white/[0.04] to-white/[0.02] p-5 space-y-4">
+                        <div className="flex items-center gap-2 text-white">
+                          <Sparkles className="w-4 h-4 text-violet-300" />
+                          <p className="font-display font-700">Apercu du rendu</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/8 bg-black/20 p-4 space-y-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar src={guild?.iconUrl} label={guild?.name} tone="from-cyan-500/25 to-violet-500/25" size="w-11 h-11" />
+                            <div>
+                              <p className="text-white font-display font-700">{guild?.name}</p>
+                              <p className="text-white/35 text-xs flex items-center gap-1.5">
+                                <Calendar className="w-3 h-3" />
+                                Message prive staff
+                              </p>
+                            </div>
+                          </div>
                           <div>
-                            <p className="text-white font-display font-700">{guild?.name}</p>
-                            <p className="text-white/35 text-xs flex items-center gap-1.5">
-                              <Calendar className="w-3 h-3" />
-                              Message prive staff
-                            </p>
+                            <p className="text-white text-sm font-display font-700">{composer.title.trim() || 'Message du staff'}</p>
+                            <p className="text-white/65 text-sm mt-2 whitespace-pre-wrap">{composer.message.trim() || 'Ton message apparaitra ici avec le rendu final du bot.'}</p>
                           </div>
                         </div>
-                        <div>
-                          <p className="text-white text-sm font-display font-700">{composer.title.trim() || 'Message du staff'}</p>
-                          <p className="text-white/65 text-sm mt-2 whitespace-pre-wrap">{composer.message.trim() || 'Ton message apparaitra ici avec le rendu final du bot.'}</p>
-                        </div>
-                      </div>
-                      <p className="text-white/35 text-xs leading-6">Le rendu final ajoute automatiquement l'identite du serveur, l'heure et la presentation propre dans le MP.</p>
-                    </div>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-            )}
-            </div>
-          </div>
-
-          <div className="spotlight-card p-6 space-y-5">
-            <div className="relative z-[1] space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <ShieldCheck className="w-5 h-5 text-emerald-300" />
-              </div>
-              <div>
-                <p className="font-display font-700 text-white text-lg">Notifications automatiques</p>
-                <p className="text-white/40 text-sm mt-1">Chaque sanction du site peut envoyer son propre MP visuel, sans repasser ailleurs.</p>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              {AUTO_OPTIONS.map((item) => {
-                const Icon = item.icon
-                const tone = AUTO_OPTION_TONES[item.color] || AUTO_OPTION_TONES.violet
-                return (
-                  <div key={item.key} className="depth-panel px-4 py-3 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${tone.shell}`}>
-                        <Icon className={`w-4 h-4 ${tone.icon}`} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-white font-display font-700">{item.title}</p>
-                        <p className="text-white/40 text-sm mt-1">{item.hint}</p>
+                        <p className="text-white/35 text-xs leading-6">Le rendu final garde l'identite du serveur et une presentation propre, sans melanger cette page avec les notifications automatiques.</p>
                       </div>
                     </div>
-                    <TogglePill
-                      enabled={!!config[item.key]}
-                      onClick={() => setConfig((current) => ({ ...current, [item.key]: !current[item.key] }))}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <label className="block space-y-2">
-                <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Serveur de recours</span>
-                <select
-                  className="select-field"
-                  value={appealGuilds.some((entry) => entry.name === config.appeal_server_name) ? config.appeal_server_name : ''}
-                  onChange={(event) => setConfig((current) => ({ ...current, appeal_server_name: event.target.value }))}
-                >
-                  <option value="">Aucun serveur choisi</option>
-                  {appealGuilds.map((entry) => (
-                    <option key={entry.id} value={entry.name}>{entry.name}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Lien d'invitation</span>
-                <input
-                  className="input-field"
-                  placeholder="https://discord.gg/..."
-                  value={config.appeal_server_url}
-                  onChange={(event) => setConfig((current) => ({ ...current, appeal_server_url: event.target.value }))}
-                />
-              </label>
-            </div>
-
-            <label className="block space-y-2">
-              <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Nom libre du serveur de recours</span>
-              <input
-                className="input-field"
-                placeholder="Exemple: Support deban DiscordForger"
-                value={config.appeal_server_name}
-                onChange={(event) => setConfig((current) => ({ ...current, appeal_server_name: event.target.value }))}
-              />
-            </label>
-
-            <button
-              onClick={handleSaveConfig}
-              disabled={savingConfig}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl border border-violet-500/25 bg-violet-500/10 text-violet-200 font-mono text-sm hover:bg-violet-500/15 transition-all disabled:opacity-50"
-            >
-              <CheckCircle2 className={`w-4 h-4 ${savingConfig ? 'animate-pulse' : ''}`} />
-              {savingConfig ? 'Enregistrement...' : 'Enregistrer la configuration'}
-            </button>
+                  </motion.div>
+                </AnimatePresence>
+              )}
             </div>
           </div>
         </div>

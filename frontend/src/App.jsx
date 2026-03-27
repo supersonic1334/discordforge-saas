@@ -17,6 +17,7 @@ import ProtectionPage from './pages/ProtectionPage'
 import SearchPage from './pages/SearchPage'
 import LogsPage from './pages/LogsPage'
 import MessagesPage from './pages/MessagesPage'
+import NotificationsPage from './pages/NotificationsPage'
 import AccessControlPage from './pages/AccessControlPage'
 import CommandsPage from './pages/CommandsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
@@ -215,6 +216,7 @@ function AppRoot() {
           <Route path="logs" element={<PageTransition><LogsPage /></PageTransition>} />
           <Route path="moderation" element={<Navigate to="/dashboard/search" replace />} />
           <Route path="messages" element={<PageTransition><MessagesPage /></PageTransition>} />
+          <Route path="notifications" element={<PageTransition><NotificationsPage /></PageTransition>} />
           <Route path="blocked" element={<PageTransition><AccessControlPage /></PageTransition>} />
           <Route path="commands" element={<PageTransition><CommandsPage /></PageTransition>} />
           <Route path="analytics" element={<PageTransition><AnalyticsPage /></PageTransition>} />
