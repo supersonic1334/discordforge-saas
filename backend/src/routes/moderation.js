@@ -53,15 +53,115 @@ function isPrimaryFounder(user) {
   return authService.isPrimaryFounderEmail(user?.email);
 }
 
+function normalizeDiscordIdentity(value) {
+  return String(value || '').trim().replace(/^@/, '').toLowerCase();
+}
+
 function parseDiscordIdentity(value) {
   const raw = String(value || '').trim();
-  if (!raw) return { raw: '', id: null };
+  if (!raw) return { raw: '', id: null, lookupQuery: '', normalized: '' };
 
   const mentionMatch = raw.match(/^<@!?(\d+)>$/);
-  if (mentionMatch) return { raw, id: mentionMatch[1] };
-  if (/^\d+$/.test(raw)) return { raw, id: raw };
+  if (mentionMatch) {
+    return { raw, id: mentionMatch[1], lookupQuery: mentionMatch[1], normalized: normalizeDiscordIdentity(raw) };
+  }
+  if (/^\d+$/.test(raw)) {
+    return { raw, id: raw, lookupQuery: raw, normalized: normalizeDiscordIdentity(raw) };
+  }
 
-  return { raw, id: null };
+  const cleaned = raw.replace(/^@/, '').trim();
+  const legacyTagMatch = cleaned.match(/^(.+?)#(\d{4})$/);
+  const lookupQuery = (legacyTagMatch?.[1] || cleaned).trim();
+
+  return {
+    raw,
+    id: null,
+    lookupQuery,
+    normalized: normalizeDiscordIdentity(cleaned),
+  };
+}
+
+function parseDiscordDate(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const normalized = raw.replace(/(\.\d{3})\d+(?=(?:Z|[+-]\d{2}:\d{2})$)/, '$1');
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getActiveTimeoutUntil(value) {
+  const timestamp = parseDiscordDate(value);
+  if (!timestamp || timestamp <= Date.now()) return null;
+  return new Date(timestamp).toISOString();
+}
+
+function buildMemberIdentitySet(member) {
+  const user = member?.user || {};
+  const values = new Set();
+  const push = (entry) => {
+    const normalized = normalizeDiscordIdentity(entry);
+    if (normalized) values.add(normalized);
+  };
+
+  push(user.id);
+  push(`<@${user.id}>`);
+  push(`<@!${user.id}>`);
+  push(user.username);
+  push(user.global_name);
+  push(member?.nick);
+  if (user.username && user.discriminator && user.discriminator !== '0') {
+    push(`${user.username}#${user.discriminator}`);
+  }
+
+  return values;
+}
+
+function memberMatchesIdentity(member, identity) {
+  const normalizedInput = normalizeDiscordIdentity(identity);
+  if (!normalizedInput) return false;
+  return buildMemberIdentitySet(member).has(normalizedInput);
+}
+
+async function resolveModeratorMemberByIdentity(token, guildId, identityInput, expectedDiscordId = null) {
+  const identity = parseDiscordIdentity(identityInput);
+  if (!identity.raw) {
+    throw buildHttpError(400, 'Identite Discord du moderateur obligatoire');
+  }
+
+  if (identity.id) {
+    const member = await getGuildMemberSafe(token, guildId, identity.id);
+    if (!member) throw buildHttpError(404, 'Compte Discord du moderateur introuvable sur ce serveur');
+    return { identity, member };
+  }
+
+  const members = await discordService.searchGuildMembers(token, guildId, identity.lookupQuery, 25).catch(() => []);
+  const exactMatches = [];
+  const seen = new Set();
+  for (const member of Array.isArray(members) ? members : []) {
+    const memberId = member?.user?.id;
+    if (!memberId || seen.has(memberId)) continue;
+    seen.add(memberId);
+    if (memberMatchesIdentity(member, identity.raw)) {
+      exactMatches.push(member);
+    }
+  }
+
+  if (expectedDiscordId) {
+    const linkedMember = exactMatches.find((member) => String(member?.user?.id) === String(expectedDiscordId));
+    if (linkedMember) return { identity, member: linkedMember };
+  }
+
+  if (exactMatches.length === 0) {
+    throw buildHttpError(404, 'Identite Discord invalide ou introuvable sur ce serveur');
+  }
+
+  if (exactMatches.length > 1) {
+    throw buildHttpError(400, 'Identite Discord ambigue, utilise un ID ou une mention');
+  }
+
+  return { identity, member: exactMatches[0] };
 }
 
 function parsePermissions(member) {
@@ -225,6 +325,7 @@ function buildMemberProfile(member, guildRoleMap, guildId) {
   const user = member.user;
   const permissions = parsePermissions(member);
   const displayName = member.nick || user.global_name || user.username || user.id;
+  const activeTimeoutUntil = getActiveTimeoutUntil(member.communication_disabled_until);
 
   return {
     id: user.id,
@@ -232,12 +333,13 @@ function buildMemberProfile(member, guildRoleMap, guildId) {
     global_name: user.global_name || null,
     nickname: member.nick || null,
     display_name: displayName,
-    avatar_url: discordService.getAvatarUrl(user.id, user.avatar),
+    avatar_url: discordService.getAvatarUrl(user.id, user.avatar, 128, user.discriminator),
     bot: Boolean(user.bot),
     created_at: snowflakeToIso(user.id),
     joined_at: member.joined_at || null,
     premium_since: member.premium_since || null,
-    timed_out_until: member.communication_disabled_until || null,
+    timed_out_until: activeTimeoutUntil,
+    timeout_active: Boolean(activeTimeoutUntil),
     roles: buildRoleSummary(member, guildRoleMap, guildId),
     permissions: {
       administrator: memberHasPermission(member, DISCORD_PERMISSIONS.ADMINISTRATOR),
@@ -265,6 +367,7 @@ function buildBasicUserProfile(user, fallbackId = null) {
       joined_at: null,
       premium_since: null,
       timed_out_until: null,
+      timeout_active: false,
       roles: [],
       permissions: null,
     };
@@ -276,12 +379,13 @@ function buildBasicUserProfile(user, fallbackId = null) {
     global_name: user.global_name || null,
     nickname: null,
     display_name: user.global_name || user.username || user.id,
-    avatar_url: discordService.getAvatarUrl(user.id, user.avatar),
+    avatar_url: discordService.getAvatarUrl(user.id, user.avatar, 128, user.discriminator),
     bot: Boolean(user.bot),
     created_at: snowflakeToIso(user.id),
     joined_at: null,
     premium_since: null,
     timed_out_until: null,
+    timeout_active: false,
     roles: [],
     permissions: null,
   };
@@ -307,18 +411,16 @@ async function getGuildBanSafe(token, guildId, userId) {
 
 async function resolveModeratorAccess(req, token, actionName, identityInput) {
   const linkedDiscordId = req.user.discord_id || null;
-  const providedIdentity = parseDiscordIdentity(identityInput);
+  const trimmedIdentity = String(identityInput || '').trim();
   const requiredPermission = QUICK_ACTION_PERMISSION[actionName] || DISCORD_PERMISSIONS.MODERATE_MEMBERS;
+  const { member } = await resolveModeratorMemberByIdentity(token, req.guild.guild_id, trimmedIdentity, linkedDiscordId);
 
   if (linkedDiscordId) {
-    if (providedIdentity.id && providedIdentity.id !== linkedDiscordId) {
-      throw buildHttpError(403, 'Linked Discord account does not match the provided moderator identity');
+    if (String(member?.user?.id || '') !== String(linkedDiscordId)) {
+      throw buildHttpError(403, 'L identite Discord ne correspond pas au compte Discord lie a ce profil');
     }
-
-    const member = await getGuildMemberSafe(token, req.guild.guild_id, linkedDiscordId);
-    if (!member) throw buildHttpError(403, 'Linked Discord account is not in this server');
     if (!memberHasPermission(member, requiredPermission)) {
-      throw buildHttpError(403, 'Linked Discord account lacks permission for this action');
+      throw buildHttpError(403, 'Le compte Discord lie n a pas les permissions necessaires pour cette action');
     }
 
     return {
@@ -329,34 +431,15 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
     };
   }
 
-  if (!isPrimaryFounder(req.user)) {
-    if (!providedIdentity.id) {
-      throw buildHttpError(400, 'Link your Discord account or provide your Discord identity');
-    }
-
-    const member = await getGuildMemberSafe(token, req.guild.guild_id, providedIdentity.id);
-    if (!member) throw buildHttpError(404, 'Moderator Discord account not found in this server');
-    if (!memberHasPermission(member, requiredPermission)) {
-      throw buildHttpError(403, 'Discord moderator identity lacks permission for this action');
-    }
-
-    return {
-      linked: false,
-      permissionVerified: true,
-      discordId: providedIdentity.id,
-      member,
-    };
+  if (!memberHasPermission(member, requiredPermission)) {
+    throw buildHttpError(403, 'L identite Discord fournie n a pas les permissions necessaires pour cette action');
   }
-
-  const founderMember = providedIdentity.id
-    ? await getGuildMemberSafe(token, req.guild.guild_id, providedIdentity.id)
-    : null;
 
   return {
     linked: false,
-    permissionVerified: Boolean(founderMember && memberHasPermission(founderMember, requiredPermission)),
-    discordId: founderMember?.user?.id || providedIdentity.id || null,
-    member: founderMember,
+    permissionVerified: true,
+    discordId: member?.user?.id || null,
+    member,
   };
 }
 
@@ -401,7 +484,7 @@ async function resolveDiscordProfile(token, identityInput) {
     return {
       identity,
       profile,
-      avatarUrl: discordService.getAvatarUrl(profile.id, profile.avatar),
+      avatarUrl: discordService.getAvatarUrl(profile.id, profile.avatar, 128, profile.discriminator),
     };
   } catch {
     return {
@@ -414,14 +497,9 @@ async function resolveDiscordProfile(token, identityInput) {
 
 async function buildModeratorMetadata(req, token, identityInput, moderationAccess = null) {
   const trimmedIdentity = String(identityInput || '').trim();
-
-  if (!isPrimaryFounder(req.user) && !trimmedIdentity && !req.user.discord_id) {
-    throw buildHttpError(400, 'Discord moderator identity required');
-  }
-
   const resolvedAccess = moderationAccess || await resolveModeratorAccess(req, token, 'warn', trimmedIdentity);
   let profile = resolvedAccess.member?.user || null;
-  let avatarUrl = profile ? discordService.getAvatarUrl(profile.id, profile.avatar) : null;
+  let avatarUrl = profile ? discordService.getAvatarUrl(profile.id, profile.avatar, 128, profile.discriminator) : null;
   let identityId = resolvedAccess.discordId || null;
 
   if (!profile && trimmedIdentity) {
@@ -460,7 +538,7 @@ async function resolveTargetUser(token, targetUserId, targetUsername) {
     const profile = await discordService.getUser(token, targetUserId);
     return {
       username: profile.global_name || profile.username || targetUserId,
-      avatarUrl: discordService.getAvatarUrl(profile.id, profile.avatar),
+      avatarUrl: discordService.getAvatarUrl(profile.id, profile.avatar, 128, profile.discriminator),
     };
   } catch {
     return {
@@ -615,7 +693,7 @@ function discordActionHistoryEntry(entry, executorMap, userId) {
     moderator: {
       id: executor?.id || entry.user_id || null,
       name: executor?.global_name || executor?.username || entry.user_id || 'Unknown',
-      avatar_url: executor ? discordService.getAvatarUrl(executor.id, executor.avatar) : null,
+      avatar_url: executor ? discordService.getAvatarUrl(executor.id, executor.avatar, 128, executor.discriminator) : null,
     },
   };
 }
@@ -716,7 +794,7 @@ router.get('/search', validateQuery(moderationSearchSchema), async (req, res, ne
           username: member.user.username || null,
           global_name: member.user.global_name || null,
           display_name: member.nick || member.user.global_name || member.user.username || member.user.id,
-          avatar_url: discordService.getAvatarUrl(member.user.id, member.user.avatar),
+          avatar_url: discordService.getAvatarUrl(member.user.id, member.user.avatar, 128, member.user.discriminator),
           nickname: member.nick || null,
           joined_at: member.joined_at || null,
           in_server: true,
@@ -733,7 +811,7 @@ router.get('/search', validateQuery(moderationSearchSchema), async (req, res, ne
           username: ban.user.username || null,
           global_name: ban.user.global_name || null,
           display_name: ban.user.global_name || ban.user.username || ban.user.id,
-          avatar_url: discordService.getAvatarUrl(ban.user.id, ban.user.avatar),
+          avatar_url: discordService.getAvatarUrl(ban.user.id, ban.user.avatar, 128, ban.user.discriminator),
           nickname: null,
           joined_at: null,
           in_server: false,
@@ -753,7 +831,7 @@ router.get('/search', validateQuery(moderationSearchSchema), async (req, res, ne
           username: member.user.username || null,
           global_name: member.user.global_name || null,
           display_name: member.nick || member.user.global_name || member.user.username || member.user.id,
-          avatar_url: discordService.getAvatarUrl(member.user.id, member.user.avatar),
+          avatar_url: discordService.getAvatarUrl(member.user.id, member.user.avatar, 128, member.user.discriminator),
           nickname: member.nick || null,
           joined_at: member.joined_at || null,
           in_server: true,
@@ -976,8 +1054,8 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
       targetUsername: target.username,
     });
   } catch (err) {
-    if (err.httpStatus === 403) return res.status(403).json({ error: 'Bot lacks permission to perform this action' });
-    if (err.httpStatus === 404) return res.status(404).json({ error: 'User not found in this server' });
+    if (err.httpStatus === 403) return res.status(403).json({ error: err.message || 'Action interdite' });
+    if (err.httpStatus === 404) return res.status(404).json({ error: err.message || 'Utilisateur introuvable sur ce serveur' });
     if (err.httpStatus === 400) return res.status(400).json({ error: err.message });
     next(err);
   }

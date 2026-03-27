@@ -408,8 +408,23 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function getAvatarUrl(userId, avatarHash, size = 128) {
-  if (!avatarHash) return `https://cdn.discordapp.com/embed/avatars/${parseInt(userId) % 5}.png`;
+function getDefaultAvatarIndex(userId, discriminator = null) {
+  const parsedDiscriminator = String(discriminator || '').trim();
+  if (/^\d{1,4}$/.test(parsedDiscriminator) && parsedDiscriminator !== '0') {
+    return Number(parsedDiscriminator) % 5;
+  }
+
+  try {
+    return Number((BigInt(String(userId)) >> 22n) % 6n);
+  } catch {
+    return 0;
+  }
+}
+
+function getAvatarUrl(userId, avatarHash, size = 128, discriminator = null) {
+  if (!avatarHash) {
+    return `https://cdn.discordapp.com/embed/avatars/${getDefaultAvatarIndex(userId, discriminator)}.png`;
+  }
   const ext = avatarHash.startsWith('a_') ? 'gif' : 'png';
   return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${ext}?size=${size}`;
 }

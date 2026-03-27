@@ -129,7 +129,7 @@ function ActionModal({ action, target, values, onChange, onClose, onSubmit, subm
               {action === 'warn' ? <input className="input-field" value={values.points} onChange={(event) => onChange((current) => ({ ...current, points: event.target.value }))} placeholder="Points" inputMode="numeric" /> : null}
             </div>
           )}
-          <input className="input-field" value={values.moderatorIdentity} onChange={(event) => onChange((current) => ({ ...current, moderatorIdentity: event.target.value }))} placeholder="Identite Discord du moderateur (optionnel)" />
+          <input className="input-field" value={values.moderatorIdentity} onChange={(event) => onChange((current) => ({ ...current, moderatorIdentity: event.target.value }))} placeholder="Identite Discord du moderateur (obligatoire)" />
         </div>
         <div className="relative z-[1] flex gap-3">
           <button type="button" onClick={onClose} className="flex-1 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white/70 transition-all hover:border-white/20 hover:text-white">Annuler</button>
@@ -165,9 +165,12 @@ function DirectMessageModal({ target, values, onChange, onClose, onSubmit, submi
 }
 
 function hasActiveTimeout(profile) {
-  const rawValue = profile?.timed_out_until
+  if (!profile?.in_server) return false
+  if (typeof profile?.timeout_active === 'boolean') return profile.timeout_active
+  const rawValue = String(profile?.timed_out_until || '').trim()
   if (!rawValue) return false
-  const timestamp = new Date(rawValue).getTime()
+  const normalized = rawValue.replace(/(\.\d{3})\d+(?=(?:Z|[+-]\d{2}:\d{2})$)/, '$1')
+  const timestamp = Date.parse(normalized)
   return Number.isFinite(timestamp) && timestamp > Date.now()
 }
 
@@ -235,12 +238,17 @@ export default function SearchPage() {
 
   async function handleSubmitAction() {
     if (!selectedGuildId || !selectedUserId || !actionModal || submittingAction) return
+    const moderatorIdentity = actionValues.moderatorIdentity.trim()
+    if (!moderatorIdentity) {
+      toast.error('Identite Discord du moderateur obligatoire')
+      return
+    }
     const payload = {
       action: actionModal,
       target_user_id: selectedUserId,
       target_username: profileData?.profile?.display_name || selectedResult?.display_name || selectedUserId,
       reason: actionValues.reason.trim() || 'Action rapide depuis Search',
-      moderator_discord_identity: actionValues.moderatorIdentity.trim() || undefined,
+      moderator_discord_identity: moderatorIdentity,
     }
     if (actionModal === 'timeout') {
       const durationMs = parseDurationInput(actionValues.duration.trim())
