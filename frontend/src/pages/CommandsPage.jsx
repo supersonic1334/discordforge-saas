@@ -503,13 +503,13 @@ function getCommandsCopy(locale) {
 
   if (key === 'en') {
     return {
-      heroBadge: 'Auto-detect',
-      heroTitle: 'More powerful, more visual, more adaptable command builder.',
-      heroText: 'Type any trigger directly: `/help`, `!ping`, `*ticket`, `?rules`, `^^panel`. The page detects the real mode automatically.',
-      detectTitle: 'Live detection',
-      detectText: 'The assistant reads your trigger as you type and keeps the final command aligned with your Discord intent.',
+      heroBadge: 'Guided flow',
+      heroTitle: 'Create a command in three clear steps.',
+      heroText: 'Write the trigger, describe what you want, then generate it. The page keeps the final Discord format aligned automatically.',
+      detectTitle: 'Trigger preview',
+      detectText: 'You immediately see how the command will be stored before generating it.',
       triggerExamples: 'Trigger ideas',
-      promptIdeas: 'Prompt ideas',
+      promptIdeas: 'Quick ideas',
       autoMode: 'Auto-detected mode',
       liveTrigger: 'Saved trigger',
       inputHelp: 'Type the exact trigger or the future command name. Examples: `/help`, `!joke`, `*ticket`, `?rules`, `^^panel`.',
@@ -528,24 +528,27 @@ function getCommandsCopy(locale) {
       helperTicket: 'Ticket panel',
       helperAnnounce: 'Styled announcement',
       assistantPanelTitle: 'AI creation flow',
-      assistantPanelText: 'Describe a simple or advanced Discord feature. The assistant now aims for richer embeds, better argument handling, and more varied responses.',
+      assistantPanelText: 'Pick an idea or describe your own command. The assistant handles the rest.',
       quotaLabel: 'AI budget left',
       total: 'Commands',
       active: 'Online',
       slash: 'Slash',
       dynamic: 'Varied',
+      stepOne: '1. Trigger',
+      stepTwo: '2. Prompt',
+      stepThree: '3. Generate',
     }
   }
 
   if (key === 'es') {
     return {
-      heroBadge: 'Deteccion auto',
-      heroTitle: 'Constructor de comandos mas potente, mas visual y mas flexible.',
-      heroText: 'Escribe directamente cualquier trigger: `/help`, `!ping`, `*ticket`, `?reglas`, `^^panel`. La pagina detecta el modo real automaticamente.',
-      detectTitle: 'Deteccion en vivo',
-      detectText: 'El asistente interpreta tu trigger mientras escribes y mantiene el comando final alineado con tu intencion real en Discord.',
+      heroBadge: 'Flujo guiado',
+      heroTitle: 'Crea un comando en tres pasos claros.',
+      heroText: 'Escribe el trigger, describe lo que quieres y genera. La pagina mantiene automaticamente el formato final de Discord.',
+      detectTitle: 'Vista previa del trigger',
+      detectText: 'Ves al instante como se guardara el comando antes de generarlo.',
       triggerExamples: 'Ideas de trigger',
-      promptIdeas: 'Ideas de pedido',
+      promptIdeas: 'Ideas rapidas',
       autoMode: 'Modo detectado',
       liveTrigger: 'Trigger guardado',
       inputHelp: 'Escribe el trigger exacto o el futuro nombre del comando. Ejemplos: `/help`, `!broma`, `*ticket`, `?reglas`, `^^panel`.',
@@ -564,23 +567,26 @@ function getCommandsCopy(locale) {
       helperTicket: 'Panel ticket',
       helperAnnounce: 'Anuncio premium',
       assistantPanelTitle: 'Flujo IA',
-      assistantPanelText: 'Describe una funcion simple o avanzada para Discord. El asistente ahora apunta a embeds mas ricos, mejor gestion de argumentos y respuestas mas variadas.',
+      assistantPanelText: 'Elige una idea o describe tu comando. El asistente se encarga del resto.',
       quotaLabel: 'Cuota IA restante',
       total: 'Comandos',
       active: 'Activos',
       slash: 'Slash',
       dynamic: 'Variables',
+      stepOne: '1. Trigger',
+      stepTwo: '2. Pedido',
+      stepThree: '3. Generar',
     }
   }
 
   return {
-    heroBadge: 'Detection auto',
-    heroTitle: 'Constructeur de commandes plus puissant, plus visuel et plus souple.',
-    heroText: 'Tape directement n’importe quel declencheur: `/help`, `!ping`, `*ticket`, `?regles`, `^^panel`. La page detecte le vrai mode automatiquement.',
-    detectTitle: 'Detection en direct',
-    detectText: 'L’assistant lit ton declencheur pendant la saisie et garde la commande finale coherente avec ce que tu veux vraiment faire sur Discord.',
+    heroBadge: 'Flux guide',
+    heroTitle: 'Cree une commande en trois etapes claires.',
+    heroText: 'Ecris le declencheur, decris ce que tu veux, puis genere. La page garde automatiquement le bon format Discord.',
+    detectTitle: 'Apercu du declencheur',
+    detectText: 'Tu vois tout de suite comment la commande sera enregistree avant la generation.',
     triggerExamples: 'Idees de declencheur',
-    promptIdeas: 'Idees de demande',
+    promptIdeas: 'Idees rapides',
     autoMode: 'Mode detecte',
     liveTrigger: 'Declencheur final',
     inputHelp: 'Ecris le declencheur exact ou le futur nom de commande. Exemples: `/help`, `!blague`, `*ticket`, `?regles`, `^^panel`.',
@@ -599,12 +605,15 @@ function getCommandsCopy(locale) {
     helperTicket: 'Ticket premium',
     helperAnnounce: 'Annonce stylisee',
     assistantPanelTitle: 'Flux IA',
-    assistantPanelText: 'Decris une fonction Discord simple ou avancee. L’assistant vise maintenant des embeds plus riches, des arguments mieux geres et des reponses moins basiques.',
+    assistantPanelText: 'Choisis une idee ou ecris ta demande. L assistant s occupe du reste.',
     quotaLabel: 'Quota IA restant',
     total: 'Commandes',
     active: 'Actives',
     slash: 'Slash',
     dynamic: 'Variables',
+    stepOne: '1. Declencheur',
+    stepTwo: '2. Demande',
+    stepThree: '3. Generer',
   }
 }
 
@@ -930,7 +939,7 @@ export default function CommandsPage() {
 
   return (
     <div className="px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,24,40,0.94),rgba(16,16,32,0.98))] shadow-[0_30px_90px_rgba(2,8,23,0.45)]">
+      <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,24,40,0.94),rgba(16,16,32,0.98))] shadow-[0_30px_90px_rgba(2,8,23,0.45)] transition-all duration-300 hover:-translate-y-1 hover:border-white/15 hover:shadow-[0_36px_100px_rgba(2,8,23,0.5)]">
         <div className="pointer-events-none absolute -left-24 top-0 h-64 w-64 rounded-full bg-neon-cyan/18 blur-3xl" />
         <div className="pointer-events-none absolute right-0 top-8 h-72 w-72 rounded-full bg-neon-violet/18 blur-3xl" />
         <div className="relative space-y-5 p-5 sm:p-7">
@@ -946,6 +955,13 @@ export default function CommandsPage() {
                 <p className="max-w-2xl text-sm leading-6 text-white/46">
                   {guild?.name} - {pageCopy.heroText}
                 </p>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[pageCopy.stepOne, pageCopy.stepTwo, pageCopy.stepThree].map((step) => (
+                  <span key={step} className="feature-chip text-white/70">
+                    {step}
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -968,7 +984,7 @@ export default function CommandsPage() {
               { label: pageCopy.slash, value: commandStats.slash, tone: 'from-neon-violet/18 to-neon-violet/5' },
               { label: pageCopy.dynamic, value: commandStats.dynamic, tone: 'from-fuchsia-500/18 to-fuchsia-500/5' },
             ].map((card) => (
-              <div key={card.label} className={`rounded-[24px] border border-white/10 bg-gradient-to-br ${card.tone} p-4 backdrop-blur-xl`}>
+              <div key={card.label} className={`feature-metric depth-panel rounded-[24px] bg-gradient-to-br ${card.tone} p-4 backdrop-blur-xl`}>
                 <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/34">{card.label}</p>
                 <p className="mt-3 font-display text-3xl font-800 text-white">{card.value}</p>
               </div>
@@ -976,7 +992,7 @@ export default function CommandsPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
-            <div className="rounded-[26px] border border-white/10 bg-white/[0.04] p-4 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="depth-panel rounded-[26px] border border-white/10 bg-white/[0.04] p-4 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-2">
                   <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/34">{pageCopy.detectTitle}</p>
@@ -992,11 +1008,11 @@ export default function CommandsPage() {
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="feature-metric rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.autoMode}</p>
                   <p className="mt-2 text-sm font-semibold text-white">{describeRequestedMode(requestedMeta, pageCopy)}</p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="feature-metric rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.liveTrigger}</p>
                   <p className="mt-2 break-all font-mono text-sm text-white">{requestedMeta.trigger || requestedMeta.command_prefix}</p>
                 </div>
@@ -1019,7 +1035,7 @@ export default function CommandsPage() {
               </div>
             </div>
 
-            <div className="rounded-[26px] border border-white/10 bg-white/[0.04] p-4 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="depth-panel rounded-[26px] border border-white/10 bg-white/[0.04] p-4 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-2">
                   <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/34">{pageCopy.promptIdeas}</p>

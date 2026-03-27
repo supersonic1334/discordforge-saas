@@ -258,8 +258,22 @@ export default function SettingsPage() {
             <div>
               <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">{t('settings.title')}</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">
-                Centralise ton profil, les langues, la securite du compte et le token du bot dans un espace plus lisible, plus propre et plus interactif.
+                Regroupe ton compte, tes langues et le token du bot dans un seul espace clair.
               </p>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <span className="feature-chip text-white/70">
+                <User className="w-3.5 h-3.5" />
+                Compte
+              </span>
+              <span className="feature-chip text-white/70">
+                <Languages className="w-3.5 h-3.5" />
+                Langues
+              </span>
+              <span className="feature-chip text-white/70">
+                <Key className="w-3.5 h-3.5" />
+                Bot
+              </span>
             </div>
           </div>
 
