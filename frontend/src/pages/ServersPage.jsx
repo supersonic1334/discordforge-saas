@@ -78,6 +78,29 @@ function MetricCard({ icon: Icon, label, value, meta, tone = 'cyan', delay = 0 }
   )
 }
 
+function HeroStatCard({ label, value, detail, tone = 'cyan', delay = 0 }) {
+  const toneClasses = {
+    cyan: 'hover:border-neon-cyan/24 hover:bg-neon-cyan/[0.06] hover:shadow-[0_18px_44px_rgba(0,229,255,0.08)]',
+    violet: 'hover:border-neon-violet/24 hover:bg-neon-violet/[0.06] hover:shadow-[0_18px_44px_rgba(176,78,255,0.08)]',
+    green: 'hover:border-emerald-400/24 hover:bg-emerald-400/[0.06] hover:shadow-[0_18px_44px_rgba(74,222,128,0.08)]',
+    neutral: 'hover:border-white/[0.16] hover:bg-white/[0.06] hover:shadow-[0_18px_44px_rgba(255,255,255,0.04)]',
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.28, ease: 'easeOut' }}
+      whileHover={{ y: -4, scale: 1.012 }}
+      className={`rounded-[24px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.02))] p-4 transition-all duration-200 ${toneClasses[tone] || toneClasses.neutral}`}
+    >
+      <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">{label}</p>
+      <p className="mt-3 font-display text-3xl font-800 text-white">{value}</p>
+      <p className="mt-1 text-sm text-white/42">{detail}</p>
+    </motion.div>
+  )
+}
+
 export default function ServersPage() {
   const { t, locale } = useI18n()
   const { hasOwnBotToken, sharedGuildCount } = useAuthStore()
@@ -126,7 +149,9 @@ export default function ServersPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-5 sm:px-5 sm:py-6">
       <ServerSurface glow="cyan" className="p-6 sm:p-7">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.16),transparent_36%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,12,18,0.98),rgba(10,14,22,0.96)_48%,rgba(17,13,28,0.92))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_34%)]" />
+        <div className="absolute left-0 top-0 h-full w-[42%] bg-[linear-gradient(90deg,rgba(34,211,238,0.05),transparent_78%)]" />
         <div className="relative grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
           <div className="space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/55">
@@ -168,26 +193,34 @@ export default function ServersPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.04] p-4">
-              <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">Connectes</p>
-              <p className="mt-3 font-display text-3xl font-800 text-white">{guilds.length}</p>
-              <p className="mt-1 text-sm text-white/40">{t(guilds.length === 1 ? 'servers.connectedSingle' : 'servers.connectedPlural')}</p>
-            </div>
-            <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.04] p-4">
-              <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">Membres</p>
-              <p className="mt-3 font-display text-3xl font-800 text-white">{numberFormatter.format(totalMembers)}</p>
-              <p className="mt-1 text-sm text-white/40">Sur l ensemble des serveurs.</p>
-            </div>
-            <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.04] p-4">
-              <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">Mode</p>
-              <p className="mt-3 font-display text-2xl font-800 text-white">{hasOwnBotToken ? 'Proprietaire' : 'Partage'}</p>
-              <p className="mt-1 text-sm text-white/40">{hasOwnBotToken ? 'Controle complet disponible.' : 'Acces partage protege.'}</p>
-            </div>
-            <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.04] p-4">
-              <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">Bot</p>
-              <p className="mt-3 font-display text-2xl font-800 text-white">{status === 'running' ? 'En ligne' : 'Hors ligne'}</p>
-              <p className="mt-1 text-sm text-white/40">{status === 'running' ? 'Pret a synchroniser.' : 'Relance le bot pour detecter les mises a jour.'}</p>
-            </div>
+            <HeroStatCard
+              label="Connectes"
+              value={guilds.length}
+              detail={t(guilds.length === 1 ? 'servers.connectedSingle' : 'servers.connectedPlural')}
+              tone="neutral"
+              delay={0.03}
+            />
+            <HeroStatCard
+              label="Membres"
+              value={numberFormatter.format(totalMembers)}
+              detail="Sur l ensemble des serveurs."
+              tone="violet"
+              delay={0.06}
+            />
+            <HeroStatCard
+              label="Mode"
+              value={hasOwnBotToken ? 'Proprietaire' : 'Partage'}
+              detail={hasOwnBotToken ? 'Controle complet disponible.' : 'Acces partage protege.'}
+              tone="neutral"
+              delay={0.09}
+            />
+            <HeroStatCard
+              label="Bot"
+              value={status === 'running' ? 'En ligne' : 'Hors ligne'}
+              detail={status === 'running' ? 'Pret a synchroniser.' : 'Relance le bot pour detecter les mises a jour.'}
+              tone="violet"
+              delay={0.12}
+            />
           </div>
         </div>
       </ServerSurface>
