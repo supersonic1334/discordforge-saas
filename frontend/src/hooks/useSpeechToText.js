@@ -22,6 +22,8 @@ function mergeTranscript(...parts) {
     .trim()
 }
 
+const IDLE_BARS = [0.18, 0.26, 0.22, 0.34, 0.28, 0.24, 0.3, 0.22, 0.16]
+
 export function useSpeechToText({ value, onChange, locale, onError }) {
   const recognitionRef = useRef(null)
   const permissionStateRef = useRef('unknown')
@@ -33,10 +35,12 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   const sourceRef = useRef(null)
   const streamRef = useRef(null)
   const animationFrameRef = useRef(null)
+  const stopModeRef = useRef('commit')
+  const stopResolverRef = useRef(null)
   const [isListening, setIsListening] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
   const [interimTranscript, setInterimTranscript] = useState('')
-  const [audioBars, setAudioBars] = useState([0.12, 0.18, 0.14, 0.22, 0.16, 0.2, 0.13])
+  const [audioBars, setAudioBars] = useState(IDLE_BARS)
 
   const isSupported = useMemo(() => !!getRecognitionConstructor(), [])
 
@@ -66,8 +70,32 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       streamRef.current = null
     }
 
-    setAudioBars([0.12, 0.18, 0.14, 0.22, 0.16, 0.2, 0.13])
+    setAudioBars(IDLE_BARS)
   }, [])
+
+  const resolveStopPromise = useCallback((valueToResolve) => {
+    if (stopResolverRef.current) {
+      stopResolverRef.current(valueToResolve)
+      stopResolverRef.current = null
+    }
+  }, [])
+
+  const finalizeRecognition = useCallback((mode = 'commit') => {
+    stopAudioMeter()
+    setIsListening(false)
+
+    const baseValue = String(baseValueRef.current || '').trim()
+    const nextValue = mode === 'commit'
+      ? mergeTranscript(baseValue, finalTranscriptRef.current, interimTranscriptRef.current)
+      : baseValue
+
+    finalTranscriptRef.current = ''
+    interimTranscriptRef.current = ''
+    setInterimTranscript('')
+    onChange(nextValue)
+    resolveStopPromise(nextValue)
+    return nextValue
+  }, [onChange, resolveStopPromise, stopAudioMeter])
 
   const startAudioMeter = useCallback(async (stream) => {
     if (typeof window === 'undefined') return
@@ -79,10 +107,11 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     const context = new AudioContextClass()
     const analyser = context.createAnalyser()
     const source = context.createMediaStreamSource(stream)
-    const dataArray = new Uint8Array(analyser.frequencyBinCount)
+    const frequencyData = new Uint8Array(256)
+    const timeDomainData = new Uint8Array(512)
 
-    analyser.fftSize = 256
-    analyser.smoothingTimeConstant = 0.82
+    analyser.fftSize = 512
+    analyser.smoothingTimeConstant = 0.64
     source.connect(analyser)
 
     audioContextRef.current = context
@@ -97,17 +126,32 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     const tick = () => {
       if (!analyserRef.current) return
 
-      analyserRef.current.getByteFrequencyData(dataArray)
-      const bucketSize = Math.max(1, Math.floor(dataArray.length / 7))
-      const nextBars = Array.from({ length: 7 }, (_, index) => {
+      analyserRef.current.getByteFrequencyData(frequencyData)
+      analyserRef.current.getByteTimeDomainData(timeDomainData)
+
+      let rmsSum = 0
+      for (let index = 0; index < timeDomainData.length; index += 1) {
+        const sample = (timeDomainData[index] - 128) / 128
+        rmsSum += sample * sample
+      }
+
+      const rms = Math.sqrt(rmsSum / timeDomainData.length)
+      const bucketSize = Math.max(1, Math.floor(frequencyData.length / IDLE_BARS.length))
+      const nextBars = Array.from({ length: IDLE_BARS.length }, (_, index) => {
         const start = index * bucketSize
-        const end = Math.min(dataArray.length, start + bucketSize)
+        const end = Math.min(frequencyData.length, start + bucketSize)
+        let peak = 0
         let sum = 0
+
         for (let cursor = start; cursor < end; cursor += 1) {
-          sum += dataArray[cursor]
+          const valueAtCursor = frequencyData[cursor]
+          sum += valueAtCursor
+          if (valueAtCursor > peak) peak = valueAtCursor
         }
+
         const average = end > start ? sum / (end - start) : 0
-        return Math.max(0.08, Math.min(1, average / 180))
+        const normalized = Math.min(1.1, (average / 95) + (peak / 255) * 0.38 + rms * 3.2)
+        return Math.max(0.12, normalized)
       })
 
       setAudioBars(nextBars)
@@ -118,16 +162,44 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   }, [stopAudioMeter])
 
   const stop = useCallback(() => {
+    stopModeRef.current = 'commit'
+
     if (recognitionRef.current) {
-      recognitionRef.current.stop()
-      return
+      return new Promise((resolve) => {
+        stopResolverRef.current = resolve
+        recognitionRef.current.stop()
+      })
     }
 
+    const committed = mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current)
+    finalTranscriptRef.current = ''
+    interimTranscriptRef.current = ''
+    setInterimTranscript('')
+    onChange(committed)
     stopAudioMeter()
     setIsListening(false)
-    setInterimTranscript('')
+    return Promise.resolve(committed)
+  }, [onChange, stopAudioMeter])
+
+  const cancel = useCallback(() => {
+    stopModeRef.current = 'cancel'
+
+    if (recognitionRef.current) {
+      return new Promise((resolve) => {
+        stopResolverRef.current = resolve
+        recognitionRef.current.abort()
+      })
+    }
+
+    const baseValue = String(baseValueRef.current || '').trim()
+    finalTranscriptRef.current = ''
     interimTranscriptRef.current = ''
-  }, [stopAudioMeter])
+    setInterimTranscript('')
+    onChange(baseValue)
+    stopAudioMeter()
+    setIsListening(false)
+    return Promise.resolve(baseValue)
+  }, [onChange, stopAudioMeter])
 
   const start = useCallback(async () => {
     const Recognition = getRecognitionConstructor()
@@ -158,11 +230,12 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       recognition.lang = normalizeLocale(locale)
       recognition.continuous = true
       recognition.interimResults = true
-      recognition.maxAlternatives = 3
+      recognition.maxAlternatives = 5
 
       baseValueRef.current = String(value || '').trim()
       finalTranscriptRef.current = ''
       interimTranscriptRef.current = ''
+      stopModeRef.current = 'commit'
       setInterimTranscript('')
 
       recognition.onresult = (event) => {
@@ -200,15 +273,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
 
       recognition.onend = () => {
         recognitionRef.current = null
-        stopAudioMeter()
-        setIsListening(false)
-        const pendingInterim = interimTranscriptRef.current
-        setInterimTranscript('')
-        interimTranscriptRef.current = ''
-        const committed = mergeTranscript(baseValueRef.current, finalTranscriptRef.current, pendingInterim)
-        if (committed) {
-          onChange(committed)
-        }
+        finalizeRecognition(stopModeRef.current)
       }
 
       recognitionRef.current = recognition
@@ -231,7 +296,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     } finally {
       setIsRequestingPermission(false)
     }
-  }, [isListening, isRequestingPermission, locale, onChange, onError, startAudioMeter, stopAudioMeter, value])
+  }, [finalizeRecognition, isListening, isRequestingPermission, locale, onChange, onError, startAudioMeter, stopAudioMeter, value])
 
   useEffect(() => () => {
     if (recognitionRef.current) {
@@ -250,6 +315,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     audioBars,
     start,
     stop,
+    cancel,
   }
 }
 

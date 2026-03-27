@@ -59,6 +59,9 @@ const UI = {
     voiceStop: 'Stop micro',
     voiceListening: 'Ecoute en cours...',
     voicePreparing: 'Autorisation micro...',
+    voiceStopDictation: 'Arreter la dictee',
+    voiceSendTranscript: 'Transcrire et generer',
+    voiceLiveTranscript: 'Transcription en direct',
     voiceUnsupported: 'Micro non pris en charge sur ce navigateur.',
     voiceDenied: 'Autorise le micro pour utiliser la dictée.',
     voiceError: 'La dictée vocale a rencontré un problème.',
@@ -113,6 +116,9 @@ const UI = {
     voiceStop: 'Stop mic',
     voiceListening: 'Listening...',
     voicePreparing: 'Requesting mic...',
+    voiceStopDictation: 'Stop dictation',
+    voiceSendTranscript: 'Transcribe and generate',
+    voiceLiveTranscript: 'Live transcript',
     voiceUnsupported: 'Microphone is not supported on this browser.',
     voiceDenied: 'Allow microphone access to use voice dictation.',
     voiceError: 'Voice dictation ran into an issue.',
@@ -167,6 +173,9 @@ const UI = {
     voiceStop: 'Detener micro',
     voiceListening: 'Escuchando...',
     voicePreparing: 'Autorizando micro...',
+    voiceStopDictation: 'Detener dictado',
+    voiceSendTranscript: 'Transcribir y generar',
+    voiceLiveTranscript: 'Transcripcion en vivo',
     voiceUnsupported: 'El micro no es compatible con este navegador.',
     voiceDenied: 'Autoriza el micro para usar la dictado por voz.',
     voiceError: 'El dictado por voz encontro un problema.',
@@ -540,11 +549,16 @@ export default function CommandsPage() {
     }
   }
 
-  async function sendAssistantPrompt() {
-    if (!selectedGuildId || !prompt.trim() || assistantLoading) return
-    if (speech.isListening) speech.stop()
+  async function sendAssistantPrompt(overridePrompt = '') {
+    if (!selectedGuildId || assistantLoading) return
 
-    const userMessage = { role: 'user', content: prompt.trim() }
+    const resolvedPrompt = String(overridePrompt || '').trim()
+      ? String(overridePrompt || '').trim()
+      : (speech.isListening ? await speech.stop() : prompt)
+    const cleanPrompt = String(resolvedPrompt || '').trim()
+    if (!cleanPrompt) return
+
+    const userMessage = { role: 'user', content: cleanPrompt }
     const nextMessages = [...messages, userMessage]
     setMessages(nextMessages)
     setAssistantLoading(true)
@@ -846,11 +860,6 @@ export default function CommandsPage() {
 
           <div className="space-y-2">
             <label className="text-xs font-mono uppercase tracking-[0.18em] text-white/35 block">{ui.promptLabel}</label>
-            {(speech.isListening || speech.isRequestingPermission) && (
-              <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/70'}`}>
-                {speech.isRequestingPermission ? ui.voicePreparing : ui.voiceListening}
-              </p>
-            )}
             <div className="relative">
               <textarea
                 ref={promptInputRef}
@@ -869,7 +878,13 @@ export default function CommandsPage() {
                 )}
                 <button
                   type="button"
-                  onClick={() => (speech.isListening ? speech.stop() : speech.start())}
+                  onClick={async () => {
+                    if (speech.isListening) {
+                      await speech.stop()
+                      return
+                    }
+                    await speech.start()
+                  }}
                   disabled={speech.isRequestingPermission}
                   className={`h-11 w-11 rounded-full border flex items-center justify-center transition-all shrink-0 disabled:opacity-70 ${
                     speech.isListening
@@ -893,7 +908,51 @@ export default function CommandsPage() {
               </div>
             </div>
             {(speech.isListening || speech.isRequestingPermission) && (
-              <p className="text-[11px] text-white/35">{speech.interimTranscript || ''}</p>
+              <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <VoiceMeter
+                      bars={speech.audioBars}
+                      active={speech.isListening}
+                      processing={speech.isRequestingPermission}
+                      accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/75'}`}>
+                        {speech.isRequestingPermission ? ui.voicePreparing : ui.voiceListening}
+                      </p>
+                      <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{ui.voiceLiveTranscript}</p>
+                      <p className="mt-2 truncate text-sm text-white/55">{speech.interimTranscript || '...'}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await speech.stop()
+                        promptInputRef.current?.focus()
+                      }}
+                      disabled={speech.isRequestingPermission}
+                      className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-mono text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
+                    >
+                      {ui.voiceStopDictation}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const transcript = await speech.stop()
+                        if (String(transcript || '').trim()) {
+                          await sendAssistantPrompt(transcript)
+                        }
+                      }}
+                      disabled={speech.isRequestingPermission || assistantLoading}
+                      className="rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-2.5 text-xs font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-50"
+                    >
+                      {ui.voiceSendTranscript}
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 

@@ -9,6 +9,24 @@ import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
 import VoiceMeter from '../components/VoiceMeter'
 
+const VOICE_UI = {
+  fr: {
+    stop: 'Arreter la dictee',
+    send: 'Transcrire et envoyer',
+    live: 'Transcription en direct',
+  },
+  en: {
+    stop: 'Stop dictation',
+    send: 'Transcribe and send',
+    live: 'Live transcript',
+  },
+  es: {
+    stop: 'Detener dictado',
+    send: 'Transcribir y enviar',
+    live: 'Transcripcion en vivo',
+  },
+}
+
 function getAssistantErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback
 }
@@ -104,6 +122,7 @@ const QUICK_ACTIONS = [
 
 export default function AIAssistant() {
   const { t, locale } = useI18n()
+  const voiceUi = VOICE_UI[String(locale || 'fr').toLowerCase().split('-')[0]] || VOICE_UI.fr
   const [messages, setMessages] = useState(() => ([
     {
       role: 'assistant',
@@ -146,9 +165,13 @@ export default function AIAssistant() {
   }, [messages, loading])
 
   const send = async (text) => {
-    const msg = text || input.trim()
+    if (loading) return
+
+    const resolvedText = typeof text === 'string' && text.trim()
+      ? text.trim()
+      : (speech.isListening ? await speech.stop() : input.trim())
+    const msg = resolvedText.trim()
     if (!msg || loading) return
-    if (speech.isListening) speech.stop()
     setInput('')
     setLoading(true)
 
@@ -273,19 +296,50 @@ export default function AIAssistant() {
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-                  <VoiceMeter
-                    bars={speech.audioBars}
-                    active={speech.isListening}
-                    processing={speech.isRequestingPermission}
-                    accent={speech.isRequestingPermission ? 'amber' : 'violet'}
-                  />
-                  <p className={`text-xs font-mono flex-1 ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-violet/70'}`}>
-                    {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
-                  </p>
-                  {speech.interimTranscript && (
-                    <p className="text-xs text-white/40 truncate max-w-[200px]">{speech.interimTranscript}</p>
-                  )}
+                <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.03] p-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <VoiceMeter
+                        bars={speech.audioBars}
+                        active={speech.isListening}
+                        processing={speech.isRequestingPermission}
+                        accent={speech.isRequestingPermission ? 'amber' : 'violet'}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-violet/80'}`}>
+                          {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
+                        </p>
+                        <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{voiceUi.live}</p>
+                        <p className="mt-2 max-w-full truncate text-sm text-white/55">
+                          {speech.interimTranscript || '...'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await speech.stop()
+                          inputRef.current?.focus()
+                        }}
+                        disabled={speech.isRequestingPermission}
+                        className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-mono text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
+                      >
+                        {voiceUi.stop}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const transcript = await speech.stop()
+                          await send(transcript)
+                        }}
+                        disabled={speech.isRequestingPermission || loading}
+                        className="rounded-2xl border border-neon-violet/25 bg-neon-violet/10 px-4 py-2.5 text-xs font-mono text-violet-200 transition-all hover:bg-neon-violet/15 disabled:opacity-50"
+                      >
+                        {voiceUi.send}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -310,7 +364,13 @@ export default function AIAssistant() {
             <div className="absolute right-3 bottom-3 flex items-center gap-2">
               <motion.button
                 type="button"
-                onClick={() => (speech.isListening ? speech.stop() : speech.start())}
+                onClick={async () => {
+                  if (speech.isListening) {
+                    await speech.stop()
+                    return
+                  }
+                  await speech.start()
+                }}
                 disabled={speech.isRequestingPermission}
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.96 }}
