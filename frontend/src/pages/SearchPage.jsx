@@ -163,6 +163,13 @@ function DirectMessageModal({ target, values, onChange, onClose, onSubmit, submi
   )
 }
 
+function hasActiveTimeout(profile) {
+  const rawValue = profile?.timed_out_until
+  if (!rawValue) return false
+  const timestamp = new Date(rawValue).getTime()
+  return Number.isFinite(timestamp) && timestamp > Date.now()
+}
+
 export default function SearchPage() {
   const { locale } = useI18n()
   const { guilds, selectedGuildId } = useGuildStore()
@@ -290,6 +297,7 @@ export default function SearchPage() {
   const siteSummary = profileData?.site?.summary || {}
   const discordSummary = profileData?.discord?.summary || {}
   const roles = profile?.roles || []
+  const timeoutActive = hasActiveTimeout(profile)
 
   if (!selectedGuildId) {
     return <SelectGuildState title="Choisis d'abord un serveur" body="La recherche utilisateur fonctionne serveur par serveur." actionLabel="Choisir un serveur" />
@@ -370,7 +378,7 @@ export default function SearchPage() {
                           {profile.banned ? <span className="badge-error">Banni</span> : null}
                           {profile.in_server ? <span className="badge-online">Dans le serveur</span> : null}
                           {!profile.in_server && !profile.banned ? <span className="badge-offline">Hors serveur</span> : null}
-                          {profile.timed_out_until ? <span className="badge-warning">Timeout actif</span> : null}
+                          {timeoutActive ? <span className="badge-warning">Timeout actif</span> : null}
                         </div>
                         <p className="mt-1 text-sm text-white/55">@{profile.username || profile.id}</p>
                         <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/35 font-mono">
@@ -408,8 +416,8 @@ export default function SearchPage() {
                         const disabled = (entry.id === 'warn' && !viewer?.can_warn) || (entry.id === 'timeout' && !viewer?.can_timeout) || (entry.id === 'untimeout' && !viewer?.can_timeout) || (entry.id === 'kick' && !viewer?.can_kick) || (entry.id === 'ban' && !viewer?.can_ban) || (entry.id === 'unban' && !viewer?.can_unban)
                         if (entry.id === 'ban' && profile.banned) return null
                         if (entry.id === 'unban' && !profile.banned) return null
-                        if (entry.id === 'untimeout' && !profile.timed_out_until) return null
-                        return <button key={entry.id} type="button" disabled={disabled} onClick={() => { setActionValues({ reason: '', duration: '', points: '1', moderatorIdentity: '' }); setActionModal(entry.id) }} className={`spotlight-card w-full rounded-[22px] border px-4 py-4 text-left transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35 ${entry.tone}`}><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><Icon className="w-4 h-4" /><span className="font-mono text-sm">{entry.label}</span></div><p className="mt-3 text-xs text-white/55">Action rapide sans quitter la fiche.</p></div><span className="rounded-full border border-white/10 bg-black/15 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">direct</span></div></button>
+                        if (entry.id === 'untimeout' && !timeoutActive) return null
+                        return <button key={entry.id} type="button" disabled={disabled} onClick={() => { setActionValues({ reason: '', duration: '', points: '1', moderatorIdentity: '' }); setActionModal(entry.id) }} className={`spotlight-card w-full rounded-[22px] border px-4 py-4 text-left transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35 ${entry.tone}`}><div className="flex items-start gap-3"><div><div className="flex items-center gap-2"><Icon className="w-4 h-4" /><span className="font-mono text-sm">{entry.label}</span></div><p className="mt-3 text-xs text-white/55">Action rapide sans quitter la fiche.</p></div></div></button>
                       })}
                     </div>
                   </div>
