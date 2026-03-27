@@ -150,45 +150,51 @@ export default function ServersPage() {
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-5 sm:px-5 sm:py-6">
       <ServerSurface glow="cyan" className="p-6 sm:p-7">
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,12,18,0.98),rgba(10,14,22,0.96)_48%,rgba(17,13,28,0.92))]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_34%)]" />
-        <div className="absolute left-0 top-0 h-full w-[42%] bg-[linear-gradient(90deg,rgba(34,211,238,0.05),transparent_78%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.045),transparent_18%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.1),transparent_34%)]" />
         <div className="relative grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-          <div className="space-y-5">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/55">
-              <Rocket className="h-3.5 w-3.5 text-neon-cyan" />
-              Espace serveurs
-            </div>
-            <div>
-              <h1 className="font-display text-3xl font-800 text-white sm:text-[2.5rem]">{t('servers.title')}</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/50 sm:text-[15px]">
-                Centre plus clair pour connecter le bot, choisir un serveur actif et basculer vite vers la protection, la recherche ou les logs.
-              </p>
-            </div>
+          <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(10,16,22,0.84),rgba(8,12,18,0.62))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_22px_60px_rgba(2,6,14,0.28)] sm:p-6">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.09),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_44%)]" />
+            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/18 to-transparent" />
+            <div className="pointer-events-none absolute inset-y-8 left-0 w-px bg-gradient-to-b from-transparent via-neon-cyan/18 to-transparent" />
+            <div className="pointer-events-none absolute bottom-0 left-8 right-16 h-px bg-gradient-to-r from-neon-cyan/18 via-white/12 to-transparent" />
 
-            <div className="flex flex-wrap gap-3">
-              <motion.button
-                type="button"
-                whileHover={{ y: -2, scale: 1.01 }}
-                whileTap={{ scale: 0.985 }}
-                onClick={inviteBotToServer}
-                disabled={!inviteUrl || !hasOwnBotToken}
-                className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/25 bg-emerald-400/12 px-4 py-3 text-sm font-mono text-emerald-300 transition-all hover:bg-emerald-400/18 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <PlusCircle className="h-4 w-4" />
-                {t('servers.addServer', 'Ajouter un serveur')}
-              </motion.button>
+            <div className="relative space-y-5">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/55">
+                <Rocket className="h-3.5 w-3.5 text-neon-cyan" />
+                Espace serveurs
+              </div>
+              <div>
+                <h1 className="font-display text-3xl font-800 text-white sm:text-[2.5rem]">{t('servers.title')}</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-white/50 sm:text-[15px]">
+                  Centre plus clair pour connecter le bot, choisir un serveur actif et basculer vite vers la protection, la recherche ou les logs.
+                </p>
+              </div>
 
-              <motion.button
-                type="button"
-                whileHover={{ y: -2, scale: 1.01 }}
-                whileTap={{ scale: 0.985 }}
-                onClick={syncGuilds}
-                disabled={status !== 'running' || isLoading || !hasOwnBotToken}
-                className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/16 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                {t('servers.sync')}
-              </motion.button>
+              <div className="flex flex-wrap gap-3">
+                <motion.button
+                  type="button"
+                  whileHover={{ y: -2, scale: 1.01 }}
+                  whileTap={{ scale: 0.985 }}
+                  onClick={inviteBotToServer}
+                  disabled={!inviteUrl || !hasOwnBotToken}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/25 bg-emerald-400/12 px-4 py-3 text-sm font-mono text-emerald-300 transition-all hover:bg-emerald-400/18 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  {t('servers.addServer', 'Ajouter un serveur')}
+                </motion.button>
+
+                <motion.button
+                  type="button"
+                  whileHover={{ y: -2, scale: 1.01 }}
+                  whileTap={{ scale: 0.985 }}
+                  onClick={syncGuilds}
+                  disabled={status !== 'running' || isLoading || !hasOwnBotToken}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/16 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  {t('servers.sync')}
+                </motion.button>
+              </div>
             </div>
           </div>
 
