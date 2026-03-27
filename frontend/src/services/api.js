@@ -5,7 +5,6 @@ const api = axios.create({
   baseURL: '/api/v1',
   timeout: 15000,
   headers: {
-    'Content-Type': 'application/json',
     'X-App-Client': 'discordforger-web',
     'X-Requested-With': 'XMLHttpRequest',
   },
@@ -19,6 +18,13 @@ api.interceptors.request.use((config) => {
   config.headers['X-Requested-With'] = 'XMLHttpRequest'
   const deviceId = getDeviceId()
   if (deviceId) config.headers['X-Device-ID'] = deviceId
+
+  const method = String(config.method || 'get').toLowerCase()
+  const hasBody = typeof config.data !== 'undefined' && config.data !== null
+  if (!hasBody && ['get', 'delete', 'head'].includes(method)) {
+    delete config.headers['Content-Type']
+  }
+
   return config
 })
 

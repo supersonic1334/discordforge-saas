@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Ban, Fingerprint, RefreshCw, Search, ShieldOff, Trash2, UserRoundX, Shield, CheckCircle2, XCircle, Filter, ChevronDown } from 'lucide-react'
+import { ArrowRight, Ban, Fingerprint, RefreshCw, Search, ShieldOff, UserRoundX, Shield, Filter, ChevronDown, Sparkles, ShieldCheck } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { blockedAPI } from '../services/api'
@@ -135,7 +135,7 @@ function BlockedRow({
         </button>
       </div>
 
-      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+      <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
         <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Raison</p>
         <p className="text-white/80 text-sm">{entry.reason || 'Aucune raison precisee.'}</p>
       </div>
@@ -156,6 +156,17 @@ export default function AccessControlPage() {
   const [actioningId, setActioningId] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filterType, setFilterType] = useState('all')
+
+  function removeEntryLocally(kind, userId) {
+    if (kind === 'ban') {
+      setBans((current) => current.filter((entry) => entry.id !== userId))
+      setTotals((current) => ({ ...current, bans: Math.max(0, (current.bans || 0) - 1) }))
+      return
+    }
+
+    setBlacklist((current) => current.filter((entry) => entry.id !== userId))
+    setTotals((current) => ({ ...current, blacklist: Math.max(0, (current.blacklist || 0) - 1) }))
+  }
 
   async function loadBlocked({ silent = false } = {}) {
     if (!selectedGuildId) return
@@ -204,6 +215,7 @@ export default function AccessControlPage() {
 
     try {
       await blockedAPI.unban(selectedGuildId, entry.id)
+      removeEntryLocally('ban', entry.id)
       toast.success('Utilisateur debanni avec succes')
       await loadBlocked({ silent: true })
     } catch (error) {
@@ -220,6 +232,7 @@ export default function AccessControlPage() {
 
     try {
       await blockedAPI.unblacklist(selectedGuildId, entry.id)
+      removeEntryLocally('blacklist', entry.id)
       toast.success('Utilisateur retire de la blacklist avec succes')
       await loadBlocked({ silent: true })
     } catch (error) {
@@ -290,6 +303,33 @@ export default function AccessControlPage() {
         <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2">
           <CountCard label="Bannis serveur" value={totals.bans || 0} tone="border-red-500/20 bg-red-500/10 text-red-300" />
           <CountCard label="Blacklist reseau" value={totals.blacklist || 0} tone="border-violet-500/20 bg-violet-500/10 text-violet-300" />
+        </div>
+
+        <div className="relative z-[1] mt-4 grid gap-3 lg:grid-cols-2">
+          <div className="depth-panel-static rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 overflow-hidden relative">
+            <div className="absolute inset-x-4 bottom-4 h-10 rounded-full bg-red-400/10 blur-2xl pointer-events-none" />
+            <div className="flex items-center gap-3 relative">
+              <div className="w-11 h-11 rounded-2xl border border-red-400/20 bg-red-400/10 flex items-center justify-center shrink-0 shadow-[0_0_24px_rgba(248,113,113,0.12)]">
+                <Ban className="w-5 h-5 text-red-300" />
+              </div>
+              <div>
+                <p className="font-display font-700 text-white">Deban instantane</p>
+                <p className="text-white/40 text-sm mt-1">Le retrait disparait directement de la liste et se resynchronise sans effort.</p>
+              </div>
+            </div>
+          </div>
+          <div className="depth-panel-static rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 overflow-hidden relative">
+            <div className="absolute inset-x-4 bottom-4 h-10 rounded-full bg-violet-400/10 blur-2xl pointer-events-none" />
+            <div className="flex items-center gap-3 relative">
+              <div className="w-11 h-11 rounded-2xl border border-violet-400/20 bg-violet-400/10 flex items-center justify-center shrink-0 shadow-[0_0_24px_rgba(192,132,252,0.12)]">
+                <ShieldCheck className="w-5 h-5 text-violet-300" />
+              </div>
+              <div>
+                <p className="font-display font-700 text-white">Surveillance reseau</p>
+                <p className="text-white/40 text-sm mt-1">Bannis serveur et blacklist globale restent lisibles dans un seul espace clair.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -429,15 +469,6 @@ export default function AccessControlPage() {
       {!loading && !hasResults && query.trim() && (
         <div className="spotlight-card p-5 text-center text-white/40 text-sm">
           <div className="relative z-[1]">Aucun resultat pour cette recherche.</div>
-        </div>
-      )}
-
-      {!loading && hasResults && (
-        <div className="spotlight-card p-4 text-center">
-          <div className="relative z-[1] flex items-center justify-center gap-2 text-white/40 text-sm font-mono">
-            <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-            Systeme de controle d'acces operationnel - Les bugs d'unban et de suppression de blacklist ont ete corriges
-          </div>
         </div>
       )}
     </div>
