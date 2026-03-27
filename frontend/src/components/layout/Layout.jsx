@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -54,6 +54,8 @@ export default function Layout() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
   const [sidebarWidthReady, setSidebarWidthReady] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  const mainRef = useRef(null)
+  const scrollPositionsRef = useRef(new Map())
   const { user, logout } = useAuthStore()
   const { guilds, selectedGuildId, clearSelectedGuild, hydrateSelectedGuild } = useGuildStore()
   const { status, ping, bot, fetchStatus, setStatus } = useBotStore()
@@ -195,6 +197,32 @@ export default function Layout() {
     }
   }, [mustStayOnServers, navigate])
 
+  useLayoutEffect(() => {
+    const container = mainRef.current
+    if (!container) return
+
+    const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
+    container.scrollTop = savedPosition
+  }, [location.pathname])
+
+  useEffect(() => {
+    const container = mainRef.current
+    if (!container) return
+
+    const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
+    if (savedPosition > 24 && container.scrollTop === 0) {
+      const rafId = window.requestAnimationFrame(() => {
+        if (mainRef.current && mainRef.current.scrollTop === 0) {
+          mainRef.current.scrollTop = savedPosition
+        }
+      })
+
+      return () => window.cancelAnimationFrame(rafId)
+    }
+
+    return undefined
+  })
+
   const handleLogout = () => {
     setStatus({
       status: 'stopped',
@@ -232,6 +260,10 @@ export default function Layout() {
       setSidebarWidth(clampSidebarWidth(event.clientX))
     }
     setIsResizing(true)
+  }
+
+  const handleMainScroll = (event) => {
+    scrollPositionsRef.current.set(location.pathname, event.currentTarget.scrollTop)
   }
 
   const renderSidebarLink = ({ icon: Icon, label, path, needsGuild }) => {
@@ -502,7 +534,11 @@ export default function Layout() {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
+        <main
+          ref={mainRef}
+          onScroll={handleMainScroll}
+          className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom"
+        >
           <Outlet />
         </main>
       </div>
