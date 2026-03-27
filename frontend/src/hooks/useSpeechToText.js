@@ -39,6 +39,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   const stopResolverRef = useRef(null)
   const [isListening, setIsListening] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
+  const [finalTranscript, setFinalTranscript] = useState('')
   const [interimTranscript, setInterimTranscript] = useState('')
   const [audioBars, setAudioBars] = useState(IDLE_BARS)
 
@@ -91,6 +92,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
 
     finalTranscriptRef.current = ''
     interimTranscriptRef.current = ''
+    setFinalTranscript('')
     setInterimTranscript('')
     onChange(nextValue)
     resolveStopPromise(nextValue)
@@ -174,6 +176,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     const committed = mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current)
     finalTranscriptRef.current = ''
     interimTranscriptRef.current = ''
+    setFinalTranscript('')
     setInterimTranscript('')
     onChange(committed)
     stopAudioMeter()
@@ -194,6 +197,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     const baseValue = String(baseValueRef.current || '').trim()
     finalTranscriptRef.current = ''
     interimTranscriptRef.current = ''
+    setFinalTranscript('')
     setInterimTranscript('')
     onChange(baseValue)
     stopAudioMeter()
@@ -235,6 +239,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       baseValueRef.current = String(value || '').trim()
       finalTranscriptRef.current = ''
       interimTranscriptRef.current = ''
+      setFinalTranscript('')
       stopModeRef.current = 'commit'
       setInterimTranscript('')
 
@@ -255,6 +260,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
 
         if (nextFinal) {
           finalTranscriptRef.current = mergeTranscript(finalTranscriptRef.current, nextFinal)
+          setFinalTranscript(finalTranscriptRef.current)
         }
 
         interimTranscriptRef.current = nextInterim
@@ -311,6 +317,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     isSupported,
     isListening,
     isRequestingPermission,
+    liveTranscript: mergeTranscript(finalTranscript, interimTranscript),
     interimTranscript,
     audioBars,
     start,

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   ArrowRight,
+  ArrowUp,
   Bot,
   Hash,
   Mic,
@@ -11,6 +12,7 @@ import {
   Send,
   Slash,
   Sparkles,
+  Square,
   Terminal,
   ToggleLeft,
   ToggleRight,
@@ -849,6 +851,18 @@ export default function CommandsPage() {
     }
   }
 
+  const stopCommandDictation = async () => {
+    await speech.stop()
+    promptInputRef.current?.focus()
+  }
+
+  const sendCommandDictation = async () => {
+    const transcript = await speech.stop()
+    if (String(transcript || '').trim()) {
+      await sendAssistantPrompt(transcript)
+    }
+  }
+
   function setCommandEnabledLocally(commandId, enabled) {
     setCommands((current) => current.map((entry) => (
       entry.id === commandId ? { ...entry, enabled } : entry
@@ -939,30 +953,18 @@ export default function CommandsPage() {
 
   return (
     <div className="px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,24,40,0.94),rgba(16,16,32,0.98))] shadow-[0_30px_90px_rgba(2,8,23,0.45)] transition-all duration-300 hover:-translate-y-1 hover:border-white/15 hover:shadow-[0_36px_100px_rgba(2,8,23,0.5)]">
-        <div className="pointer-events-none absolute -left-24 top-0 h-64 w-64 rounded-full bg-neon-cyan/18 blur-3xl" />
-        <div className="pointer-events-none absolute right-0 top-8 h-72 w-72 rounded-full bg-neon-violet/18 blur-3xl" />
-        <div className="relative space-y-5 p-5 sm:p-7">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="max-w-3xl space-y-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/85">
+      <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,24,40,0.94),rgba(16,16,32,0.98))] shadow-[0_30px_90px_rgba(2,8,23,0.45)]">
+        <div className="pointer-events-none absolute -left-24 top-0 h-64 w-64 rounded-full bg-neon-cyan/12 blur-3xl" />
+        <div className="pointer-events-none absolute right-0 top-8 h-72 w-72 rounded-full bg-neon-violet/12 blur-3xl" />
+        <div className="relative space-y-4 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/85">
                 <Sparkles className="h-3.5 w-3.5" />
-                {pageCopy.heroBadge}
-              </span>
-              <div className="space-y-2">
-                <h1 className="font-display text-2xl font-800 text-white sm:text-[2rem]">{ui.title}</h1>
-                <p className="text-base text-white/88">{pageCopy.heroTitle}</p>
-                <p className="max-w-2xl text-sm leading-6 text-white/46">
-                  {guild?.name} - {pageCopy.heroText}
-                </p>
+                {guild?.name || ui.title}
               </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {[pageCopy.stepOne, pageCopy.stepTwo, pageCopy.stepThree].map((step) => (
-                  <span key={step} className="feature-chip text-white/70">
-                    {step}
-                  </span>
-                ))}
-              </div>
+              <h1 className="font-display text-2xl font-800 text-white sm:text-[2rem]">{ui.title}</h1>
+              <p className="max-w-2xl text-sm leading-6 text-white/48">{ui.subtitle}</p>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -989,76 +991,6 @@ export default function CommandsPage() {
                 <p className="mt-3 font-display text-3xl font-800 text-white">{card.value}</p>
               </div>
             ))}
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
-            <div className="depth-panel rounded-[26px] border border-white/10 bg-white/[0.04] p-4 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-2">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/34">{pageCopy.detectTitle}</p>
-                  <p className="max-w-xl text-sm leading-6 text-white/58">{pageCopy.detectText}</p>
-                </div>
-                <div className={`rounded-2xl border px-3 py-2 text-xs font-mono ${
-                  mode === 'slash'
-                    ? 'border-neon-violet/30 bg-neon-violet/10 text-violet-200'
-                    : 'border-neon-cyan/25 bg-neon-cyan/10 text-cyan-200'
-                }`}>
-                  {describeRequestedMode(requestedMeta, pageCopy)}
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="feature-metric rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.autoMode}</p>
-                  <p className="mt-2 text-sm font-semibold text-white">{describeRequestedMode(requestedMeta, pageCopy)}</p>
-                </div>
-                <div className="feature-metric rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.liveTrigger}</p>
-                  <p className="mt-2 break-all font-mono text-sm text-white">{requestedMeta.trigger || requestedMeta.command_prefix}</p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <p className="mb-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.triggerExamples}</p>
-                <div className="flex flex-wrap gap-2">
-                  {triggerExamples.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      onClick={() => setCommandInput(example)}
-                      className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-mono text-white/72 transition-all hover:-translate-y-0.5 hover:border-neon-cyan/28 hover:bg-neon-cyan/8 hover:text-neon-cyan"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="depth-panel rounded-[26px] border border-white/10 bg-white/[0.04] p-4 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-2">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/34">{pageCopy.promptIdeas}</p>
-                  <p className="text-sm leading-6 text-white/58">{pageCopy.assistantPanelText}</p>
-                </div>
-                <div className="rounded-2xl border border-neon-violet/25 bg-neon-violet/10 p-3 text-neon-violet">
-                  <Bot className="h-4 w-4" />
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-2">
-                {promptIdeas.map((idea) => (
-                  <button
-                    key={idea}
-                    type="button"
-                    onClick={() => setPrompt(idea)}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-white/78 transition-all hover:-translate-y-0.5 hover:border-neon-violet/25 hover:bg-neon-violet/8"
-                  >
-                    {idea}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -1202,22 +1134,6 @@ export default function CommandsPage() {
               </div>
             </div>
 
-            <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-2">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/34">{pageCopy.assistantPanelTitle}</p>
-                  <p className="text-sm leading-6 text-white/58">{pageCopy.assistantPanelText}</p>
-                </div>
-                <div className={`rounded-2xl border px-3 py-2 text-xs font-mono ${
-                  mode === 'slash'
-                    ? 'border-neon-violet/28 bg-neon-violet/10 text-violet-200'
-                    : 'border-neon-cyan/25 bg-neon-cyan/10 text-cyan-200'
-                }`}>
-                  {describeRequestedMode(requestedMeta, pageCopy)}
-                </div>
-              </div>
-            </div>
-
             {editingCommand && (
               <div className="rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 space-y-3">
                 <div className="flex items-start justify-between gap-3">
@@ -1263,6 +1179,18 @@ export default function CommandsPage() {
                     <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{pageCopy.liveTrigger}</p>
                     <p className="mt-2 break-all text-sm font-mono text-white">{requestedMeta.trigger || requestedMeta.command_prefix}</p>
                   </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {triggerExamples.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => setCommandInput(example)}
+                      className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-mono text-white/72 transition-all hover:-translate-y-0.5 hover:border-neon-cyan/28 hover:bg-neon-cyan/8 hover:text-neon-cyan"
+                    >
+                      {example}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1318,35 +1246,48 @@ export default function CommandsPage() {
                       accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
                     />
                   )}
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (speech.isListening) {
-                        await speech.stop()
-                        return
-                      }
-                      await speech.start()
-                    }}
-                    disabled={speech.isRequestingPermission}
-                    className={`flex h-11 w-11 items-center justify-center rounded-full border transition-all disabled:opacity-70 ${
-                      speech.isListening
-                        ? 'border-red-500/35 bg-red-500/14 text-red-200 shadow-[0_0_20px_rgba(248,113,113,0.2)]'
-                        : speech.isRequestingPermission
-                          ? 'border-amber-400/35 bg-amber-400/12 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.18)]'
-                          : 'border-white/12 bg-white/[0.06] text-white/85 hover:border-neon-cyan/35 hover:bg-neon-cyan/10 hover:text-neon-cyan'
-                    }`}
-                    title={speech.isListening ? ui.voiceStop : ui.voiceStart}
-                  >
-                    <Mic className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={sendAssistantPrompt}
-                    disabled={assistantLoading || !prompt.trim()}
-                    className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan text-white shadow-neon-violet transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {assistantLoading ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
-                  </button>
+                  {speech.isListening || speech.isRequestingPermission ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={stopCommandDictation}
+                        disabled={speech.isRequestingPermission}
+                        className="flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] text-white/88 transition-all disabled:opacity-55"
+                        title={ui.voiceStopDictation}
+                      >
+                        <Square className="h-4 w-4 fill-current" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={sendCommandDictation}
+                        disabled={speech.isRequestingPermission || assistantLoading}
+                        className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan text-white shadow-neon-violet transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                        title={ui.voiceSendTranscript}
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => speech.start()}
+                        disabled={speech.isRequestingPermission}
+                        className="flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] text-white/85 transition-all disabled:opacity-70 hover:border-neon-cyan/35 hover:bg-neon-cyan/10 hover:text-neon-cyan"
+                        title={ui.voiceStart}
+                      >
+                        <Mic className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={sendAssistantPrompt}
+                        disabled={assistantLoading || !prompt.trim()}
+                        className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan text-white shadow-neon-violet transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {assistantLoading ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               {(speech.isListening || speech.isRequestingPermission) && (
@@ -1364,32 +1305,26 @@ export default function CommandsPage() {
                           {speech.isRequestingPermission ? ui.voicePreparing : ui.voiceListening}
                         </p>
                         <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{ui.voiceLiveTranscript}</p>
-                        <p className="mt-2 truncate text-sm text-white/55">{speech.interimTranscript || '...'}</p>
+                        <p className="mt-2 truncate text-sm text-white/65">{speech.liveTranscript || speech.interimTranscript || '...'}</p>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={async () => {
-                          await speech.stop()
-                          promptInputRef.current?.focus()
-                        }}
+                        onClick={stopCommandDictation}
                         disabled={speech.isRequestingPermission}
-                        className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-mono text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-mono text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
                       >
+                        <Square className="h-3.5 w-3.5 fill-current" />
                         {ui.voiceStopDictation}
                       </button>
                       <button
                         type="button"
-                        onClick={async () => {
-                          const transcript = await speech.stop()
-                          if (String(transcript || '').trim()) {
-                            await sendAssistantPrompt(transcript)
-                          }
-                        }}
+                        onClick={sendCommandDictation}
                         disabled={speech.isRequestingPermission || assistantLoading}
-                        className="rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-2.5 text-xs font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-2.5 text-xs font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-50"
                       >
+                        <ArrowUp className="h-3.5 w-3.5" />
                         {ui.voiceSendTranscript}
                       </button>
                     </div>

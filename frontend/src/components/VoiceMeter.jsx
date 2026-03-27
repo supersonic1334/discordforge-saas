@@ -36,15 +36,15 @@ function WaveformBars({ bars, accent, active }) {
   const data = bars.length >= BAR_COUNT ? bars.slice(0, BAR_COUNT) : DEFAULT_BARS
 
   return (
-    <div className="inline-flex h-14 items-center gap-[4px]">
+    <div className="inline-flex h-10 items-center gap-[3px]">
       {data.map((level, index) => {
-        const height = active ? Math.max(14, Math.round(16 + level * 44)) : 12
+        const height = active ? Math.max(8, Math.round(10 + level * 24)) : 8
         return (
           <motion.span
             key={index}
             animate={{ height, opacity: active ? 1 : 0.38 }}
             transition={{ type: 'spring', stiffness: 420, damping: 18, mass: 0.36 }}
-            className={`w-[4px] rounded-full bg-gradient-to-t ${cfg.bar}`}
+            className={`w-[3px] rounded-full bg-gradient-to-t ${cfg.bar}`}
           />
         )
       })}
@@ -112,9 +112,9 @@ export default function VoiceMeter({ bars = [], active = false, processing = fal
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.84, y: -4 }}
             transition={{ duration: 0.2 }}
-            className={`relative inline-flex min-h-[64px] items-center gap-4 rounded-[28px] border border-white/10 ${cfg.bg} px-4 py-3 backdrop-blur-md ${cfg.glow}`}
+            className={`relative inline-flex min-h-[48px] items-center gap-3 rounded-full border border-white/10 ${cfg.bg} px-3 py-2 backdrop-blur-md ${cfg.glow}`}
           >
-            <div className="relative flex h-11 w-11 items-center justify-center rounded-full">
+            <div className="relative flex h-8 w-8 items-center justify-center rounded-full">
               <PulseRings accent={accent} level={avgLevel} />
               <motion.div
                 animate={{
@@ -122,12 +122,12 @@ export default function VoiceMeter({ bars = [], active = false, processing = fal
                   opacity: 0.92,
                 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 14 }}
-                className={`h-11 w-11 rounded-full bg-gradient-to-br ${cfg.orb} shadow-[inset_0_1px_0_rgba(255,255,255,0.24)]`}
+                className={`h-8 w-8 rounded-full bg-gradient-to-br ${cfg.orb} shadow-[inset_0_1px_0_rgba(255,255,255,0.24)]`}
               />
               <motion.div
                 animate={{ scale: 0.72 + avgLevel * 0.16 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 16 }}
-                className="absolute h-4 w-4 rounded-full bg-white/90 shadow-[0_0_18px_rgba(255,255,255,0.55)]"
+                className="absolute h-3 w-3 rounded-full bg-white/90 shadow-[0_0_16px_rgba(255,255,255,0.45)]"
               />
             </div>
             <WaveformBars bars={bars} accent={accent} active={active} />
@@ -141,12 +141,12 @@ export default function VoiceMeter({ bars = [], active = false, processing = fal
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.84, y: -4 }}
             transition={{ duration: 0.2 }}
-            className={`inline-flex min-h-[58px] items-center gap-3 rounded-[24px] border border-white/10 ${cfg.bg} px-4 py-3 backdrop-blur-md ${cfg.glow}`}
+            className={`inline-flex min-h-[46px] items-center gap-3 rounded-full border border-white/10 ${cfg.bg} px-3 py-2 backdrop-blur-md ${cfg.glow}`}
           >
             <motion.div
               animate={{ scale: [0.92, 1.08, 0.92] }}
               transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
-              className={`h-10 w-10 rounded-full bg-gradient-to-br ${cfg.orb}`}
+              className={`h-7 w-7 rounded-full bg-gradient-to-br ${cfg.orb}`}
             />
             <ProcessingDots accent={accent} />
           </motion.div>
@@ -159,9 +159,9 @@ export default function VoiceMeter({ bars = [], active = false, processing = fal
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.16 }}
-            className="inline-flex min-h-[50px] items-center gap-3 rounded-[22px] border border-white/10 bg-black/25 px-3 py-2 backdrop-blur-md"
+            className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-white/10 bg-black/25 px-2.5 py-2 backdrop-blur-md"
           >
-            <div className={`h-8 w-8 rounded-full bg-gradient-to-br ${cfg.orb} opacity-55`} />
+            <div className={`h-6 w-6 rounded-full bg-gradient-to-br ${cfg.orb} opacity-55`} />
             <WaveformBars bars={DEFAULT_BARS} accent={accent} active={false} />
           </motion.div>
         )}

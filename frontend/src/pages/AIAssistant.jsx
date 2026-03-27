@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bot, User, CheckCircle, AlertCircle, Sparkles, Mic, MicOff, Zap, Server, Shield, Terminal, MessageCircle, Search, ScrollText, Settings, HelpCircle } from 'lucide-react'
+import { Send, Bot, User, CheckCircle, AlertCircle, Sparkles, Mic, Zap, Server, Shield, Terminal, MessageCircle, Search, ScrollText, Settings, HelpCircle, ArrowUp, Square } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
 import { aiAPI } from '../services/api'
@@ -239,6 +239,16 @@ export default function AIAssistant() {
     setLoading(false)
   }
 
+  const stopDictation = async () => {
+    await speech.stop()
+    inputRef.current?.focus()
+  }
+
+  const sendDictation = async () => {
+    const transcript = await speech.stop()
+    await send(transcript)
+  }
+
   return (
     <div className="flex flex-col h-full max-h-screen overflow-x-hidden">
       <div className="flex items-center justify-between gap-3 p-4 sm:p-6 border-b border-white/[0.06] shrink-0">
@@ -329,32 +339,28 @@ export default function AIAssistant() {
                           {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
                         </p>
                         <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{voiceUi.live}</p>
-                        <p className="mt-2 max-w-full truncate text-sm text-white/55">
-                          {speech.interimTranscript || '...'}
+                        <p className="mt-2 max-w-full truncate text-sm text-white/65">
+                          {speech.liveTranscript || speech.interimTranscript || '...'}
                         </p>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={async () => {
-                          await speech.stop()
-                          inputRef.current?.focus()
-                        }}
+                        onClick={stopDictation}
                         disabled={speech.isRequestingPermission}
-                        className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-mono text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-mono text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
                       >
+                        <Square className="h-3.5 w-3.5 fill-current" />
                         {voiceUi.stop}
                       </button>
                       <button
                         type="button"
-                        onClick={async () => {
-                          const transcript = await speech.stop()
-                          await send(transcript)
-                        }}
+                        onClick={sendDictation}
                         disabled={speech.isRequestingPermission || loading}
-                        className="rounded-2xl border border-neon-violet/25 bg-neon-violet/10 px-4 py-2.5 text-xs font-mono text-violet-200 transition-all hover:bg-neon-violet/15 disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-neon-violet/25 bg-neon-violet/10 px-4 py-2.5 text-xs font-mono text-violet-200 transition-all hover:bg-neon-violet/15 disabled:opacity-50"
                       >
+                        <ArrowUp className="h-3.5 w-3.5" />
                         {voiceUi.send}
                       </button>
                     </div>
@@ -381,40 +387,57 @@ export default function AIAssistant() {
               style={{ height: 'auto' }}
             />
             <div className="absolute right-3 bottom-3 flex items-center gap-2">
-              <motion.button
-                type="button"
-                onClick={async () => {
-                  if (speech.isListening) {
-                    await speech.stop()
-                    return
-                  }
-                  await speech.start()
-                }}
-                disabled={speech.isRequestingPermission}
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-                className={`h-11 w-11 rounded-full border flex items-center justify-center transition-all shrink-0 disabled:opacity-70 ${
-                  speech.isListening
-                    ? 'border-red-500/35 bg-red-500/14 text-red-200 shadow-[0_0_20px_rgba(248,113,113,0.2)] animate-pulse'
-                    : speech.isRequestingPermission
-                      ? 'border-amber-400/35 bg-amber-400/12 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.18)]'
-                      : 'border-white/12 bg-white/[0.06] text-white/85 hover:border-neon-violet/35 hover:bg-neon-violet/10 hover:text-neon-violet'
-                }`}
-                title={speech.isListening ? t('assistant.voiceStop') : t('assistant.voiceStart')}
-              >
-                {speech.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </motion.button>
-              <motion.button
-                onClick={() => send()}
-                disabled={!input.trim() || loading}
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-                className="h-11 w-11 rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan flex items-center justify-center text-white shadow-neon-violet disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
-              >
-                {loading
-                  ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <Send className="w-4 h-4" />}
-              </motion.button>
+              {speech.isListening || speech.isRequestingPermission ? (
+                <>
+                  <motion.button
+                    type="button"
+                    onClick={stopDictation}
+                    disabled={speech.isRequestingPermission}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    className="h-11 w-11 rounded-full border border-white/12 bg-white/[0.06] text-white/88 flex items-center justify-center transition-all shrink-0 disabled:opacity-55"
+                    title={voiceUi.stop}
+                  >
+                    <Square className="h-4 w-4 fill-current" />
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={sendDictation}
+                    disabled={speech.isRequestingPermission || loading}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    className="h-11 w-11 rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan flex items-center justify-center text-white shadow-neon-violet disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
+                    title={voiceUi.send}
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </motion.button>
+                </>
+              ) : (
+                <>
+                  <motion.button
+                    type="button"
+                    onClick={() => speech.start()}
+                    disabled={speech.isRequestingPermission}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    className="h-11 w-11 rounded-full border border-white/12 bg-white/[0.06] text-white/85 hover:border-neon-violet/35 hover:bg-neon-violet/10 hover:text-neon-violet flex items-center justify-center transition-all shrink-0 disabled:opacity-70"
+                    title={t('assistant.voiceStart')}
+                  >
+                    <Mic className="w-4 h-4" />
+                  </motion.button>
+                  <motion.button
+                    onClick={() => send()}
+                    disabled={!input.trim() || loading}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    className="h-11 w-11 rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan flex items-center justify-center text-white shadow-neon-violet disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
+                  >
+                    {loading
+                      ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      : <Send className="w-4 h-4" />}
+                  </motion.button>
+                </>
+              )}
             </div>
           </div>
         </div>
