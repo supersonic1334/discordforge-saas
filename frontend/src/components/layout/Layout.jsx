@@ -56,6 +56,9 @@ export default function Layout() {
   const [isResizing, setIsResizing] = useState(false)
   const mainRef = useRef(null)
   const scrollPositionsRef = useRef(new Map())
+  const scrollRestoreTimeoutRef = useRef(null)
+  const restoringScrollRef = useRef(false)
+  const lastManualScrollAtRef = useRef(Date.now())
   const { user, logout } = useAuthStore()
   const { guilds, selectedGuildId, clearSelectedGuild, hydrateSelectedGuild } = useGuildStore()
   const { status, ping, bot, fetchStatus, setStatus } = useBotStore()
@@ -202,26 +205,19 @@ export default function Layout() {
     if (!container) return
 
     const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
+    restoringScrollRef.current = true
     container.scrollTop = savedPosition
+    window.clearTimeout(scrollRestoreTimeoutRef.current)
+    scrollRestoreTimeoutRef.current = window.setTimeout(() => {
+      restoringScrollRef.current = false
+    }, 120)
   }, [location.pathname])
 
   useEffect(() => {
-    const container = mainRef.current
-    if (!container) return
-
-    const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
-    if (savedPosition > 24 && container.scrollTop === 0) {
-      const rafId = window.requestAnimationFrame(() => {
-        if (mainRef.current && mainRef.current.scrollTop === 0) {
-          mainRef.current.scrollTop = savedPosition
-        }
-      })
-
-      return () => window.cancelAnimationFrame(rafId)
+    return () => {
+      window.clearTimeout(scrollRestoreTimeoutRef.current)
     }
-
-    return undefined
-  })
+  }, [])
 
   const handleLogout = () => {
     setStatus({
@@ -262,8 +258,31 @@ export default function Layout() {
     setIsResizing(true)
   }
 
+  const markManualScroll = () => {
+    lastManualScrollAtRef.current = Date.now()
+  }
+
   const handleMainScroll = (event) => {
-    scrollPositionsRef.current.set(location.pathname, event.currentTarget.scrollTop)
+    const scrollTop = event.currentTarget.scrollTop
+    const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
+
+    if (restoringScrollRef.current) return
+
+    if (scrollTop === 0 && savedPosition > 24 && Date.now() - lastManualScrollAtRef.current > 700) {
+      restoringScrollRef.current = true
+      window.requestAnimationFrame(() => {
+        if (mainRef.current) {
+          mainRef.current.scrollTop = savedPosition
+        }
+        window.clearTimeout(scrollRestoreTimeoutRef.current)
+        scrollRestoreTimeoutRef.current = window.setTimeout(() => {
+          restoringScrollRef.current = false
+        }, 120)
+      })
+      return
+    }
+
+    scrollPositionsRef.current.set(location.pathname, scrollTop)
   }
 
   const renderSidebarLink = ({ icon: Icon, label, path, needsGuild }) => {
@@ -537,6 +556,10 @@ export default function Layout() {
         <main
           ref={mainRef}
           onScroll={handleMainScroll}
+          onWheel={markManualScroll}
+          onTouchStart={markManualScroll}
+          onMouseDown={markManualScroll}
+          onKeyDown={markManualScroll}
           className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom"
         >
           <Outlet />
