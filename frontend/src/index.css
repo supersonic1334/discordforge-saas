@@ -51,6 +51,11 @@
       0 8px 32px rgba(0,0,0,0.35),
       inset 0 1px 0 rgba(255,255,255,0.06),
       inset 0 0 0 0.5px rgba(255,255,255,0.04);
+    transition:
+      transform 220ms ease,
+      border-color 220ms ease,
+      box-shadow 220ms ease,
+      background-color 220ms ease;
   }
   .glass-card-hover {
     @apply glass-card transition-all duration-300 ease-out;
@@ -155,6 +160,11 @@
     box-shadow:
       0 24px 70px rgba(0,0,0,0.35),
       inset 0 1px 0 rgba(255,255,255,0.06);
+    transition:
+      transform 260ms ease,
+      box-shadow 260ms ease,
+      border-color 260ms ease,
+      background-color 260ms ease;
   }
   .feature-hero::before {
     content: '';
@@ -177,16 +187,32 @@
   .feature-chip {
     @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition:
+      transform 200ms ease,
+      border-color 200ms ease,
+      background-color 200ms ease,
+      color 200ms ease,
+      box-shadow 200ms ease;
   }
   .feature-metric {
     @apply rounded-2xl border border-white/10 bg-black/15 px-4 py-3;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition:
+      transform 220ms ease,
+      border-color 220ms ease,
+      background-color 220ms ease,
+      box-shadow 220ms ease;
   }
   .spotlight-card {
     @apply relative overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm;
     box-shadow:
       0 20px 48px rgba(0,0,0,0.28),
       inset 0 1px 0 rgba(255,255,255,0.04);
+    transition:
+      transform 260ms ease,
+      border-color 260ms ease,
+      box-shadow 260ms ease,
+      background-color 260ms ease;
   }
   .spotlight-card::before {
     content: '';
@@ -203,6 +229,37 @@
       0 16px 44px rgba(0,0,0,0.32),
       0 0 30px rgba(0,229,255,0.06);
   }
+  .depth-panel {
+    @apply spotlight-card spotlight-ring transition-all duration-300 ease-out;
+    transform-origin: center;
+    transform-style: preserve-3d;
+    will-change: transform, box-shadow, border-color;
+  }
+  .depth-panel:hover {
+    transform: translateY(-4px) scale(1.008);
+    border-color: rgba(255,255,255,0.16);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.06),
+      0 24px 56px rgba(0,0,0,0.38),
+      0 0 36px rgba(0,229,255,0.10),
+      0 0 42px rgba(176,78,255,0.08);
+  }
+  .depth-panel:focus-within {
+    border-color: rgba(0,229,255,0.22);
+    box-shadow:
+      0 0 0 1px rgba(0,229,255,0.10),
+      0 20px 52px rgba(0,0,0,0.36),
+      0 0 30px rgba(0,229,255,0.12);
+  }
+  .depth-panel-static {
+    @apply depth-panel;
+  }
+  .depth-panel-static:hover {
+    transform: none;
+  }
+  .section-hero {
+    @apply feature-hero p-6 sm:p-7;
+  }
   .timeline-shell {
     position: relative;
   }
@@ -215,6 +272,53 @@
     width: 1px;
     background: linear-gradient(180deg, rgba(0,229,255,0.22), rgba(176,78,255,0.18), transparent);
     pointer-events: none;
+  }
+}
+
+@media (hover: hover) {
+  @layer components {
+    .glass-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255,255,255,0.14);
+      box-shadow:
+        0 18px 44px rgba(0,0,0,0.42),
+        inset 0 1px 0 rgba(255,255,255,0.08),
+        0 0 24px rgba(0,229,255,0.06);
+    }
+    .feature-hero:hover {
+      transform: translateY(-4px);
+      border-color: rgba(255,255,255,0.14);
+      box-shadow:
+        0 30px 84px rgba(0,0,0,0.4),
+        inset 0 1px 0 rgba(255,255,255,0.08),
+        0 0 34px rgba(0,229,255,0.06);
+    }
+    .feature-chip:hover {
+      transform: translateY(-2px);
+      border-color: rgba(0,229,255,0.22);
+      background-color: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.88);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+    }
+    .feature-metric:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255,255,255,0.16);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.05),
+        0 18px 36px rgba(0,0,0,0.24),
+        0 0 24px rgba(176,78,255,0.06);
+    }
+    .spotlight-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(255,255,255,0.14);
+      box-shadow:
+        0 26px 54px rgba(0,0,0,0.34),
+        inset 0 1px 0 rgba(255,255,255,0.06),
+        0 0 26px rgba(0,229,255,0.06);
+    }
+    .btn-ghost:hover {
+      transform: translateY(-2px);
+    }
   }
 }
 

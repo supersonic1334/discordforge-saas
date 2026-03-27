@@ -48,6 +48,30 @@ api.interceptors.response.use(
   }
 )
 
+function deleteNoBody(url, config = {}) {
+  return api.request({
+    ...config,
+    url,
+    method: 'delete',
+    data: undefined,
+    headers: {
+      ...(config.headers || {}),
+      'Content-Type': undefined,
+    },
+    transformRequest: [
+      (data, headers) => {
+        if (headers) {
+          delete headers['Content-Type']
+          if (headers.common) delete headers.common['Content-Type']
+          if (headers.delete) delete headers.delete['Content-Type']
+        }
+        return data
+      },
+      ...(config.transformRequest || []),
+    ],
+  })
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
   register:       (data)     => api.post('/auth/register', data),
@@ -100,8 +124,8 @@ export const modAPI = {
 
 export const blockedAPI = {
   list:         (guildId, params) => api.get(`/bot/guilds/${guildId}/blocked`, { params }),
-  unban:        (guildId, userId) => api.delete(`/bot/guilds/${guildId}/blocked/bans/${userId}`),
-  unblacklist:  (guildId, userId) => api.delete(`/bot/guilds/${guildId}/blocked/blacklist/${userId}`),
+  unban:        (guildId, userId) => deleteNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}`),
+  unblacklist:  (guildId, userId) => deleteNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}`),
 }
 
 export const messagesAPI = {
@@ -138,7 +162,7 @@ export const commandsAPI = {
 export const logsAPI = {
   list:       (guildId, params) => api.get(`/bot/guilds/${guildId}/logs`, { params }),
   discord:    (guildId, params) => api.get(`/bot/guilds/${guildId}/logs/discord`, { params }),
-  clearDiscord: (guildId)       => api.delete(`/bot/guilds/${guildId}/logs/discord`),
+  clearDiscord: (guildId)       => deleteNoBody(`/bot/guilds/${guildId}/logs/discord`),
   analytics:  (guildId)         => api.get(`/bot/guilds/${guildId}/logs/analytics`),
   channel:    (guildId)         => api.get(`/bot/guilds/${guildId}/logs/channel`),
   setChannel: (guildId, data)   => api.put(`/bot/guilds/${guildId}/logs/channel`, data),
