@@ -116,7 +116,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.delete('/bans/:discordUserId', async (req, res, next) => {
+async function handleUnban(req, res, next) {
   try {
     const token = decrypt(req.botToken.encrypted_token);
     await discordService.unbanMember(token, req.guild.guild_id, req.params.discordUserId, 'Manual unban from blocked users page');
@@ -140,9 +140,9 @@ router.delete('/bans/:discordUserId', async (req, res, next) => {
     }
     next(error);
   }
-});
+}
 
-router.delete('/blacklist/:discordUserId', async (req, res, next) => {
+async function handleBlacklistRemoval(req, res, next) {
   try {
     const ownerUserId = req.guildOwnerUserId || req.user.id;
     const targetUserId = req.params.discordUserId;
@@ -169,6 +169,12 @@ router.delete('/blacklist/:discordUserId', async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}
+
+router.delete('/bans/:discordUserId', handleUnban);
+router.post('/bans/:discordUserId/unban', handleUnban);
+
+router.delete('/blacklist/:discordUserId', handleBlacklistRemoval);
+router.post('/blacklist/:discordUserId/remove', handleBlacklistRemoval);
 
 module.exports = router;

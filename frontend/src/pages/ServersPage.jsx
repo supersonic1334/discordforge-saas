@@ -152,11 +152,11 @@ export default function ServersPage() {
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,12,18,0.98),rgba(10,14,22,0.96)_48%,rgba(17,13,28,0.92))]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.045),transparent_18%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.1),transparent_34%)]" />
         <div className="relative grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-          <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(10,16,22,0.84),rgba(8,12,18,0.62))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_22px_60px_rgba(2,6,14,0.28)] sm:p-6">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.09),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_44%)]" />
-            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/18 to-transparent" />
-            <div className="pointer-events-none absolute inset-y-8 left-0 w-px bg-gradient-to-b from-transparent via-neon-cyan/18 to-transparent" />
-            <div className="pointer-events-none absolute bottom-0 left-8 right-16 h-px bg-gradient-to-r from-neon-cyan/18 via-white/12 to-transparent" />
+          <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(9,14,20,0.9),rgba(7,10,16,0.72))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_22px_60px_rgba(2,6,14,0.28)] sm:p-6">
+            <div className="pointer-events-none absolute -left-16 top-[-22%] h-56 w-56 rounded-full bg-neon-cyan/10 blur-3xl opacity-75" />
+            <div className="pointer-events-none absolute -right-20 bottom-[-30%] h-64 w-64 rounded-full bg-neon-violet/10 blur-3xl opacity-60" />
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.025),transparent_38%)]" />
+            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent" />
 
             <div className="relative space-y-5">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/55">
