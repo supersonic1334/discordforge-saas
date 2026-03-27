@@ -844,31 +844,35 @@ function TeamTab({ isOwner, collaborators, nonOwnerCollabs, activeCollabs, suspe
 
       {/* ── Token security info (compact) ─────────────────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 overflow-hidden relative">
+          <div className="absolute inset-x-4 bottom-4 h-10 rounded-full bg-emerald-400/10 blur-2xl pointer-events-none" />
+          <div className="flex items-center justify-between gap-2 mb-2 relative">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span className="text-xs font-display font-600 text-white">Securite du token</span>
           </div>
-          <div className="space-y-1.5">
-            {['Chiffre AES-256 cote serveur', 'Jamais envoye aux clients', 'Invisible dans DevTools'].map((item) => (
-              <div key={item} className="flex items-center gap-2">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400/60 shrink-0" />
-                <span className="text-[11px] text-white/35 font-mono">{item}</span>
-              </div>
+          <div className="relative flex items-end gap-2 h-10">
+            {[22, 30, 18, 34, 24].map((height, index) => (
+              <span
+                key={height}
+                className="flex-1 rounded-full bg-gradient-to-t from-emerald-400/10 via-emerald-400/25 to-emerald-300/60"
+                style={{ height: `${height}px`, opacity: 0.45 + index * 0.08 }}
+              />
             ))}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 overflow-hidden relative">
+          <div className="absolute inset-x-4 bottom-4 h-10 rounded-full bg-neon-cyan/10 blur-2xl pointer-events-none" />
+          <div className="flex items-center justify-between gap-2 mb-2 relative">
             <Zap className="w-4 h-4 text-neon-cyan" />
             <span className="text-xs font-display font-600 text-white">Synchronisation</span>
           </div>
-          <div className="space-y-1.5">
-            {['Mise a jour automatique en temps reel', 'Toute modification se propage a l\'equipe', 'Restauration instantanee pour tous'].map((item) => (
-              <div key={item} className="flex items-center gap-2">
-                <CheckCircle2 className="w-3 h-3 text-neon-cyan/60 shrink-0" />
-                <span className="text-[11px] text-white/35 font-mono">{item}</span>
-              </div>
+          <div className="relative flex items-end gap-2 h-10">
+            {[18, 34, 26, 30, 22].map((height, index) => (
+              <span
+                key={height}
+                className="flex-1 rounded-full bg-gradient-to-t from-neon-cyan/10 via-neon-cyan/25 to-neon-cyan/70"
+                style={{ height: `${height}px`, opacity: 0.45 + index * 0.08 }}
+              />
             ))}
           </div>
         </div>
