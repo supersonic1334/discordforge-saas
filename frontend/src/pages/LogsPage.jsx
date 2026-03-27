@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Activity, AlertTriangle, ArrowRight, Bot, RefreshCw, ShieldOff, Search, Filter, Calendar, User, Zap, FileText, ChevronDown, Trash2 } from 'lucide-react'
+import { Activity, AlertTriangle, Bot, RefreshCw, ShieldOff, Search, Filter, Calendar, User, Zap, FileText, ChevronDown, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { logsAPI, modAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
-import { ACTION_LABELS, ACTION_COLORS, LOG_LEVEL_COLORS, getErrorMessage, formatDate, initials, renderAvatar, SummaryCard, SelectGuildState } from '../components/moderation/moderationUI'
+import { ACTION_LABELS, ACTION_COLORS, LOG_LEVEL_COLORS, getErrorMessage, formatDate, renderAvatar, SelectGuildState } from '../components/moderation/moderationUI'
 
 const TABS = [
   { id: 'site', label: 'Logs Site', icon: Activity, color: 'neon-cyan' },
@@ -30,6 +29,15 @@ const LOG_LEVELS = [
   { value: 'warn', label: 'Warning' },
   { value: 'error', label: 'Error' },
 ]
+
+function HeaderPill({ icon: Icon, label }) {
+  return (
+    <span className="feature-chip">
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </span>
+  )
+}
 
 export default function LogsPage() {
   const { locale } = useI18n()
@@ -202,34 +210,59 @@ export default function LogsPage() {
 
   return (
     <div className="px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="font-display font-800 text-2xl text-white">Logs & Historique</h1>
-          <p className="text-white/40 text-sm mt-1">Historique complet des actions de moderation et evenements du bot. - {guild?.name}</p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => loadLogs()}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.03] text-white/70 text-sm font-mono hover:border-white/20 hover:text-white transition-all disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Recharger
-          </button>
-          {activeTab === 'discord' && (
+      <div className="feature-hero p-6 sm:p-7">
+        <div className="relative z-[1] flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <HeaderPill icon={Activity} label="logs site" />
+              <HeaderPill icon={AlertTriangle} label="warnings" />
+              <HeaderPill icon={Bot} label={guild?.name || 'discord'} />
+            </div>
+            <div>
+              <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">Logs & historique</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55 sm:text-[15px]">Vue plus nette des actions staff, avertissements et evenements Discord, avec lecture rapide et filtres propres.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 xl:justify-end">
             <button
-              onClick={handleClearDiscordLogs}
-              disabled={clearingDiscord}
-              className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-red-500/20 bg-red-500/10 text-red-300 text-sm font-mono hover:bg-red-500/15 transition-all disabled:opacity-50"
+              onClick={() => loadLogs()}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
             >
-              <Trash2 className={`w-4 h-4 ${clearingDiscord ? 'animate-pulse' : ''}`} />
-              {clearingDiscord ? 'Vidage...' : 'Vider Discord'}
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Recharger
             </button>
-          )}
+            {activeTab === 'discord' && (
+              <button
+                onClick={handleClearDiscordLogs}
+                disabled={clearingDiscord}
+                className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-mono text-red-300 transition-all hover:bg-red-500/15 disabled:opacity-50"
+              >
+                <Trash2 className={`w-4 h-4 ${clearingDiscord ? 'animate-pulse' : ''}`} />
+                {clearingDiscord ? 'Vidage...' : 'Vider Discord'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="feature-metric">
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Actions site</p>
+            <p className="mt-2 font-display text-2xl font-800 text-white">{summaries.actionCount}</p>
+          </div>
+          <div className="feature-metric">
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Avertissements</p>
+            <p className="mt-2 font-display text-2xl font-800 text-white">{summaries.warnCount}</p>
+          </div>
+          <div className="feature-metric">
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Evenements Discord</p>
+            <p className="mt-2 font-display text-2xl font-800 text-white">{summaries.discordCount}</p>
+          </div>
         </div>
       </div>
 
-      <div className="glass-card p-1 flex gap-1 overflow-x-auto">
+      <div className="spotlight-card p-1">
+        <div className="relative z-[1] flex gap-1 overflow-x-auto">
         {TABS.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -253,17 +286,13 @@ export default function LogsPage() {
                 />
               )}
             </button>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <SummaryCard label="Actions site" value={summaries.actionCount} tone="border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan" />
-        <SummaryCard label="Avertissements" value={summaries.warnCount} tone="border-amber-500/20 bg-amber-500/10 text-amber-300" />
-        <SummaryCard label="Evenements Discord" value={summaries.discordCount} tone="border-violet-500/20 bg-violet-500/10 text-violet-300" />
-      </div>
-
-      <div className="glass-card p-5 space-y-4">
+      <div className="spotlight-card p-5 sm:p-6">
+        <div className="relative z-[1] space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-white/25 absolute left-4 top-1/2 -translate-y-1/2" />
@@ -356,6 +385,7 @@ export default function LogsPage() {
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -370,7 +400,8 @@ export default function LogsPage() {
           {loading && [...Array(3)].map((_, index) => <div key={index} className="h-32 rounded-3xl skeleton" />)}
           
           {!loading && filteredLogs.length === 0 && (
-            <div className="glass-card p-8 text-center">
+            <div className="feature-hero p-8 text-center">
+              <div className="relative z-[1]">
               {activeTab === 'site' && <Activity className="w-12 h-12 text-white/10 mx-auto mb-4" />}
               {activeTab === 'warnings' && <AlertTriangle className="w-12 h-12 text-white/10 mx-auto mb-4" />}
               {activeTab === 'discord' && <Bot className="w-12 h-12 text-white/10 mx-auto mb-4" />}
@@ -380,6 +411,7 @@ export default function LogsPage() {
               <p className="text-white/40 mt-2 text-sm">
                 {activeFiltersCount > 0 ? 'Essayez de modifier vos filtres de recherche.' : 'Les logs apparaitront ici des qu\'il y aura de l\'activite.'}
               </p>
+              </div>
             </div>
           )}
 
@@ -389,7 +421,7 @@ export default function LogsPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.2 }}
-              className="glass-card p-5 space-y-4 hover:border-white/15 transition-all"
+              className="depth-panel p-5 space-y-4"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
@@ -420,7 +452,7 @@ export default function LogsPage() {
               </div>
 
               {log.reason && (
-                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
                   <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Raison</p>
                   <p className="text-white/80 text-sm">{log.reason}</p>
                 </div>
@@ -434,7 +466,7 @@ export default function LogsPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.2 }}
-              className="glass-card p-5 space-y-4 hover:border-white/15 transition-all"
+              className="depth-panel p-5 space-y-4"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
@@ -465,7 +497,7 @@ export default function LogsPage() {
               </div>
 
               {log.reason && (
-                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
                   <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Raison</p>
                   <p className="text-white/80 text-sm">{log.reason}</p>
                 </div>
@@ -479,7 +511,7 @@ export default function LogsPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.2 }}
-              className="glass-card p-5 space-y-4 hover:border-white/15 transition-all"
+              className="depth-panel p-5 space-y-4"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
@@ -520,7 +552,7 @@ export default function LogsPage() {
               </div>
 
               {log.message && (
-                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
                   <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Details</p>
                   <p className="text-white/80 text-sm">{log.message}</p>
                 </div>
@@ -531,8 +563,10 @@ export default function LogsPage() {
       </AnimatePresence>
 
       {!loading && filteredLogs.length > 0 && (
-        <div className="glass-card p-4 text-center text-white/40 text-sm font-mono">
-          {filteredLogs.length} {filteredLogs.length === 1 ? 'entree' : 'entrees'} {activeFiltersCount > 0 ? 'trouvee(s)' : 'au total'}
+        <div className="spotlight-card p-4 text-center text-white/40 text-sm font-mono">
+          <div className="relative z-[1]">
+            {filteredLogs.length} {filteredLogs.length === 1 ? 'entree' : 'entrees'} {activeFiltersCount > 0 ? 'trouvee(s)' : 'au total'}
+          </div>
         </div>
       )}
     </div>

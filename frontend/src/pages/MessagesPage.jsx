@@ -38,6 +38,25 @@ const AUTO_OPTIONS = [
   { key: 'auto_dm_blacklist', title: 'Blacklist reseau', hint: 'Notification speciale si l\'acces global est coupe.', icon: ShieldCheck, color: 'violet' },
 ]
 
+const AUTO_OPTION_TONES = {
+  amber: {
+    shell: 'border-amber-500/20 bg-amber-500/10',
+    icon: 'text-amber-300',
+  },
+  orange: {
+    shell: 'border-orange-500/20 bg-orange-500/10',
+    icon: 'text-orange-300',
+  },
+  red: {
+    shell: 'border-red-500/20 bg-red-500/10',
+    icon: 'text-red-300',
+  },
+  violet: {
+    shell: 'border-violet-500/20 bg-violet-500/10',
+    icon: 'text-violet-300',
+  },
+}
+
 function getErrorMessage(error) {
   return error?.response?.data?.error || error?.message || 'Erreur inattendue'
 }
@@ -60,6 +79,15 @@ function Avatar({ src, label, tone = 'from-cyan-500/25 to-violet-500/25', size =
     <div className={`${size} rounded-2xl border border-white/10 bg-gradient-to-br ${tone} flex items-center justify-center text-white/75 font-mono text-xs shadow-[0_18px_36px_rgba(0,0,0,0.22)]`}>
       {initials(label)}
     </div>
+  )
+}
+
+function HeaderPill({ icon: Icon, label }) {
+  return (
+    <span className="feature-chip">
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </span>
   )
 }
 
@@ -104,6 +132,10 @@ export default function MessagesPage() {
   const appealGuilds = useMemo(
     () => guilds.filter((entry) => entry.id !== selectedGuildId),
     [guilds, selectedGuildId]
+  )
+  const enabledAutoCount = useMemo(
+    () => AUTO_OPTIONS.filter((entry) => !!config[entry.key]).length,
+    [config]
   )
 
   useEffect(() => {
@@ -197,20 +229,47 @@ export default function MessagesPage() {
 
   return (
     <div className="px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="font-display font-800 text-2xl text-white">Messages & Notifications</h1>
-          <p className="text-white/40 text-sm mt-1">Recherche un membre puis envoie un MP propre. Les sanctions du site peuvent aussi partir automatiquement d'ici. - {guild?.name}</p>
+      <div className="feature-hero p-6 sm:p-7">
+        <div className="relative z-[1] flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <HeaderPill icon={MessageCircleMore} label="messages prives" />
+              <HeaderPill icon={BellRing} label="notifications auto" />
+              <HeaderPill icon={ShieldCheck} label={guild?.name || 'serveur'} />
+            </div>
+            <div>
+              <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">Messages & notifications</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55 sm:text-[15px]">Interface plus visuelle pour rechercher un membre, preparer un MP propre et piloter les notifications automatiques du site.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 xl:justify-end">
+            <button onClick={loadConfig} disabled={loadingConfig} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:opacity-50">
+              <RefreshCw className={`w-4 h-4 ${loadingConfig ? 'animate-spin' : ''}`} />
+              Recharger
+            </button>
+          </div>
         </div>
-        <button onClick={loadConfig} disabled={loadingConfig} className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.03] text-white/70 text-sm font-mono hover:border-white/20 hover:text-white transition-all disabled:opacity-50">
-          <RefreshCw className={`w-4 h-4 ${loadingConfig ? 'animate-spin' : ''}`} />
-          Recharger
-        </button>
+
+        <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="feature-metric">
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Resultats</p>
+            <p className="mt-2 font-display text-2xl font-800 text-white">{results.length}</p>
+          </div>
+          <div className="feature-metric">
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Notifications actives</p>
+            <p className="mt-2 font-display text-2xl font-800 text-white">{enabledAutoCount}</p>
+          </div>
+          <div className="feature-metric">
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Cible ouverte</p>
+            <p className="mt-2 font-display text-2xl font-800 text-white">{selectedUser ? '1' : '0'}</p>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-4">
-          <div className="glass-card p-5 space-y-4">
+          <div className="spotlight-card p-5 sm:p-6">
+            <div className="relative z-[1] space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 flex items-center justify-center shrink-0">
                 <Search className="w-5 h-5 text-neon-cyan" />
@@ -245,6 +304,7 @@ export default function MessagesPage() {
               <Search className={`w-4 h-4 ${searching ? 'animate-pulse' : ''}`} />
               Rechercher
             </button>
+            </div>
           </div>
 
           <AnimatePresence mode="wait">
@@ -264,9 +324,11 @@ export default function MessagesPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="glass-card p-6 text-center text-white/40 text-sm"
+                className="spotlight-card p-6 text-center text-white/40 text-sm"
               >
-                {query.trim() ? 'Aucun resultat.' : 'Lance une recherche pour ouvrir une fiche MP.'}
+                <div className="relative z-[1]">
+                  {query.trim() ? 'Aucun resultat.' : 'Lance une recherche pour ouvrir une fiche MP.'}
+                </div>
               </motion.div>
             )}
 
@@ -282,7 +344,7 @@ export default function MessagesPage() {
                     key={entry.id}
                     type="button"
                     onClick={() => setSelectedUser(entry)}
-                    className={`w-full text-left glass-card p-4 border transition-all ${
+                    className={`w-full text-left depth-panel p-4 border transition-all ${
                       selectedUser?.id === entry.id
                         ? 'border-neon-cyan/25 shadow-[0_0_24px_rgba(34,211,238,0.12)]'
                         : 'border-white/8 hover:border-white/15'
@@ -304,7 +366,8 @@ export default function MessagesPage() {
         </div>
 
         <div className="space-y-5">
-          <div className="glass-card p-6 space-y-5">
+          <div className="spotlight-card p-6 space-y-5">
+            <div className="relative z-[1] space-y-5">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl border border-violet-500/20 bg-violet-500/10 flex items-center justify-center shrink-0">
                 <Send className="w-5 h-5 text-violet-300" />
@@ -316,7 +379,7 @@ export default function MessagesPage() {
             </div>
 
             {!selectedUser && (
-              <div className="rounded-3xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/40 text-sm">
+              <div className="rounded-3xl border border-white/8 bg-black/15 p-8 text-center text-white/40 text-sm">
                 Selectionne une personne a gauche pour ouvrir la composition.
               </div>
             )}
@@ -331,7 +394,7 @@ export default function MessagesPage() {
                   transition={{ duration: 0.2 }}
                   className="space-y-5"
                 >
-                  <div className="rounded-3xl border border-white/8 bg-white/[0.02] p-5 flex items-center gap-4">
+                  <div className="rounded-3xl border border-white/8 bg-black/15 p-5 flex items-center gap-4">
                     <Avatar src={selectedUser.avatar_url} label={selectedUser.display_name} size="w-16 h-16" />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap gap-2 items-center">
@@ -382,7 +445,7 @@ export default function MessagesPage() {
                       </button>
                     </div>
 
-                    <div className="rounded-3xl border border-white/8 bg-gradient-to-br from-white/[0.04] to-white/[0.02] p-5 space-y-4">
+                    <div className="depth-panel-static rounded-3xl border border-white/8 bg-gradient-to-br from-white/[0.04] to-white/[0.02] p-5 space-y-4">
                       <div className="flex items-center gap-2 text-white">
                         <Sparkles className="w-4 h-4 text-violet-300" />
                         <p className="font-display font-700">Apercu du rendu</p>
@@ -409,9 +472,11 @@ export default function MessagesPage() {
                 </motion.div>
               </AnimatePresence>
             )}
+            </div>
           </div>
 
-          <div className="glass-card p-6 space-y-5">
+          <div className="spotlight-card p-6 space-y-5">
+            <div className="relative z-[1] space-y-5">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 flex items-center justify-center shrink-0">
                 <ShieldCheck className="w-5 h-5 text-emerald-300" />
@@ -425,11 +490,12 @@ export default function MessagesPage() {
             <div className="grid gap-3">
               {AUTO_OPTIONS.map((item) => {
                 const Icon = item.icon
+                const tone = AUTO_OPTION_TONES[item.color] || AUTO_OPTION_TONES.violet
                 return (
-                  <div key={item.key} className="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3 flex items-center justify-between gap-4">
+                  <div key={item.key} className="depth-panel px-4 py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl border border-${item.color}-500/20 bg-${item.color}-500/10 flex items-center justify-center shrink-0`}>
-                        <Icon className={`w-4 h-4 text-${item.color}-300`} />
+                      <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${tone.shell}`}>
+                        <Icon className={`w-4 h-4 ${tone.icon}`} />
                       </div>
                       <div className="min-w-0">
                         <p className="text-white font-display font-700">{item.title}</p>
@@ -489,6 +555,7 @@ export default function MessagesPage() {
               <CheckCircle2 className={`w-4 h-4 ${savingConfig ? 'animate-pulse' : ''}`} />
               {savingConfig ? 'Enregistrement...' : 'Enregistrer la configuration'}
             </button>
+            </div>
           </div>
         </div>
       </div>

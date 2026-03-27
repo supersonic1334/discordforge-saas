@@ -43,20 +43,31 @@ function Avatar({ src, label, tone = 'from-cyan-500/25 to-violet-500/25' }) {
 
 function EmptyState({ icon: Icon, title, body }) {
   return (
-    <div className="glass-card p-8 text-center">
-      <Icon className="w-12 h-12 text-white/10 mx-auto mb-4" />
-      <p className="font-display font-700 text-white text-lg">{title}</p>
-      <p className="text-white/40 mt-2 text-sm">{body}</p>
+    <div className="spotlight-card p-8 text-center">
+      <div className="relative z-[1]">
+        <Icon className="w-12 h-12 text-white/10 mx-auto mb-4" />
+        <p className="font-display font-700 text-white text-lg">{title}</p>
+        <p className="text-white/40 mt-2 text-sm">{body}</p>
+      </div>
     </div>
   )
 }
 
 function CountCard({ label, value, tone }) {
   return (
-    <div className={`rounded-2xl border p-4 ${tone}`}>
+    <div className={`feature-metric border ${tone}`}>
       <p className="text-[11px] font-mono uppercase tracking-[0.2em] opacity-70">{label}</p>
       <p className="mt-2 font-display text-2xl font-800">{value}</p>
     </div>
+  )
+}
+
+function HeaderPill({ icon: Icon, label }) {
+  return (
+    <span className="feature-chip">
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </span>
   )
 }
 
@@ -78,7 +89,7 @@ function BlockedRow({
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.2 }}
-      className="glass-card p-5 space-y-4 hover:border-white/15 transition-all"
+      className="depth-panel p-5 space-y-4"
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-center gap-4 min-w-0">
@@ -251,22 +262,39 @@ export default function AccessControlPage() {
 
   return (
     <div className="px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="font-display font-800 text-2xl text-white">Controle d'Acces</h1>
-          <p className="text-white/40 text-sm mt-1">Gestion des bannissements serveur et blacklist reseau. - {guild?.name}</p>
+      <div className="feature-hero p-6 sm:p-7">
+        <div className="relative z-[1] flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <HeaderPill icon={Ban} label="bannis serveur" />
+              <HeaderPill icon={Fingerprint} label="blacklist reseau" />
+              <HeaderPill icon={Shield} label={guild?.name || 'controle'} />
+            </div>
+            <div>
+              <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">Controle d'acces</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55 sm:text-[15px]">Panneau plus lisible pour debannir, retirer une blacklist et garder un oeil clair sur toutes les restrictions du reseau.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 xl:justify-end">
+            <button
+              onClick={() => loadBlocked()}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Recharger
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => loadBlocked()}
-          disabled={refreshing}
-          className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.03] text-white/70 text-sm font-mono hover:border-white/20 hover:text-white transition-all disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Recharger
-        </button>
+
+        <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2">
+          <CountCard label="Bannis serveur" value={totals.bans || 0} tone="border-red-500/20 bg-red-500/10 text-red-300" />
+          <CountCard label="Blacklist reseau" value={totals.blacklist || 0} tone="border-violet-500/20 bg-violet-500/10 text-violet-300" />
+        </div>
       </div>
 
-      <div className="glass-card p-5 space-y-4">
+      <div className="spotlight-card p-5 sm:p-6">
+        <div className="relative z-[1] space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-white/25 absolute left-4 top-1/2 -translate-y-1/2" />
@@ -278,9 +306,6 @@ export default function AccessControlPage() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <div className="px-3 py-2 rounded-xl border border-neon-cyan/15 bg-neon-cyan/10 text-neon-cyan text-xs font-mono">
-              Auto-refresh 8s
-            </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-mono transition-all ${
@@ -322,23 +347,21 @@ export default function AccessControlPage() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <CountCard label="Bannis serveur" value={totals.bans || 0} tone="border-red-500/20 bg-red-500/10 text-red-300" />
-          <CountCard label="Blacklist reseau" value={totals.blacklist || 0} tone="border-violet-500/20 bg-violet-500/10 text-violet-300" />
         </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
         {filterType !== 'blacklist' && (
           <section className="space-y-4">
-            <div className="glass-card p-5 flex items-center gap-3">
+            <div className="spotlight-card p-5 flex items-center gap-3">
+              <div className="relative z-[1] flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl border border-red-500/20 bg-red-500/10 flex items-center justify-center shrink-0">
                 <Ban className="w-5 h-5 text-red-300" />
               </div>
               <div>
                 <p className="font-display font-700 text-white text-lg">Bannis du serveur</p>
                 <p className="text-white/40 text-sm mt-1">Liste des comptes actuellement bannis sur ce serveur.</p>
+              </div>
               </div>
             </div>
 
@@ -367,13 +390,15 @@ export default function AccessControlPage() {
 
         {filterType !== 'bans' && (
           <section className="space-y-4">
-            <div className="glass-card p-5 flex items-center gap-3">
+            <div className="spotlight-card p-5 flex items-center gap-3">
+              <div className="relative z-[1] flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl border border-violet-500/20 bg-violet-500/10 flex items-center justify-center shrink-0">
                 <Fingerprint className="w-5 h-5 text-violet-300" />
               </div>
               <div>
                 <p className="font-display font-700 text-white text-lg">Blacklist reseau</p>
                 <p className="text-white/40 text-sm mt-1">Blocages globaux du bot sur tout ton reseau de serveurs.</p>
+              </div>
               </div>
             </div>
 
@@ -402,14 +427,14 @@ export default function AccessControlPage() {
       </div>
 
       {!loading && !hasResults && query.trim() && (
-        <div className="glass-card p-5 text-center text-white/40 text-sm">
-          Aucun resultat pour cette recherche.
+        <div className="spotlight-card p-5 text-center text-white/40 text-sm">
+          <div className="relative z-[1]">Aucun resultat pour cette recherche.</div>
         </div>
       )}
 
       {!loading && hasResults && (
-        <div className="glass-card p-4 text-center">
-          <div className="flex items-center justify-center gap-2 text-white/40 text-sm font-mono">
+        <div className="spotlight-card p-4 text-center">
+          <div className="relative z-[1] flex items-center justify-center gap-2 text-white/40 text-sm font-mono">
             <CheckCircle2 className="w-4 h-4 text-emerald-300" />
             Systeme de controle d'acces operationnel - Les bugs d'unban et de suppression de blacklist ont ete corriges
           </div>
