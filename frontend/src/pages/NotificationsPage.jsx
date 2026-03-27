@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Clock3,
   RefreshCw,
-  Save,
   ShieldCheck,
   Sparkles,
   UserRoundX,
@@ -137,6 +136,9 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedPreview, setSelectedPreview] = useState('auto_dm_warn')
+  const autosaveTimerRef = useRef(null)
+  const lastSavedSignatureRef = useRef(JSON.stringify(DEFAULT_CONFIG))
+  const hydratedRef = useRef(false)
 
   const appealGuilds = useMemo(
     () => guilds.filter((entry) => entry.id !== selectedGuildId),
@@ -154,33 +156,57 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (!selectedGuildId) return
+    hydratedRef.current = false
     loadConfig()
   }, [selectedGuildId])
+
+  useEffect(() => {
+    if (!selectedGuildId || !hydratedRef.current) return undefined
+    const signature = JSON.stringify(config)
+    if (signature === lastSavedSignatureRef.current) return undefined
+
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current)
+    }
+
+    autosaveTimerRef.current = window.setTimeout(async () => {
+      setSaving(true)
+      try {
+        const response = await messagesAPI.saveConfig(selectedGuildId, config)
+        const nextConfig = { ...DEFAULT_CONFIG, ...(response.data?.settings || {}) }
+        const nextSignature = JSON.stringify(nextConfig)
+        lastSavedSignatureRef.current = nextSignature
+        setConfig((current) => {
+          const currentSignature = JSON.stringify(current)
+          return currentSignature === nextSignature ? current : nextConfig
+        })
+      } catch (error) {
+        toast.error(getErrorMessage(error))
+      } finally {
+        setSaving(false)
+      }
+    }, 700)
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        window.clearTimeout(autosaveTimerRef.current)
+      }
+    }
+  }, [config, selectedGuildId])
 
   async function loadConfig() {
     if (!selectedGuildId) return
     setLoading(true)
     try {
       const response = await messagesAPI.config(selectedGuildId)
-      setConfig({ ...DEFAULT_CONFIG, ...(response.data?.settings || {}) })
+      const nextConfig = { ...DEFAULT_CONFIG, ...(response.data?.settings || {}) }
+      setConfig(nextConfig)
+      lastSavedSignatureRef.current = JSON.stringify(nextConfig)
+      hydratedRef.current = true
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function handleSave() {
-    if (!selectedGuildId || saving) return
-    setSaving(true)
-    try {
-      const response = await messagesAPI.saveConfig(selectedGuildId, config)
-      setConfig({ ...DEFAULT_CONFIG, ...(response.data?.settings || {}) })
-      toast.success('Notifications enregistrees')
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -225,20 +251,11 @@ export default function NotificationsPage() {
             <button
               type="button"
               onClick={loadConfig}
-              disabled={loading}
+              disabled={loading || saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${loading || saving ? 'animate-spin' : ''}`} />
               Recharger
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl border border-violet-500/25 bg-violet-500/10 px-4 py-3 text-sm font-mono text-violet-200 transition-all hover:bg-violet-500/15 disabled:opacity-50"
-            >
-              <Save className={`w-4 h-4 ${saving ? 'animate-pulse' : ''}`} />
-              {saving ? 'Enregistrement...' : 'Enregistrer'}
             </button>
           </div>
         </div>
