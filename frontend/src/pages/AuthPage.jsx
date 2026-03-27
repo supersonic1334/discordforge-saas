@@ -37,43 +37,55 @@ function buildSnowLayer(count, options) {
     drift: (Math.random() - 0.5) * options.maxDrift,
     opacity: options.minOpacity + Math.random() * (options.maxOpacity - options.minOpacity),
     blur: Math.random() * options.maxBlur,
+    sway: 0.35 + Math.random() * 0.85,
+    rotate: (Math.random() - 0.5) * 60,
   }))
 }
 
 function AuthSnowBackdrop({ pointerX, pointerY }) {
-  const layerDriftX = useSpring(useTransform(pointerX, [0, 100], [-18, 18]), { stiffness: 110, damping: 18, mass: 0.7 })
-  const layerDriftY = useSpring(useTransform(pointerY, [0, 100], [-12, 12]), { stiffness: 110, damping: 18, mass: 0.7 })
-  const frontFlakes = useMemo(() => buildSnowLayer(38, {
-    key: 'front',
-    minSize: 2,
-    maxSize: 6.5,
-    minDuration: 10,
-    maxDuration: 18,
-    maxDelay: 16,
-    maxDrift: 52,
-    minOpacity: 0.18,
-    maxOpacity: 0.7,
-    maxBlur: 1.1,
-  }), [])
-  const backFlakes = useMemo(() => buildSnowLayer(54, {
+  const layerDriftX = useSpring(useTransform(pointerX, [0, 100], [-24, 24]), { stiffness: 120, damping: 18, mass: 0.7 })
+  const layerDriftY = useSpring(useTransform(pointerY, [0, 100], [-14, 14]), { stiffness: 120, damping: 18, mass: 0.72 })
+  const backFlakes = useMemo(() => buildSnowLayer(78, {
     key: 'back',
-    minSize: 1,
-    maxSize: 3.6,
-    minDuration: 16,
-    maxDuration: 28,
+    minSize: 0.9,
+    maxSize: 2.8,
+    minDuration: 18,
+    maxDuration: 31,
     maxDelay: 18,
-    maxDrift: 34,
-    minOpacity: 0.08,
-    maxOpacity: 0.35,
-    maxBlur: 2.1,
+    maxDrift: 28,
+    minOpacity: 0.09,
+    maxOpacity: 0.34,
+    maxBlur: 1.8,
+  }), [])
+  const midFlakes = useMemo(() => buildSnowLayer(56, {
+    key: 'mid',
+    minSize: 1.3,
+    maxSize: 4.4,
+    minDuration: 13,
+    maxDuration: 23,
+    maxDelay: 16,
+    maxDrift: 40,
+    minOpacity: 0.14,
+    maxOpacity: 0.52,
+    maxBlur: 1.2,
+  }), [])
+  const frontFlakes = useMemo(() => buildSnowLayer(44, {
+    key: 'front',
+    minSize: 2.2,
+    maxSize: 6.8,
+    minDuration: 9,
+    maxDuration: 17,
+    maxDelay: 16,
+    maxDrift: 58,
+    minOpacity: 0.24,
+    maxOpacity: 0.86,
+    maxBlur: 0.9,
   }), [])
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-      <div className="absolute inset-0 bg-[#03070d]" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,14,22,0.28),rgba(3,7,13,0.9)_32%,rgba(2,5,11,1))]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(166,213,255,0.08),transparent_34%),radial-gradient(circle_at_bottom,rgba(107,164,214,0.07),transparent_28%)]" />
-      <div className="absolute inset-0 opacity-[0.045] [background-image:linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:150px_150px]" />
+      <div className="absolute inset-0 bg-black" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,10,18,0.12),rgba(0,0,0,0.68)_34%,rgba(0,0,0,1))]" />
 
       <motion.div style={{ x: layerDriftX, y: layerDriftY }} className="absolute inset-[-8%]">
         {backFlakes.map((flake) => (
@@ -87,12 +99,39 @@ function AuthSnowBackdrop({ pointerX, pointerY }) {
               height: flake.size,
               opacity: flake.opacity,
               filter: `blur(${flake.blur}px)`,
-              boxShadow: '0 0 14px rgba(214,236,255,0.18)',
+              boxShadow: '0 0 12px rgba(214,236,255,0.12)',
             }}
             animate={{
-              x: [0, flake.drift, flake.drift * -0.3],
+              x: [0, flake.drift * flake.sway, flake.drift * -0.25],
               y: ['0vh', '135vh'],
               opacity: [0, flake.opacity, flake.opacity * 0.92, 0],
+            }}
+            transition={{
+              duration: flake.duration,
+              ease: 'linear',
+              repeat: Infinity,
+              delay: flake.delay,
+            }}
+          />
+        ))}
+
+        {midFlakes.map((flake) => (
+          <motion.span
+            key={flake.id}
+            className="absolute rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.92),rgba(214,236,255,0.28)_62%,transparent)]"
+            style={{
+              left: `${flake.left}%`,
+              top: `${flake.top}%`,
+              width: flake.size,
+              height: flake.size,
+              opacity: flake.opacity,
+              filter: `blur(${flake.blur}px)`,
+              boxShadow: '0 0 15px rgba(214,236,255,0.18)',
+            }}
+            animate={{
+              x: [0, flake.drift * 0.65, flake.drift * -0.12],
+              y: ['0vh', '137vh'],
+              opacity: [0, flake.opacity, flake.opacity, 0],
             }}
             transition={{
               duration: flake.duration,
@@ -106,7 +145,7 @@ function AuthSnowBackdrop({ pointerX, pointerY }) {
         {frontFlakes.map((flake) => (
           <motion.span
             key={flake.id}
-            className="absolute rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.95),rgba(214,236,255,0.42)_60%,transparent)]"
+            className="absolute"
             style={{
               left: `${flake.left}%`,
               top: `${flake.top}%`,
@@ -114,12 +153,12 @@ function AuthSnowBackdrop({ pointerX, pointerY }) {
               height: flake.size,
               opacity: flake.opacity,
               filter: `blur(${flake.blur}px)`,
-              boxShadow: '0 0 18px rgba(214,236,255,0.22)',
             }}
             animate={{
-              x: [0, flake.drift, flake.drift * 0.4],
+              x: [0, flake.drift, flake.drift * 0.38],
               y: ['0vh', '138vh'],
-              opacity: [0, flake.opacity, flake.opacity, 0],
+              rotate: [flake.rotate, flake.rotate + 26, flake.rotate - 16, flake.rotate + 12],
+              opacity: [0, flake.opacity, flake.opacity * 0.94, 0],
             }}
             transition={{
               duration: flake.duration,
@@ -127,11 +166,42 @@ function AuthSnowBackdrop({ pointerX, pointerY }) {
               repeat: Infinity,
               delay: flake.delay,
             }}
-          />
+          >
+            <span
+              className="absolute left-1/2 top-1/2 rounded-full bg-white"
+              style={{
+                width: flake.size * 0.34,
+                height: flake.size * 0.34,
+                marginLeft: -(flake.size * 0.17),
+                marginTop: -(flake.size * 0.17),
+                boxShadow: '0 0 14px rgba(230,244,255,0.26)',
+              }}
+            />
+            <span
+              className="absolute left-1/2 top-1/2 rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(214,236,255,0.18))]"
+              style={{
+                width: Math.max(1, flake.size * 0.12),
+                height: flake.size,
+                marginLeft: -(Math.max(1, flake.size * 0.12) / 2),
+                marginTop: -(flake.size / 2),
+                boxShadow: '0 0 10px rgba(214,236,255,0.18)',
+              }}
+            />
+            <span
+              className="absolute left-1/2 top-1/2 rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0.95),rgba(214,236,255,0.18))]"
+              style={{
+                width: flake.size,
+                height: Math.max(1, flake.size * 0.12),
+                marginLeft: -(flake.size / 2),
+                marginTop: -(Math.max(1, flake.size * 0.12) / 2),
+                boxShadow: '0 0 10px rgba(214,236,255,0.18)',
+              }}
+            />
+          </motion.span>
         ))}
       </motion.div>
 
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/45 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent" />
     </div>
   )
 }
@@ -340,16 +410,6 @@ export default function AuthPage() {
                 className="relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,85vw)]"
               >
               <motion.div
-                aria-hidden="true"
-                animate={{
-                  scale: [1, 1.05, 0.99, 1],
-                  opacity: [0.14, 0.24, 0.16, 0.14],
-                }}
-                transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute inset-x-[18%] top-[12%] h-[62%] rounded-full bg-[radial-gradient(circle,rgba(78,205,255,0.22),rgba(176,78,255,0.08)_58%,transparent_78%)] blur-3xl"
-              />
-
-              <motion.div
                 animate={{
                   y: [0, -10, 0, 7, 0],
                   rotate: [0, -1.8, 1.6, 0],
@@ -374,16 +434,6 @@ export default function AuthPage() {
                   loading="eager"
                 />
               </motion.div>
-
-              <motion.div
-                aria-hidden="true"
-                animate={{
-                  opacity: [0.12, 0.2, 0.12],
-                  scale: [0.98, 1.02, 0.98],
-                }}
-                transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute inset-x-[24%] bottom-[18%] h-10 rounded-full bg-[radial-gradient(circle,rgba(88,129,255,0.24),transparent_72%)] blur-2xl"
-              />
             </motion.div>
             <p className="text-white/40 text-sm">{t('auth.tagline')}</p>
           </div>
