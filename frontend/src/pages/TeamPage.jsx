@@ -850,14 +850,20 @@ function TeamTab({ isOwner, collaborators, nonOwnerCollabs, activeCollabs, suspe
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span className="text-xs font-display font-600 text-white">Securite du token</span>
           </div>
-          <div className="relative flex items-end gap-2 h-10">
-            {[22, 30, 18, 34, 24].map((height, index) => (
-              <span
-                key={height}
-                className="flex-1 rounded-full bg-gradient-to-t from-emerald-400/10 via-emerald-400/25 to-emerald-300/60"
-                style={{ height: `${height}px`, opacity: 0.45 + index * 0.08 }}
-              />
-            ))}
+          <div className="relative mt-4 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl border border-emerald-400/20 bg-emerald-400/10 flex items-center justify-center shrink-0 shadow-[0_0_24px_rgba(74,222,128,0.14)]">
+                <ShieldCheck className="w-4 h-4 text-emerald-300" />
+              </div>
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.8)] animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-white/14" />
+                <span className="h-2 w-2 rounded-full bg-white/10" />
+              </div>
+              <span className="px-3 py-1.5 rounded-xl border border-emerald-400/20 bg-emerald-400/10 text-[11px] font-mono uppercase tracking-[0.18em] text-emerald-200 shadow-[0_8px_24px_rgba(16,185,129,0.12)]">
+                actif
+              </span>
+            </div>
           </div>
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 overflow-hidden relative">
@@ -866,14 +872,21 @@ function TeamTab({ isOwner, collaborators, nonOwnerCollabs, activeCollabs, suspe
             <Zap className="w-4 h-4 text-neon-cyan" />
             <span className="text-xs font-display font-600 text-white">Synchronisation</span>
           </div>
-          <div className="relative flex items-end gap-2 h-10">
-            {[18, 34, 26, 30, 22].map((height, index) => (
-              <span
-                key={height}
-                className="flex-1 rounded-full bg-gradient-to-t from-neon-cyan/10 via-neon-cyan/25 to-neon-cyan/70"
-                style={{ height: `${height}px`, opacity: 0.45 + index * 0.08 }}
-              />
-            ))}
+          <div className="relative mt-4 rounded-2xl border border-neon-cyan/15 bg-neon-cyan/[0.04] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl border border-neon-cyan/20 bg-neon-cyan/10 flex items-center justify-center shrink-0 shadow-[0_0_24px_rgba(34,211,238,0.14)]">
+                <Zap className="w-4 h-4 text-neon-cyan" />
+              </div>
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-neon-cyan shadow-[0_0_14px_rgba(34,211,238,0.8)] animate-pulse" />
+                <div className="h-2 flex-1 rounded-full bg-white/8 overflow-hidden">
+                  <div className="h-full w-3/4 rounded-full bg-gradient-to-r from-neon-cyan/35 via-neon-cyan/70 to-neon-cyan/35" />
+                </div>
+              </div>
+              <span className="px-3 py-1.5 rounded-xl border border-neon-cyan/20 bg-neon-cyan/10 text-[11px] font-mono uppercase tracking-[0.18em] text-cyan-100 shadow-[0_8px_24px_rgba(34,211,238,0.12)]">
+                live
+              </span>
+            </div>
           </div>
         </div>
       </div>
