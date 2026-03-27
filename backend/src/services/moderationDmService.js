@@ -1,5 +1,6 @@
 'use strict';
 
+const config = require('../config');
 const db = require('../database');
 const discordService = require('./discordService');
 const logger = require('../utils/logger').child('ModerationDM');
@@ -150,6 +151,47 @@ function formatDuration(durationMs) {
   return `${totalDays} jour${totalDays > 1 ? 's' : ''}`;
 }
 
+function truncateField(value, max = 1024) {
+  const text = sanitizeMultilineText(value, max);
+  return text.length > max ? `${text.slice(0, Math.max(0, max - 3))}...` : text;
+}
+
+function getBrandAssets() {
+  const fallbackUrl = 'https://discordforger.onrender.com';
+  const candidateUrl = sanitizeUrl(config.FRONTEND_URL);
+  const siteUrl = candidateUrl && !candidateUrl.includes('localhost') ? candidateUrl : fallbackUrl;
+  const siteRoot = siteUrl.replace(/\/+$/, '');
+
+  return {
+    brandName: 'DiscordForger',
+    siteUrl,
+    brandIconUrl: `${siteRoot}/discordforger-icon.png`,
+    brandLogoUrl: `${siteRoot}/discordforger-logo-full.png`,
+  };
+}
+
+function buildSiteButton(brandAssets) {
+  return {
+    type: 2,
+    style: 5,
+    label: 'Lien du site',
+    url: brandAssets.siteUrl,
+  };
+}
+
+function buildAppealButton(settings) {
+  const appealUrl = sanitizeUrl(settings.appeal_server_url);
+  if (!appealUrl) return null;
+
+  const appealName = sanitizeText(settings.appeal_server_name || '', 120) || 'Serveur d appel';
+  return {
+    type: 2,
+    style: 5,
+    label: `Recours - ${appealName}`,
+    url: appealUrl,
+  };
+}
+
 function buildActionPayload({
   guildIdentity,
   actionType,
@@ -161,52 +203,58 @@ function buildActionPayload({
   settings,
 }) {
   const style = ACTION_STYLES[actionType] || ACTION_STYLES.warn;
+  const brandAssets = getBrandAssets();
+  const moderatorLabel = sanitizeText(moderatorName, 80) || 'Staff du serveur';
+  const appealButton = buildAppealButton(settings);
   const appealName = sanitizeText(settings.appeal_server_name || '', 120) || 'Serveur d appel';
-  const appealUrl = sanitizeUrl(settings.appeal_server_url);
+  const detailLines = [
+    `**Serveur** : ${guildIdentity.name}`,
+    `**Action** : ${style.label}`,
+    `**Par** : ${moderatorLabel}`,
+  ];
+
+  if (actionType === 'warn' && Number(points || 0) > 0) {
+    detailLines.push(`**Points** : ${Number(points)}`);
+  }
+
+  if (actionType === 'timeout' && durationMs) {
+    detailLines.push(`**Duree** : ${formatDuration(durationMs)}`);
+  }
+
+  const description = [
+    style.summary,
+    '',
+    detailLines.join('\n'),
+    '',
+    '**Raison**',
+    truncateField(reason || 'Aucune raison precisee.', 900),
+  ];
+
   const fields = [
     {
-      name: 'Serveur',
-      value: guildIdentity.name,
+      name: 'Propulse par',
+      value: 'DiscordForger\nModeration automatisee',
       inline: true,
     },
     {
-      name: 'Sanction',
-      value: style.label,
+      name: 'Etat',
+      value: actionType === 'unban' || actionType === 'untimeout'
+        ? 'Restriction retiree'
+        : 'Notification envoyee',
       inline: true,
     },
     {
-      name: 'Par',
-      value: sanitizeText(moderatorName, 80) || 'Staff du serveur',
+      name: 'Site',
+      value: `[Ouvrir DiscordForger](${brandAssets.siteUrl})`,
       inline: true,
     },
   ];
 
-  if (actionType === 'warn' && Number(points || 0) > 0) {
+  if ((actionType === 'ban' || actionType === 'blacklist') && appealButton) {
+    description.push('', `**Recours**\nTu peux demander une nouvelle etude via **${appealName}**.`);
     fields.push({
-      name: 'Points',
-      value: String(Number(points)),
-      inline: true,
-    });
-  }
-
-  if (actionType === 'timeout' && durationMs) {
-    fields.push({
-      name: 'Duree',
-      value: formatDuration(durationMs),
-      inline: true,
-    });
-  }
-
-  fields.push({
-    name: 'Raison',
-    value: sanitizeMultilineText(reason, 900) || 'Aucune raison precisee.',
-    inline: false,
-  });
-
-  if ((actionType === 'ban' || actionType === 'blacklist') && appealUrl) {
-    fields.push({
-      name: 'Derniere chance',
-      value: `Si tu veux demander un deban, rejoins **${appealName}** via le bouton ci-dessous.`,
+      name: 'Recours',
+      value: truncateField(`Utilise le bouton ci-dessous pour rejoindre ${appealName}.`, 220),
       inline: false,
     });
   }
@@ -214,39 +262,38 @@ function buildActionPayload({
   const embed = {
     color: style.color,
     author: {
-      name: guildIdentity.name,
-      icon_url: guildIdentity.iconUrl || undefined,
+      name: `${brandAssets.brandName} - Notification staff`,
+      icon_url: brandAssets.brandIconUrl,
     },
     title: style.title,
-    description: style.summary,
-    thumbnail: guildIdentity.iconUrl ? { url: guildIdentity.iconUrl } : undefined,
+    description: description.join('\n'),
+    thumbnail: {
+      url: guildIdentity.iconUrl || brandAssets.brandIconUrl,
+    },
+    image: {
+      url: brandAssets.brandLogoUrl,
+    },
     footer: {
-      text: 'DiscordForger • Notification automatique',
-      icon_url: moderatorAvatarUrl || guildIdentity.iconUrl || undefined,
+      text: 'Genere avec DiscordForger - Notification automatique',
+      icon_url: moderatorAvatarUrl || guildIdentity.iconUrl || brandAssets.brandIconUrl,
     },
     timestamp: new Date().toISOString(),
     fields,
   };
 
-  const components = (actionType === 'ban' || actionType === 'blacklist') && appealUrl
-    ? [
-        {
-          type: 1,
-          components: [
-            {
-              type: 2,
-              style: 5,
-              label: `Rejoindre ${appealName}`,
-              url: appealUrl,
-            },
-          ],
-        },
-      ]
-    : undefined;
+  const components = [buildSiteButton(brandAssets)];
+  if ((actionType === 'ban' || actionType === 'blacklist') && appealButton) {
+    components.push(appealButton);
+  }
 
   return {
     embeds: [embed],
-    components,
+    components: [
+      {
+        type: 1,
+        components,
+      },
+    ],
   };
 }
 
@@ -256,33 +303,59 @@ function buildDirectMessagePayload({
   message,
   senderName,
 }) {
+  const brandAssets = getBrandAssets();
+  const cleanTitle = sanitizeText(title, 120) || 'Message du staff';
+  const cleanMessage = truncateField(message || 'Aucun contenu.', 1600);
+
   return {
     embeds: [
       {
         color: 0x22d3ee,
         author: {
-          name: guildIdentity.name,
-          icon_url: guildIdentity.iconUrl || undefined,
+          name: `${brandAssets.brandName} - Message staff`,
+          icon_url: brandAssets.brandIconUrl,
         },
-        title: sanitizeText(title, 120) || 'Message du staff',
-        description: sanitizeMultilineText(message, 1800),
-        thumbnail: guildIdentity.iconUrl ? { url: guildIdentity.iconUrl } : undefined,
+        title: cleanTitle,
+        description: [
+          'Tu as recu un message prive depuis le dashboard staff.',
+          '',
+          '**Message**',
+          cleanMessage,
+        ].join('\n'),
+        thumbnail: {
+          url: guildIdentity.iconUrl || brandAssets.brandIconUrl,
+        },
+        image: {
+          url: brandAssets.brandLogoUrl,
+        },
         fields: [
+          {
+            name: 'Serveur',
+            value: guildIdentity.name,
+            inline: true,
+          },
           {
             name: 'Envoye par',
             value: sanitizeText(senderName, 80) || 'Staff du serveur',
             inline: true,
           },
           {
-            name: 'Depuis',
-            value: guildIdentity.name,
+            name: 'Genere avec',
+            value: `[DiscordForger](${brandAssets.siteUrl})`,
             inline: true,
           },
         ],
         footer: {
-          text: 'DiscordForger • Message prive',
+          text: 'Genere avec DiscordForger - Message prive',
+          icon_url: guildIdentity.iconUrl || brandAssets.brandIconUrl,
         },
         timestamp: new Date().toISOString(),
+      },
+    ],
+    components: [
+      {
+        type: 1,
+        components: [buildSiteButton(brandAssets)],
       },
     ],
   };
