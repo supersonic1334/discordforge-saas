@@ -51,7 +51,8 @@ function isFullPrefixCommandInput(value) {
   const raw = String(value || '').trim();
   if (!raw) return false;
   if (raw.includes(' ')) return true;
-  if (/^[!?.+$#-]/.test(raw)) return raw.length > 1;
+  if (/^[^a-z0-9\s/]+$/i.test(raw)) return false;
+  if (/^[^a-z0-9\s/].+/i.test(raw)) return raw.length > 1;
   return false;
 }
 
@@ -79,6 +80,9 @@ function sanitizeCommandName(value, commandType = 'prefix') {
 }
 
 function buildCommandTrigger(commandType, commandPrefix, commandName) {
+  if (!commandName) {
+    return commandType === 'slash' ? '/' : commandPrefix;
+  }
   if (commandType === 'slash') {
     return `/${commandName}`;
   }
@@ -101,20 +105,31 @@ function resolveRequestedCommandMeta({ mode, prefix, trigger, command_name }) {
     };
   }
 
+  const normalizedPrefix = normalizeCommandPrefix(prefix || '!');
   const requestedTrigger = String(trigger || '').trim();
-  if (isFullPrefixCommandInput(requestedTrigger)) {
+  if (requestedTrigger) {
     const derived = deriveCommandMeta(requestedTrigger);
     return {
       command_type: 'prefix',
-      command_prefix: normalizeCommandPrefix(derived.command_prefix || '!'),
+      command_prefix: normalizeCommandPrefix(derived.command_prefix || normalizedPrefix),
       command_name: sanitizeCommandName(derived.command_name || '', 'prefix'),
-      trigger: derived.trigger || requestedTrigger,
+      trigger: derived.trigger || buildCommandTrigger('prefix', normalizeCommandPrefix(derived.command_prefix || normalizedPrefix), sanitizeCommandName(derived.command_name || '', 'prefix')),
+    };
+  }
+
+  const requestedName = sanitizeCommandName(command_name || '', 'prefix');
+  if (requestedName) {
+    return {
+      command_type: 'prefix',
+      command_prefix: normalizedPrefix,
+      command_name: requestedName,
+      trigger: buildCommandTrigger('prefix', normalizedPrefix, requestedName),
     };
   }
 
   return {
     command_type: 'prefix',
-    command_prefix: normalizeCommandPrefix(prefix || '!'),
+    command_prefix: normalizedPrefix,
     command_name: '',
     trigger: '',
   };
@@ -127,30 +142,60 @@ function deriveCommandMeta(trigger) {
       command_type: 'prefix',
       command_prefix: '!',
       command_name: '',
+      trigger: '',
     };
   }
 
   if (raw.startsWith('/')) {
+    const commandName = sanitizeCommandName(raw.slice(1), 'slash');
     return {
       command_type: 'slash',
       command_prefix: '/',
-      command_name: sanitizeCommandName(raw.slice(1), 'slash'),
+      command_name: commandName,
+      trigger: commandName ? `/${commandName}` : '/',
     };
   }
 
   if (raw.includes(' ')) {
     const [prefix, ...rest] = raw.split(/\s+/);
+    const commandPrefix = normalizeCommandPrefix(prefix);
+    const commandName = sanitizeCommandName(rest.join('-'), 'prefix');
     return {
       command_type: 'prefix',
-      command_prefix: normalizeCommandPrefix(prefix),
-      command_name: sanitizeCommandName(rest.join('-'), 'prefix'),
+      command_prefix: commandPrefix,
+      command_name: commandName,
+      trigger: buildCommandTrigger('prefix', commandPrefix, commandName),
     };
   }
 
+  if (/^[^a-z0-9\s/]+$/i.test(raw)) {
+    const commandPrefix = normalizeCommandPrefix(raw);
+    return {
+      command_type: 'prefix',
+      command_prefix: commandPrefix,
+      command_name: '',
+      trigger: commandPrefix,
+    };
+  }
+
+  const symbolicTrigger = raw.match(/^([^a-z0-9\s/]+)(.+)$/i);
+  if (symbolicTrigger) {
+    const commandPrefix = normalizeCommandPrefix(symbolicTrigger[1]);
+    const commandName = sanitizeCommandName(symbolicTrigger[2], 'prefix');
+    return {
+      command_type: 'prefix',
+      command_prefix: commandPrefix,
+      command_name: commandName,
+      trigger: buildCommandTrigger('prefix', commandPrefix, commandName),
+    };
+  }
+
+  const commandName = sanitizeCommandName(raw, 'prefix');
   return {
     command_type: 'prefix',
-    command_prefix: raw.slice(0, 1) || '!',
-    command_name: sanitizeCommandName(raw.slice(1), 'prefix'),
+    command_prefix: '!',
+    command_name: commandName,
+    trigger: buildCommandTrigger('prefix', '!', commandName),
   };
 }
 
@@ -396,7 +441,7 @@ Current command being edited:
   const creativityIndex = Math.floor(Math.random() * 100);
 
   return `You are DiscordForger Command Builder — an expert, creative assistant.
-You create simple custom Discord commands that work immediately in this product.
+You build commands that feel polished, useful, varied, and immediately usable inside DiscordForger.
 
 Server: ${guildName}
 Command mode requested: ${mode}
@@ -408,41 +453,57 @@ UNIQUENESS SEED: ${randomSeed}
 CREATIVITY INDEX: ${creativityIndex}
 STYLE DIRECTIVE: ${varietyOpener}
 
-SUPPORTED OUTPUT ONLY:
+SYSTEM CAPABILITIES:
+- You can build strong text commands, embed commands, guided argument flows, rich help commands, FAQ-style commands, announcement commands, onboarding prompts, and pseudo-panel experiences using premium embed formatting.
+- If the user asks for buttons, menus, or a full interactive panel that this command system cannot truly store, convert it into the richest supported alternative: an embed-based command, clear numbered sections, optional args, a usage hint, and smart response mode.
+- For content commands, you MAY use [[random: option A || option B || option C]] inside response or embed_title. The runtime will pick one option at execution time. Use at least 6 genuinely different options when the request is for jokes, facts, quotes, tips, roasts, or rotating content.
+
+SUPPORTED OUTPUT FIELDS ONLY:
 - command_name
 - description
 - response
 - response_mode ("channel" | "reply" | "dm")
 - embed_enabled (true | false)
 - embed_title
+- embed_color
 - mention_user (true | false)
+- usage_hint
+- require_args
+- delete_trigger
+- cooldown_ms
 
 STRICT RULES:
 1. Return a short, creative explanation in the user's language. ${varietyOpener} NEVER repeat the same phrasing — be genuinely unique every time.
 2. Then return exactly one \`\`\`command block with valid JSON.
-3. command_name must be short and usable immediately.
+3. command_name must be short, production-ready, and usable immediately.
 4. For slash mode, command_name must be lowercase and Discord-safe.
-5. Do not output code, JavaScript, aliases, buttons, webhooks, APIs, role restrictions, or unsupported logic.
+5. Do not output JavaScript, Discord.js code, webhooks, external APIs, buttons, selects, modals, or unsupported schema fields.
 6. This system only supports text or embed responses with placeholders.
 7. Supported placeholders are: {mention} {username} {server} {channel} {memberCount} {args} {arg1} {arg2}.
-8. If the user asks for impossible advanced behavior, convert it into the closest working command in this system.
-9. Keep the command clear and production-ready.
+8. If the request is too advanced for this command system, produce the closest real version instead of pretending unsupported logic is possible.
+9. Responses must feel premium: strong copy, clean formatting, useful structure, no bland filler.
 10. If an exact trigger or command name is requested above, you must respect it.
-11. VARIETY IS MANDATORY: Your response text, descriptions, and command responses must be genuinely different from any previous response. Use the uniqueness seed ${randomSeed} to inspire variation.
+11. For variable content commands, do not hardcode one single repeated joke or fact. Use the [[random: ... || ...]] syntax with truly different options.
 12. For content commands (jokes, facts, quotes, tips), the actual content MUST be original and unique — never recycled.
 13. Descriptions should be concise but creative — avoid generic phrasing like "A simple command that...".
-14. Command responses should feel polished, well-formatted, and professional.
+14. Add usage_hint when args are useful. Set require_args=true when the command clearly needs user input.
+15. Use cooldown_ms when spam or abuse would make the command annoying.
 
 JSON shape:
 \`\`\`command
 {
   "command_name": "bonjour",
-  "description": "Salue un membre",
+  "description": "Salue un membre avec une reponse premium",
   "response": "Bonjour {mention} !",
   "response_mode": "reply",
   "embed_enabled": false,
   "embed_title": "",
-  "mention_user": false
+  "embed_color": "#22d3ee",
+  "mention_user": false,
+  "usage_hint": "",
+  "require_args": false,
+  "delete_trigger": false,
+  "cooldown_ms": 0
 }
 \`\`\``;
 }
@@ -474,15 +535,16 @@ function normalizeAssistantDraft(draft, mode, prefix, currentCommand = null, req
     response_mode: ['channel', 'reply', 'dm'].includes(draft?.response_mode) ? draft.response_mode : (currentCommand?.response_mode || 'reply'),
     embed_enabled: draft?.embed_enabled ?? currentCommand?.embed_enabled ?? false,
     embed_title: String(draft?.embed_title || currentCommand?.embed_title || '').trim().slice(0, 256),
+    embed_color: normalizeColor(draft?.embed_color || currentCommand?.embed_color || '#22d3ee'),
     mention_user: draft?.mention_user ?? currentCommand?.mention_user ?? false,
-    delete_trigger: currentCommand?.delete_trigger || false,
+    delete_trigger: draft?.delete_trigger ?? currentCommand?.delete_trigger ?? false,
     allowed_roles: [],
     allowed_channels: [],
     aliases: [],
-    cooldown_ms: 0,
+    cooldown_ms: Number(draft?.cooldown_ms ?? currentCommand?.cooldown_ms ?? 0),
     delete_response_after_ms: 0,
-    require_args: false,
-    usage_hint: '',
+    require_args: draft?.require_args ?? currentCommand?.require_args ?? false,
+    usage_hint: String(draft?.usage_hint || currentCommand?.usage_hint || '').trim().slice(0, 200),
   }, currentCommand);
 }
 

@@ -185,8 +185,20 @@ function buildLogEmbed(event, data, ac) {
 
 const commandCooldowns = new Map();
 
+function resolveRandomBlocks(template) {
+  return String(template || '').replace(/\[\[random:(.*?)\]\]/gis, (_, rawOptions) => {
+    const options = String(rawOptions || '')
+      .split('||')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    if (!options.length) return '';
+    return options[Math.floor(Math.random() * options.length)];
+  });
+}
+
 function replaceCommandVariables(template, context) {
-  return String(template || '')
+  return resolveRandomBlocks(template)
     .replace(/{user}/gi, `<@${context.author.id}>`)
     .replace(/{mention}/gi, `<@${context.author.id}>`)
     .replace(/{username}/gi, context.author.username)

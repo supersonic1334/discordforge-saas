@@ -112,16 +112,53 @@ function Message({ msg, locale, actionLabel }) {
   )
 }
 
-const QUICK_ACTIONS = [
-  { icon: Zap, label: 'Start bot', action: 'Demarre le bot' },
-  { icon: Server, label: 'Build server', action: 'Construis un serveur pour moi' },
-  { icon: Shield, label: 'Protection', action: 'Active tous les modules de protection' },
-  { icon: Terminal, label: 'Commands', action: 'Cree une commande bonjour qui dit bonjour' },
-  { icon: HelpCircle, label: 'Help', action: 'Explique moi toutes les fonctionnalites de la plateforme' },
-]
+function getAssistantCopy(locale) {
+  const key = String(locale || 'fr').toLowerCase().split('-')[0]
+
+  if (key === 'en') {
+    return {
+      heroTitle: 'DiscordForger co-pilot',
+      heroText: 'Specialized in Discord, bot workflows, commands, moderation, and dashboard guidance.',
+      helpLabel: 'Help',
+      helpAction: 'Help me understand everything you can do on DiscordForger, including commands, moderation, protection, messages, and the current server context.',
+      cards: [
+        { icon: Server, title: 'Server ops', text: 'Build, clone, organize, and secure Discord servers.' },
+        { icon: Shield, title: 'Protection', text: 'Explain modules, moderation flows, and safe actions.' },
+        { icon: Terminal, title: 'Commands', text: 'Guide or generate richer Discord command ideas.' },
+      ],
+    }
+  }
+
+  if (key === 'es') {
+    return {
+      heroTitle: 'Copiloto DiscordForger',
+      heroText: 'Especializado en Discord, flujos del bot, comandos, moderacion y guia del dashboard.',
+      helpLabel: 'Help',
+      helpAction: 'Ayudame a entender todo lo que puedes hacer en DiscordForger, incluyendo comandos, moderacion, proteccion, mensajes y el contexto del servidor actual.',
+      cards: [
+        { icon: Server, title: 'Servidor', text: 'Construir, clonar, organizar y asegurar servidores Discord.' },
+        { icon: Shield, title: 'Proteccion', text: 'Explicar modulos, moderacion y acciones seguras.' },
+        { icon: Terminal, title: 'Comandos', text: 'Guiar o generar ideas de comandos mas ricos.' },
+      ],
+    }
+  }
+
+  return {
+    heroTitle: 'Copilote DiscordForger',
+    heroText: 'Specialise Discord, workflows du bot, commandes, moderation et accompagnement du dashboard.',
+    helpLabel: 'Help',
+    helpAction: 'Aide-moi a comprendre tout ce que tu peux faire sur DiscordForger, y compris les commandes, la moderation, la protection, les messages et le contexte du serveur actuel.',
+    cards: [
+      { icon: Server, title: 'Serveur', text: 'Construire, cloner, organiser et securiser des serveurs Discord.' },
+      { icon: Shield, title: 'Protection', text: 'Expliquer les modules, la moderation et les actions sures.' },
+      { icon: Terminal, title: 'Commandes', text: 'Guider ou generer des idees de commandes plus riches.' },
+    ],
+  }
+}
 
 export default function AIAssistant() {
   const { t, locale } = useI18n()
+  const assistantCopy = getAssistantCopy(locale)
   const voiceUi = VOICE_UI[String(locale || 'fr').toLowerCase().split('-')[0]] || VOICE_UI.fr
   const [messages, setMessages] = useState(() => ([
     {
@@ -136,7 +173,6 @@ export default function AIAssistant() {
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const { selectedGuildId, guilds } = useGuildStore()
-  const suggestions = t('assistant.suggestions', [])
   const selectedGuild = useMemo(() => guilds.find(g => g.id === selectedGuildId), [guilds, selectedGuildId])
   const speech = useSpeechToText({
     value: input,
@@ -255,33 +291,42 @@ export default function AIAssistant() {
       </div>
 
       {messages.length <= 1 && (
-        <div className="px-4 sm:px-6 pb-3 space-y-3">
-          <div className="flex gap-2 flex-wrap">
-            {suggestions.map((suggestion) => (
-              <button
-                key={suggestion}
-                onClick={() => send(suggestion)}
-                className="px-3 py-1.5 rounded-lg text-xs font-mono text-neon-cyan/60 hover:text-neon-cyan border border-neon-cyan/10 hover:border-neon-cyan/30 hover:bg-neon-cyan/5 transition-all duration-200"
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
+        <div className="px-4 sm:px-6 pb-3">
+          <div className="overflow-hidden rounded-[28px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(16,24,40,0.94),rgba(20,18,36,0.98))] p-4 sm:p-5 shadow-[0_18px_50px_rgba(2,8,23,0.28)]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-2 max-w-2xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-neon-violet/20 bg-neon-violet/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.2em] text-violet-200">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  DiscordForger AI
+                </div>
+                <h2 className="font-display text-xl font-700 text-white">{assistantCopy.heroTitle}</h2>
+                <p className="text-sm leading-6 text-white/55">{assistantCopy.heroText}</p>
+              </div>
 
-          <div className="flex gap-2 flex-wrap">
-            {QUICK_ACTIONS.map((qa) => {
-              const Icon = qa.icon
-              return (
-                <button
-                  key={qa.label}
-                  onClick={() => send(qa.action)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-violet-300/60 hover:text-violet-300 border border-violet-500/10 hover:border-violet-500/25 hover:bg-violet-500/5 transition-all duration-200"
-                >
-                  <Icon className="w-3 h-3" />
-                  {qa.label}
-                </button>
-              )
-            })}
+              <button
+                type="button"
+                onClick={() => send(assistantCopy.helpAction)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-gradient-to-r from-neon-cyan/18 to-neon-violet/18 px-4 py-3 text-sm font-mono text-white transition-all hover:scale-[1.02] hover:border-neon-cyan/40"
+              >
+                <HelpCircle className="w-4 h-4" />
+                {assistantCopy.helpLabel}
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {assistantCopy.cards.map((card) => {
+                const Icon = card.icon
+                return (
+                  <div key={card.title} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-neon-cyan/18 bg-neon-cyan/10 text-neon-cyan">
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <p className="mt-3 font-display text-sm font-700 text-white">{card.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-white/50">{card.text}</p>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}

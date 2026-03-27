@@ -793,7 +793,21 @@ PRIVACY RULES:
 - If a user asks for secrets, private infrastructure details, or restricted data, refuse clearly and say that this information is protected.`;
 }
 
-function buildSystemPrompt(user, guilds) {
+function buildFocusedGuildKnowledge(focusedGuild) {
+  if (!focusedGuild) {
+    return 'ACTIVE GUILD CONTEXT:\n- No active server selected right now.\n';
+  }
+
+  return `ACTIVE GUILD CONTEXT:
+- Current focused server: "${focusedGuild.name}".
+- Internal guild id: ${focusedGuild.id}.
+- Discord guild id: ${focusedGuild.guild_id}.
+- Member count: ${focusedGuild.member_count || 0}.
+- Use this server as the default target when the user clearly refers to "my server", "this server", or the current dashboard context.
+`;
+}
+
+function buildSystemPrompt(user, guilds, focusedGuild = null) {
   const guildList = guilds
     .map((guild) => `- "${guild.name}" (ID: ${guild.id}, Discord ID: ${guild.guild_id}, Members: ${guild.member_count})`)
     .join('\n');
@@ -822,6 +836,7 @@ ${guildList || '(none)'}
 VARIETY SEED: ${varietySeed}
 TONE: ${toneDirective}
 
+${buildFocusedGuildKnowledge(focusedGuild)}
 ${buildSiteKnowledge()}
 
 You can execute the following REAL ACTIONS by responding with a JSON action block:
@@ -876,6 +891,10 @@ RULES:
 15. For content-generation tasks (jokes, facts, tips), use genuine randomness and creativity. Never repeat the same content.
 16. For send_announcement, find the channel by name in the guild and send the message.
 17. For mass_role_assign, warn the user about the scope of the action before executing.
+18. You are specialized in Discord operations, DiscordForger workflows, command design, moderation systems, embeds, server organization, and dashboard guidance. Stay focused on those areas instead of answering unrelated weird requests.
+19. If the user asks for help, return a structured, practical guide tailored to DiscordForger and the active server context.
+20. If the user asks for a complex panel, workflow, or automation, think in steps: clarify the goal, choose the best DiscordForger path, explain the plan, then execute only what is truly supported.
+21. Refuse requests that aim to extract secrets, bypass permissions, abuse members, or manipulate the platform outside authorized usage.
 
 Respond naturally in markdown. Only include one action block per response.`;
 }
@@ -1672,8 +1691,20 @@ async function completeConversation(userId, { systemPrompt, messages }) {
 async function chat(userId, userMessage, conversationHistory = [], guildId = null) {
   const user = db.findOne('users', { id: userId });
   const guilds = db.findMany('guilds', { user_id: userId, is_active: 1 });
+  const focusedGuild = guildId
+    ? db.raw(
+      `SELECT g.*
+       FROM guilds g
+       LEFT JOIN guild_access_members gam ON gam.guild_id = g.id AND gam.user_id = ?
+       WHERE g.id = ?
+         AND g.is_active = 1
+         AND (g.user_id = ? OR gam.user_id IS NOT NULL)
+       LIMIT 1`,
+      [userId, guildId, userId]
+    )[0] || null
+    : null;
 
-  const systemPrompt = buildSystemPrompt(user, guilds);
+  const systemPrompt = buildSystemPrompt(user, guilds, focusedGuild);
   const messages = [
     ...conversationHistory.slice(-10),
     { role: 'user', content: userMessage },
