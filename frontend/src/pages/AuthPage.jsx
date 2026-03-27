@@ -27,6 +27,19 @@ function GoogleMark(props) {
   )
 }
 
+const AUTH_PARTICLES = [
+  { left: '8%', top: '16%', size: 10, alpha: 0.22, duration: 8.6, delay: 0.2 },
+  { left: '18%', top: '28%', size: 6, alpha: 0.16, duration: 7.4, delay: 1.4 },
+  { left: '28%', top: '12%', size: 8, alpha: 0.18, duration: 9.1, delay: 0.8 },
+  { left: '72%', top: '18%', size: 9, alpha: 0.18, duration: 8.2, delay: 0.6 },
+  { left: '84%', top: '26%', size: 7, alpha: 0.14, duration: 7.8, delay: 1.8 },
+  { left: '74%', top: '64%', size: 8, alpha: 0.16, duration: 9.4, delay: 1.1 },
+  { left: '16%', top: '72%', size: 7, alpha: 0.14, duration: 8.7, delay: 0.9 },
+  { left: '34%', top: '78%', size: 10, alpha: 0.15, duration: 9.8, delay: 1.6 },
+  { left: '58%', top: '14%', size: 5, alpha: 0.2, duration: 7.1, delay: 0.4 },
+  { left: '62%', top: '76%', size: 6, alpha: 0.17, duration: 8.9, delay: 1.2 },
+]
+
 function AuthAtmosphere({ pointerX, pointerY }) {
   const driftX = useSpring(useTransform(pointerX, [0, 100], [-36, 36]), { stiffness: 120, damping: 18, mass: 0.6 })
   const driftY = useSpring(useTransform(pointerY, [0, 100], [-26, 26]), { stiffness: 120, damping: 18, mass: 0.6 })
@@ -34,15 +47,11 @@ function AuthAtmosphere({ pointerX, pointerY }) {
   const reverseY = useSpring(useTransform(pointerY, [0, 100], [18, -18]), { stiffness: 110, damping: 20, mass: 0.7 })
   const cursorGlowX = useSpring(useTransform(pointerX, [0, 100], [-140, 140]), { stiffness: 95, damping: 18, mass: 0.8 })
   const cursorGlowY = useSpring(useTransform(pointerY, [0, 100], [-90, 90]), { stiffness: 95, damping: 18, mass: 0.8 })
-  const panelOneX = useSpring(useTransform(pointerX, [0, 100], [-24, 24]), { stiffness: 110, damping: 20 })
-  const panelOneY = useSpring(useTransform(pointerY, [0, 100], [-14, 14]), { stiffness: 110, damping: 20 })
-  const panelTwoX = useSpring(useTransform(pointerX, [0, 100], [18, -18]), { stiffness: 110, damping: 20 })
-  const panelTwoY = useSpring(useTransform(pointerY, [0, 100], [12, -12]), { stiffness: 110, damping: 20 })
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(10,18,26,0.88),rgba(4,7,14,0.98)_64%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.03),transparent_24%,transparent_72%,rgba(255,255,255,0.015))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.02),transparent_24%,transparent_72%,rgba(255,255,255,0.01))]" />
       <div className="absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:140px_140px]" />
 
       <motion.div
@@ -65,22 +74,44 @@ function AuthAtmosphere({ pointerX, pointerY }) {
       />
 
       <motion.div
-        style={{ x: panelOneX, y: panelOneY }}
-        className="absolute left-[8%] top-[18%] hidden h-[18rem] w-[15rem] rounded-[34px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.01))] shadow-[0_28px_60px_rgba(0,0,0,0.22)] backdrop-blur-[2px] lg:block"
+        style={{ x: driftX, y: driftY }}
+        animate={{ opacity: [0.22, 0.3, 0.22], scale: [1, 1.06, 1] }}
+        transition={{ duration: 10.4, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute left-[10%] top-[22%] h-[18rem] w-[18rem] rounded-full bg-[radial-gradient(circle,rgba(72,204,255,0.14),rgba(72,204,255,0.07)_34%,transparent_72%)] blur-[70px]"
       />
       <motion.div
-        style={{ x: panelTwoX, y: panelTwoY }}
-        className="absolute right-[10%] top-[14%] hidden h-[14rem] w-[17rem] rounded-[30px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] shadow-[0_28px_60px_rgba(0,0,0,0.2)] backdrop-blur-[2px] lg:block"
+        style={{ x: reverseX, y: reverseY }}
+        animate={{ opacity: [0.18, 0.26, 0.18], scale: [1, 1.08, 1] }}
+        transition={{ duration: 11.2, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute right-[8%] top-[24%] h-[16rem] w-[20rem] rounded-full bg-[radial-gradient(circle,rgba(176,78,255,0.16),rgba(176,78,255,0.07)_36%,transparent_74%)] blur-[76px]"
       />
 
-      <motion.div
-        style={{ x: driftX }}
-        className="absolute -left-[8%] top-[28%] h-px w-[44rem] rotate-[12deg] bg-[linear-gradient(90deg,transparent,rgba(88,186,255,0.52),rgba(176,78,255,0.22),transparent)] blur-[0.6px]"
-      />
-      <motion.div
-        style={{ x: reverseX }}
-        className="absolute right-[-12%] top-[62%] h-px w-[38rem] -rotate-[10deg] bg-[linear-gradient(90deg,transparent,rgba(176,78,255,0.46),rgba(88,186,255,0.20),transparent)] blur-[0.6px]"
-      />
+      {AUTH_PARTICLES.map((particle, index) => (
+        <motion.span
+          key={`${particle.left}-${particle.top}-${index}`}
+          animate={{
+            y: [0, -18, 0],
+            x: [0, index % 2 === 0 ? 10 : -10, 0],
+            opacity: [particle.alpha * 0.55, particle.alpha, particle.alpha * 0.45],
+            scale: [1, 1.18, 0.94, 1],
+          }}
+          transition={{
+            duration: particle.duration,
+            delay: particle.delay,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
+          className="absolute rounded-full bg-white"
+          style={{
+            left: particle.left,
+            top: particle.top,
+            width: particle.size,
+            height: particle.size,
+            opacity: particle.alpha,
+            boxShadow: `0 0 ${particle.size * 2.4}px rgba(130,220,255,0.24), 0 0 ${particle.size * 4.5}px rgba(176,78,255,0.12)`,
+          }}
+        />
+      ))}
     </div>
   )
 }
