@@ -55,6 +55,7 @@ export default function LogsPage() {
   const [filterDate, setFilterDate] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [clearingDiscord, setClearingDiscord] = useState(false)
+  const [expandedDetails, setExpandedDetails] = useState({})
 
   async function loadSiteLogs({ silent = false } = {}) {
     if (!selectedGuildId) return
@@ -162,7 +163,8 @@ export default function LogsPage() {
           log.executor?.global_name?.toLowerCase().includes(searchLower) ||
           log.metadata?.actor_name?.toLowerCase().includes(searchLower) ||
           log.metadata?.target_label?.toLowerCase().includes(searchLower) ||
-          log.target?.label?.toLowerCase().includes(searchLower)
+          log.target?.label?.toLowerCase().includes(searchLower) ||
+          (Array.isArray(log.details) && log.details.some((detail) => detail?.toLowerCase().includes(searchLower)))
         if (!matchesSearch) return false
       }
 
@@ -185,6 +187,13 @@ export default function LogsPage() {
     setFilterAction('')
     setFilterLevel('')
     setFilterDate('')
+  }
+
+  const toggleDetails = (logId) => {
+    setExpandedDetails((current) => ({
+      ...current,
+      [logId]: !current[logId],
+    }))
   }
 
   const activeFiltersCount = useMemo(() => {
@@ -526,15 +535,23 @@ export default function LogsPage() {
                       <span className={`px-2.5 py-1 rounded-full border text-xs font-mono uppercase ${LOG_LEVEL_COLORS[log.level] || 'border-white/10 bg-white/[0.04] text-white/55'}`}>
                         {log.level}
                       </span>
+                      <span className={`px-2.5 py-1 rounded-full border text-[11px] font-mono ${log.metadata?.source_kind === 'runtime' ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300' : 'border-violet-500/20 bg-violet-500/10 text-violet-300'}`}>
+                        {log.metadata?.source_kind === 'runtime' ? 'Detection bot' : 'Audit Discord'}
+                      </span>
                       {log.target?.label ? (
                         <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/[0.04] text-xs font-mono text-white/60">
                           {log.target.label}
                         </span>
                       ) : null}
                     </div>
-                    <p className="text-sm text-white/55 truncate mt-1">
+                    <p className="text-sm text-white/55 mt-1">
                       {log.executor?.global_name || log.executor?.username || log.metadata?.actor_name || 'System'}
                     </p>
+                    {log.message ? (
+                      <p className="mt-3 text-sm leading-6 text-white/80">
+                        {log.message}
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap gap-3 mt-3 text-xs text-white/35 font-mono">
                       <span className="flex items-center gap-1.5">
                         <Calendar className="w-3 h-3" />
@@ -549,14 +566,44 @@ export default function LogsPage() {
                     </div>
                   </div>
                 </div>
+                <div className="flex shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleDetails(log.id)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-mono text-white/65 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+                  >
+                    Infos supplementaires
+                    <ChevronDown className={`w-3 h-3 transition-transform ${expandedDetails[log.id] ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
               </div>
 
-              {log.message && (
-                <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Details</p>
-                  <p className="text-white/80 text-sm">{log.message}</p>
-                </div>
-              )}
+              <AnimatePresence initial={false}>
+                {expandedDetails[log.id] ? (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4 space-y-3">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30">Details utiles</p>
+                      {Array.isArray(log.details) && log.details.length > 0 ? (
+                        <div className="space-y-2">
+                          {log.details.map((detail, index) => (
+                            <div key={`${log.id}-${index}`} className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-2 text-sm text-white/78">
+                              {detail}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-white/45">Aucune information supplementaire utile sur cette entree.</p>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </motion.div>
           ))}
         </motion.div>

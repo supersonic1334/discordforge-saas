@@ -287,11 +287,11 @@ function buildDiscordLogMessage(entry, target, executorName) {
   }
 
   if (target?.label) {
-    parts.push(`Cible: ${target.label}`);
+    parts.push(`Cible : ${target.label}`);
   }
 
   if (entry.reason) {
-    parts.push(`Raison: ${entry.reason}`);
+    parts.push(`Raison : ${entry.reason}`);
   }
 
   const changesCount = Array.isArray(entry.changes) ? entry.changes.length : 0;
@@ -299,10 +299,179 @@ function buildDiscordLogMessage(entry, target, executorName) {
     parts.push(`${changesCount} changement${changesCount > 1 ? 's' : ''}`);
   }
 
-  return parts.join(' · ');
+  return parts.join(' - ');
 }
 
-// ── Bot event logs ─────────────────────────────────────────────────────────────
+function truncateText(value, max = 220) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function compactLines(lines) {
+  return [...new Set((Array.isArray(lines) ? lines : []).map((line) => String(line || '').trim()).filter(Boolean))];
+}
+
+function formatContentSamples(samples) {
+  return (Array.isArray(samples) ? samples : []).map((sample) => {
+    const count = Number(sample?.count || 0);
+    const text = truncateText(sample?.content, 280) || 'Contenu non lisible';
+    return count > 1 ? `${text} x${count}` : text;
+  });
+}
+
+function formatAuthorSamples(samples) {
+  return (Array.isArray(samples) ? samples : []).map((sample) => {
+    const count = Number(sample?.count || 0);
+    const label = String(sample?.label || sample?.id || 'Utilisateur inconnu').trim();
+    return count > 1 ? `${label} (${count} messages)` : label;
+  });
+}
+
+function formatChangeLine(change, roleMap, channelMap) {
+  if (!change || typeof change !== 'object') return null;
+  const key = String(change.key || '').trim();
+  const oldValue = change.old_value;
+  const newValue = change.new_value;
+
+  if (key === '$add' || key === '$remove') {
+    const roles = Array.isArray(newValue) ? newValue : [];
+    const labels = roles.map((role) => {
+      const roleId = role?.id || role;
+      return normalizeRoleLabel(role?.name || roleMap.get(roleId)?.name, roleId);
+    }).filter(Boolean);
+    if (!labels.length) return null;
+    return key === '$add' ? `Roles ajoutes : ${labels.join(', ')}` : `Roles retires : ${labels.join(', ')}`;
+  }
+
+  if (key === 'communication_disabled_until') {
+    if (newValue) return `Restriction de parole jusqu'au ${new Date(newValue).toLocaleString('fr-FR')}`;
+    if (oldValue && !newValue) return 'Restriction de parole retiree';
+  }
+
+  if (key === 'channel_id') {
+    const channelId = newValue || oldValue;
+    const channelName = channelMap.get(channelId)?.name || null;
+    return `Salon : ${normalizeChannelLabel(channelName, channelId)}`;
+  }
+
+  if (key === 'nick') {
+    return `Surnom : ${oldValue || 'aucun'} -> ${newValue || 'aucun'}`;
+  }
+
+  const labelMap = { name: 'Nom', topic: 'Sujet', code: 'Code', max_age: 'Duree max', max_uses: 'Utilisations max' };
+  const label = labelMap[key] || key || 'Champ';
+  const before = Array.isArray(oldValue) ? oldValue.join(', ') : oldValue;
+  const after = Array.isArray(newValue) ? newValue.join(', ') : newValue;
+  if (before === undefined && after === undefined) return null;
+  return `${label} : ${before ?? 'vide'} -> ${after ?? 'vide'}`;
+}
+
+function buildAuditDetailLines(entry, target, executorName, context) {
+  const actionName = formatAuditActionLabel(entry.action_type, Array.isArray(entry.changes) ? entry.changes : []);
+  const options = entry.options && typeof entry.options === 'object' ? entry.options : {};
+  const changes = Array.isArray(entry.changes) ? entry.changes : [];
+  const lines = [];
+  const channelId = options.channel_id || getChangeValue(changes, 'channel_id') || null;
+  const channelName = context.channelMap.get(channelId)?.name || options.channel_name || null;
+
+  if (executorName && executorName !== 'System') lines.push(`Par : ${executorName}`);
+  if (target?.label) lines.push(`Cible : ${target.label}`);
+  if (channelId || channelName) lines.push(`Salon : ${normalizeChannelLabel(channelName, channelId)}`);
+  if (entry.reason) lines.push(`Raison : ${entry.reason}`);
+  if (actionName === 'message_bulk_delete' && Number(options.count || 0) > 0) {
+    lines.push(`Nombre de messages supprimes : ${options.count}`);
+  }
+
+  for (const change of changes) {
+    const line = formatChangeLine(change, context.roleMap, context.channelMap);
+    if (line) lines.push(line);
+  }
+
+  return compactLines(lines);
+}
+
+function buildRuntimeDiscordLog(log) {
+  const metadata = parseJson(log.metadata);
+  const eventType = String(metadata.event_type || 'discord_event').trim();
+  const targetLabel = metadata.target_label || metadata.channel_name || 'Evenement Discord';
+  const actor = metadata.actor_name ? {
+    id: metadata.actor_id || null,
+    username: metadata.actor_name,
+    global_name: metadata.actor_name,
+    avatar_url: metadata.actor_avatar_url || null,
+  } : {
+    id: null,
+    username: null,
+    global_name: null,
+    avatar_url: null,
+  };
+
+  const target = {
+    kind: 'runtime',
+    id: metadata.target_id || null,
+    label: targetLabel,
+    subtitle: metadata.channel_name ? normalizeChannelLabel(metadata.channel_name, metadata.channel_id) : 'Discord',
+    avatar_url: metadata.target_avatar_url || null,
+    username: null,
+    global_name: null,
+  };
+
+  const details = [];
+  if (metadata.channel_name || metadata.channel_id) {
+    details.push(`Salon : ${normalizeChannelLabel(metadata.channel_name, metadata.channel_id)}`);
+  }
+  if (metadata.target_label) {
+    details.push(`Cible : ${metadata.target_label}`);
+  }
+  if (metadata.target_count) {
+    details.push(`Nombre de messages supprimes : ${metadata.target_count}`);
+  }
+  if (metadata.content) {
+    details.push(`Contenu : ${truncateText(metadata.content, 320)}`);
+  }
+
+  const authorLines = formatAuthorSamples(metadata.authors);
+  if (authorLines.length) details.push(`Auteurs concernes : ${authorLines.join(' - ')}`);
+
+  for (const line of formatContentSamples(metadata.contents).slice(0, 5)) {
+    details.push(`Message supprime : ${line}`);
+  }
+
+  if (Array.isArray(metadata.attachments) && metadata.attachments.length) {
+    details.push(`Fichiers joints : ${metadata.attachments.map((attachment) => attachment?.name || 'fichier').join(', ')}`);
+  }
+
+  return {
+    id: `runtime-${log.id}`,
+    action_type: eventType,
+    action_name: eventType,
+    target_id: metadata.target_id || null,
+    reason: '',
+    created_at: log.created_at,
+    timestamp: log.created_at,
+    level: log.level || 'info',
+    event_type: metadata.action_label || log.message || 'Evenement Discord',
+    guild_name: null,
+    executor: actor,
+    actor,
+    target,
+    options: metadata,
+    changes: [],
+    details,
+    message: metadata.target_count
+      ? `${metadata.target_count} message${Number(metadata.target_count) > 1 ? 's' : ''} supprime${Number(metadata.target_count) > 1 ? 's' : ''}`
+      : truncateText(metadata.content, 180) || log.message || 'Evenement Discord',
+    metadata: {
+      actor_name: metadata.actor_name || 'Systeme',
+      target_label: target.label,
+      target_subtitle: target.subtitle,
+      changes_count: 0,
+      source_kind: 'runtime',
+    },
+  };
+}
+
 router.get('/', validateQuery(paginationSchema), async (req, res, next) => {
   try {
   const { page, limit } = req.query;
@@ -371,11 +540,20 @@ router.get('/discord', validateQuery(paginationSchema), async (req, res, next) =
     const clearedBeforeTs = req.guild.discord_logs_cleared_before
       ? new Date(req.guild.discord_logs_cleared_before).getTime()
       : 0;
-    const [auditLogPayload, channels, roles] = await Promise.all([
+
+    const runtimeLimit = Math.max(60, Number(limit || 50) * 4);
+    const [auditLogPayload, channels, roles, runtimeRows] = await Promise.all([
       discordService.getGuildAuditLogs(token, req.guild.guild_id, { limit }),
       discordService.getGuildChannels(token, req.guild.guild_id).catch(() => []),
       discordService.getGuildRoles(token, req.guild.guild_id).catch(() => []),
+      Promise.resolve(
+        db.raw(
+          'SELECT * FROM bot_logs WHERE guild_id = ? AND category = ? ORDER BY created_at DESC LIMIT ?',
+          [req.guild.id, 'discord_event', runtimeLimit]
+        )
+      ),
     ]);
+
     const users = Array.isArray(auditLogPayload?.users) ? auditLogPayload.users : [];
     const entries = Array.isArray(auditLogPayload?.audit_log_entries) ? auditLogPayload.audit_log_entries : [];
     const userMap = new Map(users.map((user) => [user.id, user]));
@@ -401,7 +579,7 @@ router.get('/discord', validateQuery(paginationSchema), async (req, res, next) =
       }
     }
 
-    const logs = entries.map((entry) => {
+    const auditLogs = entries.map((entry) => {
       const executor = userMap.get(entry.user_id);
       const target = buildTargetDescriptor(entry, {
         userMap,
@@ -417,8 +595,9 @@ router.get('/discord', validateQuery(paginationSchema), async (req, res, next) =
         id: executor?.id || entry.user_id || null,
         username: executor?.username || null,
         global_name: executor?.global_name || null,
-        avatar_url: executor ? discordService.getAvatarUrl(executor.id, executor.avatar) : null,
+        avatar_url: executor ? discordService.getAvatarUrl(executor.id, executor.avatar, 128, executor.discriminator) : null,
       };
+      const details = buildAuditDetailLines(entry, target, executorName, { channelMap, roleMap });
 
       return {
         id: entry.id,
@@ -436,19 +615,28 @@ router.get('/discord', validateQuery(paginationSchema), async (req, res, next) =
         target,
         options: entry.options || {},
         changes: Array.isArray(entry.changes) ? entry.changes : [],
+        details,
         message: buildDiscordLogMessage(entry, target, executorName),
         metadata: {
           actor_name: executorName,
           target_label: target?.label || null,
           target_subtitle: target?.subtitle || null,
           changes_count: Array.isArray(entry.changes) ? entry.changes.length : 0,
+          source_kind: 'audit',
         },
       };
-    }).filter((entry) => {
-      if (!clearedBeforeTs) return true;
-      const entryTs = new Date(entry.created_at).getTime();
-      return Number.isFinite(entryTs) && entryTs > clearedBeforeTs;
     });
+
+    const runtimeLogs = runtimeRows.map(buildRuntimeDiscordLog);
+
+    const logs = [...auditLogs, ...runtimeLogs]
+      .filter((entry) => {
+        if (!clearedBeforeTs) return true;
+        const entryTs = new Date(entry.created_at || entry.timestamp).getTime();
+        return Number.isFinite(entryTs) && entryTs > clearedBeforeTs;
+      })
+      .sort((a, b) => new Date(b.created_at || b.timestamp || 0).getTime() - new Date(a.created_at || a.timestamp || 0).getTime())
+      .slice(0, Number(limit || 50));
 
     res.json({
       logs,

@@ -208,6 +208,7 @@ class BotProcess extends EventEmitter {
     c.on(Events.GuildMemberAdd, (member) => this._onMemberAdd(member));
     c.on(Events.GuildMemberRemove, (member) => this._onMemberRemove(member));
     c.on(Events.MessageDelete, (msg) => this._onMessageDelete(msg));
+    c.on(Events.MessageBulkDelete, (messages) => this._onMessageBulkDelete(messages));
     c.on(Events.MessageUpdate, (oldMsg, newMsg) => this._onMessageUpdate(oldMsg, newMsg));
     c.on(Events.GuildBanAdd, (ban) => this._onBanAdd(ban));
     c.on(Events.GuildMemberUpdate, (oldMember, newMember) => this._onMemberUpdate(oldMember, newMember));
@@ -309,6 +310,17 @@ class BotProcess extends EventEmitter {
     });
 
     await Promise.allSettled(syncJobs);
+  }
+
+  _resolveInternalGuildId(discordGuildId) {
+    return db.raw('SELECT id FROM guilds WHERE guild_id = ? AND user_id = ?', [discordGuildId, this.userId])[0]?.id || null;
+  }
+
+  _storeDiscordRuntimeLog(discordGuildId, message, metadata = {}, level = 'info') {
+    const internalGuildId = this._resolveInternalGuildId(discordGuildId);
+    if (!internalGuildId) return;
+
+    logBotEvent(this.userId, internalGuildId, level, 'discord_event', message, metadata);
   }
 
   // ── Event Handlers ──────────────────────────────────────────────────────────
@@ -456,6 +468,22 @@ class BotProcess extends EventEmitter {
   async _onMessageDelete(message) {
     if (!message.guild) return;
     const configs = await this._getEnabledModules(message.guild.id);
+    this._storeDiscordRuntimeLog(message.guild.id, 'Contenu supprime', {
+      event_type: 'message_delete_content',
+      action_label: 'Contenu supprime',
+      target_id: message.author?.id || null,
+      target_label: message.author?.globalName || message.author?.tag || message.author?.username || message.author?.id || 'Utilisateur inconnu',
+      target_avatar_url: message.author?.displayAvatarURL?.({ size: 128 }) || null,
+      channel_id: message.channel?.id || null,
+      channel_name: message.channel?.name || null,
+      content: String(message.content || '').slice(0, 1600),
+      attachments: [...(message.attachments?.values?.() || [])].slice(0, 5).map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name || 'fichier',
+        content_type: attachment.contentType || null,
+        url: attachment.url || null,
+      })),
+    });
     if (configs.LOGGING?.enabled) {
       await handleLogging('message_delete', {
         author: message.author,
@@ -463,6 +491,43 @@ class BotProcess extends EventEmitter {
         content: message.content,
       }, configs.LOGGING, this.token).catch(() => {});
     }
+  }
+
+  async _onMessageBulkDelete(messages) {
+    const list = [...(messages?.values?.() || [])];
+    const first = list[0];
+    if (!first?.guild) return;
+
+    const groupedAuthors = new Map();
+    const groupedContents = new Map();
+
+    for (const message of list) {
+      const authorId = message.author?.id || 'unknown';
+      const authorLabel = message.author?.globalName || message.author?.tag || message.author?.username || authorId;
+      const currentAuthor = groupedAuthors.get(authorId) || {
+        id: message.author?.id || null,
+        label: authorLabel,
+        count: 0,
+      };
+      currentAuthor.count += 1;
+      groupedAuthors.set(authorId, currentAuthor);
+
+      const rawContent = String(message.content || '').trim();
+      if (!rawContent) continue;
+      const currentContent = groupedContents.get(rawContent) || { content: rawContent, count: 0 };
+      currentContent.count += 1;
+      groupedContents.set(rawContent, currentContent);
+    }
+
+    this._storeDiscordRuntimeLog(first.guild.id, 'Suppression multiple detectee', {
+      event_type: 'message_bulk_delete_content',
+      action_label: 'Suppression multiple detectee',
+      target_count: list.length,
+      channel_id: first.channel?.id || null,
+      channel_name: first.channel?.name || null,
+      authors: [...groupedAuthors.values()].sort((a, b) => b.count - a.count).slice(0, 5),
+      contents: [...groupedContents.values()].sort((a, b) => b.count - a.count).slice(0, 8),
+    });
   }
 
   async _onMessageUpdate(oldMsg, newMsg) {
