@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import { Eye, EyeOff, Bot, Shield, Zap, AlertCircle, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
-import SnowCanvas from '../components/SnowCanvas'
 import { authAPI } from '../services/api'
 import { useAuthStore } from '../stores'
 import { useI18n } from '../i18n'
@@ -27,52 +26,112 @@ function GoogleMark(props) {
   )
 }
 
-function AuthAtmosphere({ pointerX, pointerY }) {
-  const driftX = useSpring(useTransform(pointerX, [0, 100], [-36, 36]), { stiffness: 120, damping: 18, mass: 0.6 })
-  const driftY = useSpring(useTransform(pointerY, [0, 100], [-26, 26]), { stiffness: 120, damping: 18, mass: 0.6 })
-  const reverseX = useSpring(useTransform(pointerX, [0, 100], [28, -28]), { stiffness: 110, damping: 20, mass: 0.7 })
-  const reverseY = useSpring(useTransform(pointerY, [0, 100], [18, -18]), { stiffness: 110, damping: 20, mass: 0.7 })
-  const cursorGlowX = useSpring(useTransform(pointerX, [0, 100], [-140, 140]), { stiffness: 95, damping: 18, mass: 0.8 })
-  const cursorGlowY = useSpring(useTransform(pointerY, [0, 100], [-90, 90]), { stiffness: 95, damping: 18, mass: 0.8 })
+function buildSnowLayer(count, options) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `${options.key}-${index}`,
+    left: Math.random() * 100,
+    top: -18 - Math.random() * 92,
+    size: options.minSize + Math.random() * (options.maxSize - options.minSize),
+    duration: options.minDuration + Math.random() * (options.maxDuration - options.minDuration),
+    delay: Math.random() * options.maxDelay,
+    drift: (Math.random() - 0.5) * options.maxDrift,
+    opacity: options.minOpacity + Math.random() * (options.maxOpacity - options.minOpacity),
+    blur: Math.random() * options.maxBlur,
+  }))
+}
+
+function AuthSnowBackdrop({ pointerX, pointerY }) {
+  const layerDriftX = useSpring(useTransform(pointerX, [0, 100], [-18, 18]), { stiffness: 110, damping: 18, mass: 0.7 })
+  const layerDriftY = useSpring(useTransform(pointerY, [0, 100], [-12, 12]), { stiffness: 110, damping: 18, mass: 0.7 })
+  const frontFlakes = useMemo(() => buildSnowLayer(38, {
+    key: 'front',
+    minSize: 2,
+    maxSize: 6.5,
+    minDuration: 10,
+    maxDuration: 18,
+    maxDelay: 16,
+    maxDrift: 52,
+    minOpacity: 0.18,
+    maxOpacity: 0.7,
+    maxBlur: 1.1,
+  }), [])
+  const backFlakes = useMemo(() => buildSnowLayer(54, {
+    key: 'back',
+    minSize: 1,
+    maxSize: 3.6,
+    minDuration: 16,
+    maxDuration: 28,
+    maxDelay: 18,
+    maxDrift: 34,
+    minOpacity: 0.08,
+    maxOpacity: 0.35,
+    maxBlur: 2.1,
+  }), [])
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(10,18,26,0.88),rgba(4,7,14,0.98)_64%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.02),transparent_24%,transparent_72%,rgba(255,255,255,0.01))]" />
-      <div className="absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:140px_140px]" />
+      <div className="absolute inset-0 bg-[#03070d]" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,14,22,0.28),rgba(3,7,13,0.9)_32%,rgba(2,5,11,1))]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(166,213,255,0.08),transparent_34%),radial-gradient(circle_at_bottom,rgba(107,164,214,0.07),transparent_28%)]" />
+      <div className="absolute inset-0 opacity-[0.045] [background-image:linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:150px_150px]" />
 
-      <motion.div
-        style={{ x: driftX, y: driftY }}
-        className="absolute left-[6%] top-[4%] h-[clamp(18rem,34vw,34rem)] w-[clamp(18rem,42vw,42rem)] rounded-full bg-[radial-gradient(circle,rgba(60,210,255,0.22),rgba(60,210,255,0.10)_34%,rgba(78,102,255,0.08)_58%,transparent_76%)] blur-[88px] md:blur-[120px]"
-      />
-      <motion.div
-        style={{ x: reverseX, y: reverseY }}
-        className="absolute right-[-6%] top-[18%] h-[clamp(16rem,32vw,30rem)] w-[clamp(16rem,34vw,34rem)] rounded-full bg-[radial-gradient(circle,rgba(168,104,255,0.22),rgba(176,78,255,0.10)_36%,rgba(83,130,255,0.08)_60%,transparent_78%)] blur-[90px] md:blur-[128px]"
-      />
-      <motion.div
-        style={{ x: cursorGlowX, y: cursorGlowY }}
-        className="absolute left-1/2 top-[20%] h-[20rem] w-[20rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.10),rgba(100,221,255,0.08)_28%,rgba(176,78,255,0.06)_56%,transparent_74%)] blur-[90px]"
-      />
+      <motion.div style={{ x: layerDriftX, y: layerDriftY }} className="absolute inset-[-8%]">
+        {backFlakes.map((flake) => (
+          <motion.span
+            key={flake.id}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: `${flake.left}%`,
+              top: `${flake.top}%`,
+              width: flake.size,
+              height: flake.size,
+              opacity: flake.opacity,
+              filter: `blur(${flake.blur}px)`,
+              boxShadow: '0 0 14px rgba(214,236,255,0.18)',
+            }}
+            animate={{
+              x: [0, flake.drift, flake.drift * -0.3],
+              y: ['0vh', '135vh'],
+              opacity: [0, flake.opacity, flake.opacity * 0.92, 0],
+            }}
+            transition={{
+              duration: flake.duration,
+              ease: 'linear',
+              repeat: Infinity,
+              delay: flake.delay,
+            }}
+          />
+        ))}
 
-      <motion.div
-        animate={{ opacity: [0.14, 0.22, 0.16], scale: [1, 1.04, 0.99] }}
-        transition={{ duration: 8.5, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute inset-x-[22%] top-[12%] h-24 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.16),transparent_72%)] blur-3xl"
-      />
+        {frontFlakes.map((flake) => (
+          <motion.span
+            key={flake.id}
+            className="absolute rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.95),rgba(214,236,255,0.42)_60%,transparent)]"
+            style={{
+              left: `${flake.left}%`,
+              top: `${flake.top}%`,
+              width: flake.size,
+              height: flake.size,
+              opacity: flake.opacity,
+              filter: `blur(${flake.blur}px)`,
+              boxShadow: '0 0 18px rgba(214,236,255,0.22)',
+            }}
+            animate={{
+              x: [0, flake.drift, flake.drift * 0.4],
+              y: ['0vh', '138vh'],
+              opacity: [0, flake.opacity, flake.opacity, 0],
+            }}
+            transition={{
+              duration: flake.duration,
+              ease: 'linear',
+              repeat: Infinity,
+              delay: flake.delay,
+            }}
+          />
+        ))}
+      </motion.div>
 
-      <motion.div
-        style={{ x: driftX, y: driftY }}
-        animate={{ opacity: [0.22, 0.3, 0.22], scale: [1, 1.06, 1] }}
-        transition={{ duration: 10.4, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute left-[10%] top-[22%] h-[18rem] w-[18rem] rounded-full bg-[radial-gradient(circle,rgba(72,204,255,0.14),rgba(72,204,255,0.07)_34%,transparent_72%)] blur-[70px]"
-      />
-      <motion.div
-        style={{ x: reverseX, y: reverseY }}
-        animate={{ opacity: [0.18, 0.26, 0.18], scale: [1, 1.08, 1] }}
-        transition={{ duration: 11.2, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute right-[8%] top-[24%] h-[16rem] w-[20rem] rounded-full bg-[radial-gradient(circle,rgba(176,78,255,0.16),rgba(176,78,255,0.07)_36%,transparent_74%)] blur-[76px]"
-      />
-
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/45 to-transparent" />
     </div>
   )
 }
@@ -262,8 +321,7 @@ export default function AuthPage() {
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >
-      <SnowCanvas />
-      <AuthAtmosphere pointerX={pointerX} pointerY={pointerY} />
+      <AuthSnowBackdrop pointerX={pointerX} pointerY={pointerY} />
 
       <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:gap-10">
         <motion.div
