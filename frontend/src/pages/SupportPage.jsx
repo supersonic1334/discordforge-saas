@@ -983,31 +983,33 @@ export default function SupportPage() {
   return (
     <div className="relative min-h-full px-4 py-8 md:px-8 md:py-10">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div className={`mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-mono ${
+        <div className="feature-hero p-6 sm:p-7">
+          <div className="relative z-[1] flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <div className={`mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-mono ${
               isStaff ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300' : 'border-violet-500/20 bg-violet-500/10 text-violet-200'
-            }`}>
-              <LifeBuoy className="h-3.5 w-3.5" />
-              {isStaff ? text.titleStaff : text.title}
+              }`}>
+                <LifeBuoy className="h-3.5 w-3.5" />
+                {isStaff ? text.titleStaff : text.title}
+              </div>
+              <h1 className="font-display text-3xl font-700 text-white md:text-4xl">{isStaff ? text.titleStaff : text.titleUser}</h1>
+              <p className="mt-2 max-w-3xl text-white/45">{isStaff ? text.staffSubtitle : text.userSubtitle}</p>
             </div>
-            <h1 className="font-display text-3xl font-700 text-white md:text-4xl">{isStaff ? text.titleStaff : text.titleUser}</h1>
-            <p className="mt-2 max-w-3xl text-white/45">{isStaff ? text.staffSubtitle : text.userSubtitle}</p>
-          </div>
 
-          {isStaff && (
-            <div className="flex flex-wrap gap-3">
-              <StatCard label={text.counts.open} value={counts.open || 0} tone="border-cyan-500/20 bg-cyan-500/10 text-cyan-300" />
-              <StatCard label={text.counts.claimed} value={counts.claimed || 0} tone="border-amber-500/20 bg-amber-500/10 text-amber-300" />
-              <StatCard label={text.counts.closed} value={counts.closed || 0} tone="border-white/10 bg-white/[0.04] text-white/70" />
-            </div>
-          )}
+            {isStaff && (
+              <div className="flex flex-wrap gap-3">
+                <StatCard label={text.counts.open} value={counts.open || 0} tone="border-cyan-500/20 bg-cyan-500/10 text-cyan-300" />
+                <StatCard label={text.counts.claimed} value={counts.claimed || 0} tone="border-amber-500/20 bg-amber-500/10 text-amber-300" />
+                <StatCard label={text.counts.closed} value={counts.closed || 0} tone="border-white/10 bg-white/[0.04] text-white/70" />
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-6">
             {!isStaff && (
-              <form onSubmit={handleCreate} className="rounded-[30px] border border-white/[0.08] bg-white/[0.03] p-5">
+              <form onSubmit={handleCreate} className="depth-panel rounded-[30px] border border-white/[0.08] bg-white/[0.03] p-5">
                 <div className="mb-5">
                   <h2 className="font-display text-xl font-700 text-white">{text.newTicket}</h2>
                   <p className="mt-1 text-sm text-white/45">{text.newTicketHint}</p>
@@ -1063,7 +1065,7 @@ export default function SupportPage() {
               </form>
             )}
 
-            <div className="rounded-[30px] border border-white/[0.08] bg-white/[0.03] p-5">
+            <div className="depth-panel rounded-[30px] border border-white/[0.08] bg-white/[0.03] p-5">
               <div className="mb-4">
                 <h2 className="font-display text-xl font-700 text-white">{isStaff ? text.queue : text.myTickets}</h2>
                 <p className="mt-1 text-sm text-white/45">{isStaff ? text.queueHint : text.myTicketsHint}</p>
@@ -1143,7 +1145,7 @@ export default function SupportPage() {
             </div>
           </div>
 
-          <div className="flex min-h-[860px] flex-col overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.03]">
+          <div className="depth-panel flex min-h-[860px] flex-col overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.03]">
             {renderConversation()}
           </div>
         </div>

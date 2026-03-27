@@ -292,41 +292,15 @@ export default function AIAssistant() {
 
       {messages.length <= 1 && (
         <div className="px-4 sm:px-6 pb-3">
-          <div className="overflow-hidden rounded-[28px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(16,24,40,0.94),rgba(20,18,36,0.98))] p-4 sm:p-5 shadow-[0_18px_50px_rgba(2,8,23,0.28)]">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-2 max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-neon-violet/20 bg-neon-violet/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.2em] text-violet-200">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  DiscordForger AI
-                </div>
-                <h2 className="font-display text-xl font-700 text-white">{assistantCopy.heroTitle}</h2>
-                <p className="text-sm leading-6 text-white/55">{assistantCopy.heroText}</p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => send(assistantCopy.helpAction)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-gradient-to-r from-neon-cyan/18 to-neon-violet/18 px-4 py-3 text-sm font-mono text-white transition-all hover:scale-[1.02] hover:border-neon-cyan/40"
-              >
-                <HelpCircle className="w-4 h-4" />
-                {assistantCopy.helpLabel}
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {assistantCopy.cards.map((card) => {
-                const Icon = card.icon
-                return (
-                  <div key={card.title} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-neon-cyan/18 bg-neon-cyan/10 text-neon-cyan">
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <p className="mt-3 font-display text-sm font-700 text-white">{card.title}</p>
-                    <p className="mt-1 text-xs leading-5 text-white/50">{card.text}</p>
-                  </div>
-                )
-              })}
-            </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => send(assistantCopy.helpAction)}
+              className="feature-chip text-white/75 hover:text-white"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              {assistantCopy.helpLabel}
+            </button>
           </div>
         </div>
       )}

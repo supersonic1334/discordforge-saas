@@ -718,34 +718,43 @@ export default function AdminPanel() {
 
   return (
     <div className="px-4 py-5 sm:p-6 max-w-5xl mx-auto space-y-5">
-      <div className="flex items-center gap-3">
-        <Crown className="w-6 h-6 text-amber-400" />
-        <h1 className="font-display font-800 text-2xl text-white">{t('admin.title')}</h1>
-      </div>
-
-      {sysInfo && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          {[
-            [t('admin.stats.users'), sysInfo.users, 'text-neon-cyan', Users],
-            [t('admin.stats.connectedUsers'), sysInfo.connectedUsers, 'text-green-400', Activity],
-            [t('admin.stats.servers'), sysInfo.guilds, 'text-neon-violet', Bot],
-            [t('admin.stats.activeBots'), sysInfo.runningBots, 'text-green-400', Activity],
-            [t('admin.stats.memory'), `${sysInfo.memoryMB}MB`, 'text-amber-400', Activity],
-          ].map(([label, value, color, Icon]) => (
-            <div key={label} className="glass-card p-4">
-              <p className={`text-xl font-display font-700 ${color}`}>{value}</p>
-              <p className="text-xs text-white/40">{label}</p>
+      <div className="feature-hero p-6 sm:p-7">
+        <div className="relative z-[1] space-y-5">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl border border-amber-500/25 bg-amber-500/10 flex items-center justify-center">
+              <Crown className="w-5 h-5 text-amber-400" />
             </div>
-          ))}
-        </div>
-      )}
+            <div>
+              <h1 className="font-display font-800 text-2xl text-white">{t('admin.title')}</h1>
+              <p className="text-sm text-white/45">Vue plus claire pour les utilisateurs, l IA et les cles fournisseurs.</p>
+            </div>
+          </div>
 
-      <div className="flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 w-fit">
-        {tabs.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} className={`px-4 py-1.5 rounded-lg text-sm font-mono transition-all ${tab === id ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-white/40 hover:text-white'}`}>
-            {label}
-          </button>
-        ))}
+          {sysInfo && (
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              {[
+                [t('admin.stats.users'), sysInfo.users, 'text-neon-cyan'],
+                [t('admin.stats.connectedUsers'), sysInfo.connectedUsers, 'text-green-400'],
+                [t('admin.stats.servers'), sysInfo.guilds, 'text-neon-violet'],
+                [t('admin.stats.activeBots'), sysInfo.runningBots, 'text-green-400'],
+                [t('admin.stats.memory'), `${sysInfo.memoryMB}MB`, 'text-amber-400'],
+              ].map(([label, value, color]) => (
+                <div key={label} className="feature-metric depth-panel p-4">
+                  <p className={`text-xl font-display font-700 ${color}`}>{value}</p>
+                  <p className="text-xs text-white/40">{label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 w-fit">
+            {tabs.map(([id, label]) => (
+              <button key={id} onClick={() => setTab(id)} className={`px-4 py-1.5 rounded-lg text-sm font-mono transition-all ${tab === id ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-white/40 hover:text-white'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {tab === 'users' && canManageUsers && (
@@ -773,7 +782,7 @@ export default function AdminPanel() {
               : 'bg-white/5 text-white/40 border border-white/10'
 
             return (
-              <div key={user.id} className="glass-card p-4 space-y-3">
+              <div key={user.id} className="depth-panel p-4 space-y-3">
                 <div className="flex items-start gap-4 flex-wrap">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 flex items-center justify-center font-display font-700 shrink-0">
                     {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full rounded-full object-cover" alt="" /> : user.username[0]}
@@ -882,7 +891,7 @@ export default function AdminPanel() {
 
       {tab === 'provider_keys' && canManageProviderPool && (
         <div className="space-y-5">
-          <div className="glass-card p-5 space-y-2">
+          <div className="depth-panel p-5 space-y-2">
             <div className="flex items-center gap-2">
               <KeyRound className="w-4 h-4 text-emerald-400" />
               <p className="font-display font-600 text-white">{t('admin.providerKeysTitle', 'Cl\u00e9s fournisseurs')}</p>
@@ -893,7 +902,7 @@ export default function AdminPanel() {
           </div>
 
           <div className="grid xl:grid-cols-2 gap-5 items-start">
-            <div className="glass-card p-5 space-y-3">
+            <div className="depth-panel p-5 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-display font-600 text-white">{t('admin.providerKeysValid', 'Cl\u00e9s valides')}</p>
                 <span className="badge badge-online">{validProviderKeys.length}</span>
@@ -907,7 +916,7 @@ export default function AdminPanel() {
               )}
             </div>
 
-            <div className="glass-card p-5 space-y-3">
+            <div className="depth-panel p-5 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-display font-600 text-white">{t('admin.providerKeysInvalid', 'Cl\u00e9s invalides')}</p>
                 <span className="badge bg-red-500/10 text-red-400 border border-red-500/20">{invalidProviderKeys.length}</span>
@@ -925,7 +934,7 @@ export default function AdminPanel() {
       )}
 
       {tab === 'ai' && (
-        <div className="glass-card p-5 space-y-4 max-w-lg">
+        <div className="depth-panel p-5 space-y-4 max-w-lg">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="font-display font-600 text-white">{t('admin.aiTitle')}</p>
             <div className="min-w-[165px]">
