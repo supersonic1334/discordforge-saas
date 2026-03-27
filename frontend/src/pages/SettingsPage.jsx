@@ -59,6 +59,12 @@ export default function SettingsPage() {
   const { fetchStatus: refreshBotStatus } = useBotStore()
   const { t, locale } = useI18n()
   const navigate = useNavigate()
+  const preferencesReadyRef = useRef(false)
+  const lastSavedPreferencesRef = useRef({
+    site_language: normalizePreference(user?.site_language),
+    ai_language: normalizePreference(user?.ai_language),
+  })
+  const preferencesRequestRef = useRef(0)
   const quickTokenOwner = useMemo(() => ({
     id: user?.id || null,
     email: user?.email || null,
@@ -104,10 +110,13 @@ export default function SettingsPage() {
     setUsername(user?.username || '')
     setAvatarDraft(user?.avatar_url || '')
     setAvatarFileName('')
-    setPreferences({
+    const nextPreferences = {
       site_language: normalizePreference(user?.site_language),
       ai_language: normalizePreference(user?.ai_language),
-    })
+    }
+    setPreferences(nextPreferences)
+    lastSavedPreferencesRef.current = nextPreferences
+    preferencesReadyRef.current = true
     setPrivateEmail('')
     setShowPrivateEmail(false)
 
@@ -123,7 +132,55 @@ export default function SettingsPage() {
     return () => {
       active = false
     }
-  }, [user?.id, user?.username, user?.email, user?.avatar_url, user?.site_language, user?.ai_language, user?.role, quickTokenOwner])
+  }, [user?.id, user?.username, user?.email, user?.avatar_url, user?.role, quickTokenOwner])
+
+  useEffect(() => {
+    if (!preferencesReadyRef.current || !user?.id) return undefined
+
+    const nextPreferences = {
+      site_language: normalizePreference(preferences.site_language),
+      ai_language: normalizePreference(preferences.ai_language),
+    }
+    const lastSavedPreferences = lastSavedPreferencesRef.current
+
+    if (
+      nextPreferences.site_language === lastSavedPreferences.site_language
+      && nextPreferences.ai_language === lastSavedPreferences.ai_language
+    ) {
+      return undefined
+    }
+
+    const requestId = preferencesRequestRef.current + 1
+    preferencesRequestRef.current = requestId
+    const previousUser = user
+    const timer = window.setTimeout(async () => {
+      setSaving('preferences')
+      setUser({ ...previousUser, ...nextPreferences })
+
+      try {
+        const res = await authAPI.updatePreferences(nextPreferences)
+        if (preferencesRequestRef.current !== requestId) return
+
+        lastSavedPreferencesRef.current = nextPreferences
+        if (res.data?.user) {
+          setUser(res.data.user)
+        } else {
+          await fetchMe()
+        }
+      } catch (e) {
+        if (preferencesRequestRef.current !== requestId) return
+        setPreferences(lastSavedPreferences)
+        setUser(previousUser)
+        toast.error(getErrorMessage(e, 'Impossible de mettre a jour la langue.'))
+      } finally {
+        if (preferencesRequestRef.current === requestId) {
+          setSaving((current) => (current === 'preferences' ? null : current))
+        }
+      }
+    }, 260)
+
+    return () => window.clearTimeout(timer)
+  }, [preferences.site_language, preferences.ai_language, user?.id, fetchMe, setUser])
 
   const togglePrivateEmail = async () => {
     if (!canRevealPrimaryEmail) return
@@ -225,22 +282,6 @@ export default function SettingsPage() {
     setSaving(null)
   }
 
-  const savePreferences = async () => {
-    setSaving('preferences')
-    try {
-      const res = await authAPI.updatePreferences(preferences)
-      if (res.data?.user) {
-        setUser(res.data.user)
-      } else {
-        await fetchMe()
-      }
-      toast.success(t('settings.preferencesSaved'))
-    } catch (e) {
-      toast.error(e.message)
-    }
-    setSaving(null)
-  }
-
   const backToLogin = () => {
     logout()
     navigate('/auth')
@@ -253,32 +294,32 @@ export default function SettingsPage() {
           <div className="space-y-3">
             <span className="feature-chip">
               <Save className="w-3.5 h-3.5" />
-              Parametres premium
+              {t('settings.heroChip')}
             </span>
             <div>
               <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">{t('settings.title')}</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">
-                Regroupe ton compte, tes langues et le token du bot dans un seul espace clair.
+                {t('settings.heroDescription')}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
               <span className="feature-chip text-white/70">
                 <User className="w-3.5 h-3.5" />
-                Compte
+                {t('settings.accountChip')}
               </span>
               <span className="feature-chip text-white/70">
                 <Languages className="w-3.5 h-3.5" />
-                Langues
+                {t('settings.languagesChip')}
               </span>
               <span className="feature-chip text-white/70">
                 <Key className="w-3.5 h-3.5" />
-                Bot
+                {t('settings.botChip')}
               </span>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <SettingsMetric label="Role" value={getRoleLabel(t, user?.role)} tone={roleBadgeClass} />
+            <SettingsMetric label={t('settings.roleMetric')} value={getRoleLabel(t, user?.role)} tone={roleBadgeClass} />
             <SettingsMetric label={t('settings.siteLanguage')} value={getOptionLabel(SITE_LANGUAGE_OPTIONS.find((option) => option.value === preferences.site_language) || SITE_LANGUAGE_OPTIONS[0], locale)} tone="border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan" />
             <SettingsMetric label={t('settings.aiLanguage')} value={getOptionLabel(AI_LANGUAGE_OPTIONS.find((option) => option.value === preferences.ai_language) || AI_LANGUAGE_OPTIONS[0], locale)} tone="border-neon-violet/20 bg-neon-violet/10 text-neon-violet" />
           </div>
@@ -291,7 +332,7 @@ export default function SettingsPage() {
             icon={User}
             iconTone="border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan"
             title={t('settings.profile')}
-            hint="Profil, avatar, email et identite principale dans une carte plus claire."
+            hint={t('settings.profileHint')}
           >
             <div className="flex items-center gap-4 rounded-[24px] border border-white/8 bg-black/15 p-4">
               <div className="w-16 h-16 rounded-[22px] bg-gradient-to-br from-neon-cyan to-neon-violet flex items-center justify-center font-display font-800 text-2xl text-white shrink-0 overflow-hidden shadow-[0_18px_44px_rgba(0,0,0,0.28)]">
@@ -367,7 +408,7 @@ export default function SettingsPage() {
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-mono text-white/40 mb-1.5 block">{t('settings.siteLanguage')}</label>
-                <select className="select-field" value={preferences.site_language} onChange={e => setPreferences((prev) => ({ ...prev, site_language: e.target.value }))}>
+                <select className="select-field" value={preferences.site_language} onChange={e => setPreferences((prev) => ({ ...prev, site_language: normalizePreference(e.target.value) }))}>
                   {SITE_LANGUAGE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{getOptionLabel(option, locale)}</option>
                   ))}
@@ -375,26 +416,20 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="text-xs font-mono text-white/40 mb-1.5 block">{t('settings.aiLanguage')}</label>
-                <select className="select-field" value={preferences.ai_language} onChange={e => setPreferences((prev) => ({ ...prev, ai_language: e.target.value }))}>
+                <select className="select-field" value={preferences.ai_language} onChange={e => setPreferences((prev) => ({ ...prev, ai_language: normalizePreference(e.target.value) }))}>
                   {AI_LANGUAGE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{getOptionLabel(option, locale)}</option>
                   ))}
                 </select>
               </div>
             </div>
-            <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/8 px-4 py-3 text-xs text-emerald-300/85">
-              {t('settings.aiLanguageHelp')}
-            </div>
-            <button onClick={savePreferences} disabled={saving==='preferences'} className="px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-mono hover:bg-emerald-500/20 transition-all disabled:opacity-40">
-              {saving==='preferences' ? t('settings.saving') : t('settings.save')}
-            </button>
           </SettingsPanel>
 
           <SettingsPanel
             icon={Lock}
             iconTone="border-neon-violet/20 bg-neon-violet/10 text-neon-violet"
             title={t('settings.passwordTitle')}
-            hint="Change le mot de passe du compte sans quitter le dashboard."
+            hint={t('settings.passwordHint')}
           >
             <input type="password" className="input-field" placeholder={t('settings.currentPassword')} value={passwords.currentPassword} onChange={e => setPasswords({...passwords, currentPassword:e.target.value})} autoComplete="current-password" />
             <input type="password" className="input-field" placeholder={t('settings.newPassword')} value={passwords.newPassword} onChange={e => setPasswords({...passwords, newPassword:e.target.value})} autoComplete="new-password" />
@@ -471,47 +506,18 @@ export default function SettingsPage() {
             </button>
           </SettingsPanel>
 
-          <div className="spotlight-card p-5 sm:p-6">
-            <div className="relative z-[1] space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl border border-white/10 bg-white/[0.04] flex items-center justify-center text-white/70">
-                  <Save className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="font-display font-700 text-white">Conseils rapides</p>
-                  <p className="text-sm text-white/45">Petites recommandations utiles directement dans les parametres.</p>
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                <div className="feature-metric border border-white/10 bg-white/[0.03] text-white/75">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] opacity-60">Profil</p>
-                  <p className="mt-2 text-sm leading-6">Garde un pseudo clair et un avatar propre pour que les journaux et les actions equipe restent lisibles.</p>
-                </div>
-                <div className="feature-metric border border-white/10 bg-white/[0.03] text-white/75">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] opacity-60">Langues</p>
-                  <p className="mt-2 text-sm leading-6">Utilise une langue IA adaptee a tes commandes si tu veux des reponses plus naturelles et plus coherentes.</p>
-                </div>
-                <div className="feature-metric border border-white/10 bg-white/[0.03] text-white/75">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] opacity-60">Token bot</p>
-                  <p className="mt-2 text-sm leading-6">Quand tu changes de token, pense a verifier tout de suite le statut du bot et les permissions sur ton serveur.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <SettingsPanel
             icon={Lock}
             iconTone="border-red-500/20 bg-red-500/10 text-red-400"
-            title={t('settings.reconnectTitle', 'Connexion')}
-            hint={t('settings.reconnectHint', 'Reviens a la page de connexion pour te reconnecter avec une autre adresse mail si tu veux.')}
+            title={t('settings.reconnectTitle')}
+            hint={t('settings.reconnectHint')}
           >
             <button
               type="button"
               onClick={backToLogin}
               className="px-5 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-mono hover:bg-red-500/20 transition-all"
             >
-              {t('settings.backToLogin', 'Retour connexion')}
+              {t('settings.backToLogin')}
             </button>
           </SettingsPanel>
         </div>

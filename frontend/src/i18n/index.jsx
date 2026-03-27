@@ -1,15 +1,15 @@
-import { createContext, useContext, useEffect, useMemo } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '../stores'
 
 export const SITE_LANGUAGE_OPTIONS = [
-  { value: 'auto', labels: { fr: 'Automatique (navigateur)', en: 'Automatic (browser)', es: 'Automatico (navegador)' } },
+  { value: 'auto', labels: { fr: 'Automatique', en: 'Automatic', es: 'Automatico' } },
   { value: 'fr', labels: { fr: 'Francais', en: 'French', es: 'Frances' } },
   { value: 'en', labels: { fr: 'Anglais', en: 'English', es: 'Ingles' } },
   { value: 'es', labels: { fr: 'Espagnol', en: 'Spanish', es: 'Espanol' } },
 ]
 
 export const AI_LANGUAGE_OPTIONS = [
-  { value: 'auto', labels: { fr: 'Automatique (selon le message)', en: 'Automatic (from message)', es: 'Automatico (segun el mensaje)' } },
+  { value: 'auto', labels: { fr: 'Automatique', en: 'Automatic', es: 'Automatico' } },
   { value: 'fr', labels: { fr: 'Francais', en: 'French', es: 'Frances' } },
   { value: 'en', labels: { fr: 'Anglais', en: 'English', es: 'Ingles' } },
   { value: 'es', labels: { fr: 'Espagnol', en: 'Spanish', es: 'Espanol' } },
@@ -42,9 +42,16 @@ const translations = {
     },
     settings: {
       title: 'Parametres',
+      heroChip: 'Parametres premium',
+      heroDescription: 'Regroupe ton compte, tes langues et le token du bot dans un seul espace clair.',
       profile: 'Profil',
       preferences: 'Langue et IA',
-      preferencesHint: 'Le site peut suivre le navigateur, et l IA peut repondre automatiquement dans la langue du message.',
+      preferencesHint: 'Choisis la langue du site et de l assistant.',
+      roleMetric: 'Role',
+      accountChip: 'Compte',
+      languagesChip: 'Langues',
+      botChip: 'Bot',
+      profileHint: 'Profil, avatar, email et identite principale dans une carte plus claire.',
       avatarChoose: 'Choisir une photo',
       avatarSave: 'Sauvegarder la photo',
       avatarRemove: 'Retirer',
@@ -53,7 +60,7 @@ const translations = {
       avatarHint: 'Image carree recommandee. JPG, PNG, WEBP ou GIF.',
       siteLanguage: 'Langue du site',
       aiLanguage: 'Langue de l IA',
-      aiLanguageHelp: 'Auto = repond dans la langue detectee dans ton message.',
+      aiLanguageHelp: '',
       usernamePlaceholder: 'Nouveau pseudo',
       currentPassword: 'Mot de passe actuel',
       newPassword: 'Nouveau mot de passe (min 8 car., majuscule, chiffre)',
@@ -61,6 +68,7 @@ const translations = {
       update: 'Mettre a jour',
       saving: 'Sauvegarde...',
       passwordTitle: 'Changer le mot de passe',
+      passwordHint: 'Change le mot de passe du compte sans quitter le dashboard.',
       botTokenTitle: 'Token du bot',
       botTokenHint: 'Changer le token redemarre le bot et resynchronise tous les serveurs.',
       quickTokenTitle: 'Token rapide',
@@ -78,6 +86,9 @@ const translations = {
       showPrivateEmail: 'Afficher mon email',
       hidePrivateEmail: 'Masquer mon email',
       privateEmailHint: 'Email masque par defaut pour les partages d ecran. Le bouton * ne fonctionne que pour le fondateur principal.',
+      reconnectTitle: 'Connexion',
+      reconnectHint: 'Reviens a la page de connexion pour te reconnecter avec une autre adresse mail si tu veux.',
+      backToLogin: 'Retour connexion',
     },
     admin: {
       title: 'Panel Admin',
@@ -269,9 +280,16 @@ const translations = {
     },
     settings: {
       title: 'Settings',
+      heroChip: 'Premium settings',
+      heroDescription: 'Keep your account, languages, and bot token in one clear place.',
       profile: 'Profile',
       preferences: 'Language and AI',
-      preferencesHint: 'The site can follow the browser language, and the AI can answer automatically in the message language.',
+      preferencesHint: 'Choose the site and assistant language.',
+      roleMetric: 'Role',
+      accountChip: 'Account',
+      languagesChip: 'Languages',
+      botChip: 'Bot',
+      profileHint: 'Profile, avatar, email, and primary identity in a clearer card.',
       avatarChoose: 'Choose photo',
       avatarSave: 'Save photo',
       avatarRemove: 'Remove',
@@ -280,7 +298,7 @@ const translations = {
       avatarHint: 'Square image recommended. JPG, PNG, WEBP or GIF.',
       siteLanguage: 'Site language',
       aiLanguage: 'AI language',
-      aiLanguageHelp: 'Auto = reply in the language detected from your message.',
+      aiLanguageHelp: '',
       usernamePlaceholder: 'New username',
       currentPassword: 'Current password',
       newPassword: 'New password (min 8 chars, uppercase, number)',
@@ -288,6 +306,7 @@ const translations = {
       update: 'Update',
       saving: 'Saving...',
       passwordTitle: 'Change password',
+      passwordHint: 'Change the account password without leaving the dashboard.',
       botTokenTitle: 'Bot token',
       botTokenHint: 'Changing the token restarts the bot and resyncs every server.',
       quickTokenTitle: 'Quick token',
@@ -305,6 +324,9 @@ const translations = {
       showPrivateEmail: 'Show my email',
       hidePrivateEmail: 'Hide my email',
       privateEmailHint: 'Email stays hidden by default for screen sharing. The * button only works for the primary founder.',
+      reconnectTitle: 'Sign in',
+      reconnectHint: 'Go back to the login page if you want to sign in with another email address.',
+      backToLogin: 'Back to login',
     },
     admin: {
       title: 'Admin Panel',
@@ -496,9 +518,16 @@ const translations = {
     },
     settings: {
       title: 'Configuracion',
+      heroChip: 'Configuracion premium',
+      heroDescription: 'Reune tu cuenta, idiomas y token del bot en un solo espacio claro.',
       profile: 'Perfil',
       preferences: 'Idioma e IA',
-      preferencesHint: 'El sitio puede seguir el idioma del navegador, y la IA puede responder automaticamente en el idioma del mensaje.',
+      preferencesHint: 'Elige el idioma del sitio y del asistente.',
+      roleMetric: 'Rol',
+      accountChip: 'Cuenta',
+      languagesChip: 'Idiomas',
+      botChip: 'Bot',
+      profileHint: 'Perfil, avatar, email e identidad principal en una tarjeta mas clara.',
       avatarChoose: 'Elegir foto',
       avatarSave: 'Guardar foto',
       avatarRemove: 'Quitar',
@@ -507,7 +536,7 @@ const translations = {
       avatarHint: 'Imagen cuadrada recomendada. JPG, PNG, WEBP o GIF.',
       siteLanguage: 'Idioma del sitio',
       aiLanguage: 'Idioma de la IA',
-      aiLanguageHelp: 'Auto = responder en el idioma detectado en tu mensaje.',
+      aiLanguageHelp: '',
       usernamePlaceholder: 'Nuevo nombre',
       currentPassword: 'Contrasena actual',
       newPassword: 'Nueva contrasena (min 8 caracteres, mayuscula, numero)',
@@ -515,6 +544,7 @@ const translations = {
       update: 'Actualizar',
       saving: 'Guardando...',
       passwordTitle: 'Cambiar contrasena',
+      passwordHint: 'Cambia la contrasena de la cuenta sin salir del panel.',
       botTokenTitle: 'Token del bot',
       botTokenHint: 'Cambiar el token reinicia el bot y resincroniza todos los servidores.',
       quickTokenTitle: 'Token rapido',
@@ -532,6 +562,9 @@ const translations = {
       showPrivateEmail: 'Mostrar mi email',
       hidePrivateEmail: 'Ocultar mi email',
       privateEmailHint: 'El email queda oculto por defecto para compartir pantalla. El boton * solo funciona para el fundador principal.',
+      reconnectTitle: 'Conexion',
+      reconnectHint: 'Vuelve a la pagina de acceso si quieres entrar con otro correo.',
+      backToLogin: 'Volver al acceso',
     },
     admin: {
       title: 'Panel admin',
@@ -1467,15 +1500,24 @@ function getByPath(obj, path) {
 
 function detectBrowserLocale() {
   if (typeof navigator === 'undefined') return 'en'
-  const language = String(navigator.language || 'en').toLowerCase()
-  if (language.startsWith('fr')) return 'fr'
-  if (language.startsWith('es')) return 'es'
+
+  const candidates = Array.isArray(navigator.languages) && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || 'en']
+
+  for (const candidate of candidates) {
+    const language = String(candidate || '').toLowerCase()
+    if (language.startsWith('fr')) return 'fr'
+    if (language.startsWith('es')) return 'es'
+    if (language.startsWith('en')) return 'en'
+  }
+
   return 'en'
 }
 
-export function resolveSiteLocale(preference = 'auto') {
+export function resolveSiteLocale(preference = 'auto', browserLocale = detectBrowserLocale()) {
   if (preference && preference !== 'auto' && translations[preference]) return preference
-  return detectBrowserLocale()
+  return browserLocale
 }
 
 export function getOptionLabel(option, locale) {
@@ -1498,7 +1540,18 @@ export function getModuleCategoryLabel(category, locale) {
 
 export function I18nProvider({ children }) {
   const siteLanguage = useAuthStore((state) => state.user?.site_language)
-  const locale = useMemo(() => resolveSiteLocale(siteLanguage), [siteLanguage])
+  const [browserLocale, setBrowserLocale] = useState(() => detectBrowserLocale())
+  const locale = useMemo(() => resolveSiteLocale(siteLanguage, browserLocale), [siteLanguage, browserLocale])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const syncBrowserLocale = () => setBrowserLocale(detectBrowserLocale())
+    syncBrowserLocale()
+    window.addEventListener('languagechange', syncBrowserLocale)
+
+    return () => window.removeEventListener('languagechange', syncBrowserLocale)
+  }, [])
 
   useEffect(() => {
     document.documentElement.lang = locale
