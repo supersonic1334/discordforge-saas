@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import { Eye, EyeOff, Bot, Shield, Zap, AlertCircle, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
 import SnowCanvas from '../components/SnowCanvas'
@@ -27,36 +27,59 @@ function GoogleMark(props) {
   )
 }
 
-// Floating orbs for auth page background
-function FloatingOrbs() {
+function AuthAtmosphere({ pointerX, pointerY }) {
+  const driftX = useSpring(useTransform(pointerX, [0, 100], [-36, 36]), { stiffness: 120, damping: 18, mass: 0.6 })
+  const driftY = useSpring(useTransform(pointerY, [0, 100], [-26, 26]), { stiffness: 120, damping: 18, mass: 0.6 })
+  const reverseX = useSpring(useTransform(pointerX, [0, 100], [28, -28]), { stiffness: 110, damping: 20, mass: 0.7 })
+  const reverseY = useSpring(useTransform(pointerY, [0, 100], [18, -18]), { stiffness: 110, damping: 20, mass: 0.7 })
+  const cursorGlowX = useSpring(useTransform(pointerX, [0, 100], [-140, 140]), { stiffness: 95, damping: 18, mass: 0.8 })
+  const cursorGlowY = useSpring(useTransform(pointerY, [0, 100], [-90, 90]), { stiffness: 95, damping: 18, mass: 0.8 })
+  const panelOneX = useSpring(useTransform(pointerX, [0, 100], [-24, 24]), { stiffness: 110, damping: 20 })
+  const panelOneY = useSpring(useTransform(pointerY, [0, 100], [-14, 14]), { stiffness: 110, damping: 20 })
+  const panelTwoX = useSpring(useTransform(pointerX, [0, 100], [18, -18]), { stiffness: 110, damping: 20 })
+  const panelTwoY = useSpring(useTransform(pointerY, [0, 100], [12, -12]), { stiffness: 110, damping: 20 })
+
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(10,18,26,0.88),rgba(4,7,14,0.98)_64%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.03),transparent_24%,transparent_72%,rgba(255,255,255,0.015))]" />
+      <div className="absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:140px_140px]" />
+
       <motion.div
-        animate={{
-          x: [0, 40, -20, 30, 0],
-          y: [0, -30, 20, -10, 0],
-          scale: [1, 1.15, 0.95, 1.08, 1],
-        }}
-        transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-[15%] left-[12%] w-[clamp(12rem,35vw,28rem)] aspect-square rounded-full bg-neon-cyan/[0.04] blur-[80px] md:blur-[120px]"
+        style={{ x: driftX, y: driftY }}
+        className="absolute left-[6%] top-[4%] h-[clamp(18rem,34vw,34rem)] w-[clamp(18rem,42vw,42rem)] rounded-full bg-[radial-gradient(circle,rgba(60,210,255,0.22),rgba(60,210,255,0.10)_34%,rgba(78,102,255,0.08)_58%,transparent_76%)] blur-[88px] md:blur-[120px]"
       />
       <motion.div
-        animate={{
-          x: [0, -30, 25, 0],
-          y: [0, 25, -35, 0],
-          scale: [1, 1.1, 0.92, 1],
-        }}
-        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute bottom-[20%] right-[8%] w-[clamp(10rem,30vw,24rem)] aspect-square rounded-full bg-neon-violet/[0.04] blur-[80px] md:blur-[120px]"
+        style={{ x: reverseX, y: reverseY }}
+        className="absolute right-[-6%] top-[18%] h-[clamp(16rem,32vw,30rem)] w-[clamp(16rem,34vw,34rem)] rounded-full bg-[radial-gradient(circle,rgba(168,104,255,0.22),rgba(176,78,255,0.10)_36%,rgba(83,130,255,0.08)_60%,transparent_78%)] blur-[90px] md:blur-[128px]"
       />
       <motion.div
-        animate={{
-          x: [0, 15, -10, 0],
-          y: [0, -20, 15, 0],
-          opacity: [0.03, 0.06, 0.03],
-        }}
-        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-[55%] left-[45%] w-[clamp(8rem,20vw,16rem)] aspect-square rounded-full bg-neon-green/[0.03] blur-[80px]"
+        style={{ x: cursorGlowX, y: cursorGlowY }}
+        className="absolute left-1/2 top-[20%] h-[20rem] w-[20rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.10),rgba(100,221,255,0.08)_28%,rgba(176,78,255,0.06)_56%,transparent_74%)] blur-[90px]"
+      />
+
+      <motion.div
+        animate={{ opacity: [0.14, 0.22, 0.16], scale: [1, 1.04, 0.99] }}
+        transition={{ duration: 8.5, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute inset-x-[22%] top-[12%] h-24 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.16),transparent_72%)] blur-3xl"
+      />
+
+      <motion.div
+        style={{ x: panelOneX, y: panelOneY }}
+        className="absolute left-[8%] top-[18%] hidden h-[18rem] w-[15rem] rounded-[34px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.01))] shadow-[0_28px_60px_rgba(0,0,0,0.22)] backdrop-blur-[2px] lg:block"
+      />
+      <motion.div
+        style={{ x: panelTwoX, y: panelTwoY }}
+        className="absolute right-[10%] top-[14%] hidden h-[14rem] w-[17rem] rounded-[30px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] shadow-[0_28px_60px_rgba(0,0,0,0.2)] backdrop-blur-[2px] lg:block"
+      />
+
+      <motion.div
+        style={{ x: driftX }}
+        className="absolute -left-[8%] top-[28%] h-px w-[44rem] rotate-[12deg] bg-[linear-gradient(90deg,transparent,rgba(88,186,255,0.52),rgba(176,78,255,0.22),transparent)] blur-[0.6px]"
+      />
+      <motion.div
+        style={{ x: reverseX }}
+        className="absolute right-[-12%] top-[62%] h-px w-[38rem] -rotate-[10deg] bg-[linear-gradient(90deg,transparent,rgba(176,78,255,0.46),rgba(88,186,255,0.20),transparent)] blur-[0.6px]"
       />
     </div>
   )
@@ -77,6 +100,8 @@ export default function AuthPage() {
   const { login, register, isLoading } = useAuthStore()
   const blockedHint = useMemo(() => new URLSearchParams(location.search).get('blocked') === '1', [location.search])
   const formRef = useRef(null)
+  const pointerX = useMotionValue(50)
+  const pointerY = useMotionValue(24)
 
   const featureCards = [
     {
@@ -209,6 +234,19 @@ export default function AuthPage() {
     window.location.href = '/api/v1/auth/google'
   }
 
+  const handleAuthPointerMove = (event) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (!bounds.width || !bounds.height) return
+
+    pointerX.set(((event.clientX - bounds.left) / bounds.width) * 100)
+    pointerY.set(((event.clientY - bounds.top) / bounds.height) * 100)
+  }
+
+  const resetAuthPointer = () => {
+    pointerX.set(50)
+    pointerY.set(24)
+  }
+
   const oauthButtons = [
     oauthProviders.discord ? {
       key: 'discord',
@@ -227,9 +265,13 @@ export default function AuthPage() {
   ].filter(Boolean)
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-surface-0 relative overflow-x-hidden p-4 md:px-6 md:py-8">
+    <div
+      className="min-h-screen min-h-[100dvh] bg-surface-0 relative overflow-x-hidden p-4 md:px-6 md:py-8"
+      onMouseMove={handleAuthPointerMove}
+      onMouseLeave={resetAuthPointer}
+    >
       <SnowCanvas />
-      <FloatingOrbs />
+      <AuthAtmosphere pointerX={pointerX} pointerY={pointerY} />
 
       <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:gap-10">
         <motion.div
@@ -239,13 +281,14 @@ export default function AuthPage() {
           className="w-full max-w-[min(28rem,100%)] pt-4 sm:pt-6 md:pt-10"
         >
           {/* Logo section */}
-          <div className="text-center mb-6 sm:mb-8">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 18 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ duration: 0.7, ease: 'easeOut' }}
-              className="relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,85vw)]"
-            >
+            <div className="text-center mb-6 sm:mb-8">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 18 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: 'easeOut' }}
+                whileHover={{ y: -5, scale: 1.01 }}
+                className="relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,85vw)]"
+              >
               <motion.div
                 aria-hidden="true"
                 animate={{
@@ -297,16 +340,16 @@ export default function AuthPage() {
 
           {/* Access check / Blocked / Form */}
           {!accessChecked ? (
-            <div className="gradient-border">
+            <motion.div whileHover={{ y: -4, scale: 1.005 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="gradient-border">
               <div className="bg-surface-1 rounded-2xl p-6 sm:p-8 text-center space-y-4">
                 <div className="mx-auto w-10 h-10 border-2 border-white/15 border-t-neon-cyan rounded-full animate-spin" />
                 <p className="text-sm text-white/45 font-mono">
                   {t('auth.blockedChecking', 'Verification de l acces...')}
                 </p>
               </div>
-            </div>
+            </motion.div>
           ) : (blocked || blockedHint) ? (
-            <div className="gradient-border">
+            <motion.div whileHover={{ y: -4, scale: 1.005 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="gradient-border">
               <div className="bg-surface-1 rounded-2xl p-6 sm:p-8 text-center space-y-5">
                 <motion.div
                   initial={{ scale: 0.8 }}
@@ -327,12 +370,13 @@ export default function AuthPage() {
                   </p>
                 </div>
               </div>
-            </div>
+            </motion.div>
           ) : (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={{ y: -6, scale: 1.006 }}
             className="gradient-border"
           >
             <div className="bg-surface-1 rounded-2xl p-5 sm:p-8">
