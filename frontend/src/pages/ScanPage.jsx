@@ -358,7 +358,7 @@ export default function ScanPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { guilds, selectedGuildId } = useGuildStore()
-  const { user, fetchMe } = useAuthStore()
+  const { user, fetchMe, setUser } = useAuthStore()
   const guild = guilds.find((entry) => entry.id === selectedGuildId)
 
   const [filters, setFilters] = useState({
@@ -515,26 +515,42 @@ export default function ScanPage() {
     }
   }
 
-  async function syncViewerAfterDiscordLink() {
-    const maxAttempts = 8
+  function applyImmediateDiscordLink(linkResult) {
+    const linkedDiscordId = String(linkResult?.linkedDiscordId || '').trim()
+    if (!linkedDiscordId) return false
 
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      await fetchMe()
-      const nextScan = await loadScan(true, filters, selectedUserId, { silent: attempt > 0 })
+    const nextUser = {
+      ...(useAuthStore.getState().user || user || {}),
+      discord_id: linkedDiscordId,
+    }
+    setUser(nextUser)
 
-      if (selectedUserId) {
-        await loadDetail(selectedUserId, { silent: true })
-      }
-
-      const nextViewer = nextScan?.viewer
-      if (nextViewer?.linked_discord) {
-        return true
-      }
-
-      await new Promise((resolve) => window.setTimeout(resolve, 350))
+    const immediateViewer = {
+      ...(scan?.viewer || detail?.viewer || {}),
+      linked_discord: true,
+      linked_discord_id: linkedDiscordId,
+      can_warn: Boolean(scan?.viewer?.can_warn || detail?.viewer?.can_warn || nextUser?.is_primary_founder),
+      can_timeout: Boolean(scan?.viewer?.can_timeout || detail?.viewer?.can_timeout || nextUser?.is_primary_founder),
+      can_kick: Boolean(scan?.viewer?.can_kick || detail?.viewer?.can_kick || nextUser?.is_primary_founder),
+      can_ban: Boolean(scan?.viewer?.can_ban || detail?.viewer?.can_ban || nextUser?.is_primary_founder),
+      can_blacklist_network: Boolean(scan?.viewer?.can_blacklist_network || detail?.viewer?.can_blacklist_network || nextUser?.is_primary_founder),
     }
 
-    return false
+    setScan((current) => current ? { ...current, viewer: immediateViewer } : current)
+    setDetail((current) => current ? { ...current, viewer: { ...(current.viewer || {}), ...immediateViewer } } : current)
+    return true
+  }
+
+  async function syncViewerAfterDiscordLink(linkResult) {
+    const immediateLinked = applyImmediateDiscordLink(linkResult)
+
+    await fetchMe()
+    const nextScan = await loadScan(true, filters, selectedUserId)
+    if (selectedUserId) {
+      await loadDetail(selectedUserId, { silent: true })
+    }
+
+    return Boolean(nextScan?.viewer?.linked_discord || immediateLinked || useAuthStore.getState().user?.discord_id)
   }
 
   useEffect(() => {
@@ -600,7 +616,7 @@ export default function ScanPage() {
         throw new Error(result?.error || 'discord_link_failed')
       }
 
-      const synced = await syncViewerAfterDiscordLink()
+      const synced = await syncViewerAfterDiscordLink(result)
       if (!synced) {
         throw new Error('Le compte Discord est lie, mais la mise a jour n a pas encore fini. Reessaie dans quelques secondes.')
       }

@@ -167,7 +167,7 @@ function decodeDiscordLinkState(rawState, { throwOnInvalid = false } = {}) {
   }
 }
 
-function renderDiscordLinkPopup(res, linkState, { success, error = '' } = {}) {
+function renderDiscordLinkPopup(res, linkState, { success, error = '', linkedUser = null, oauthProfile = null } = {}) {
   const returnTo = sanitizeFrontendReturnPath(linkState?.returnTo);
   const fallbackUrl = buildFrontendRedirect(returnTo, success
     ? { discord_linked: '1' }
@@ -178,6 +178,8 @@ function renderDiscordLinkPopup(res, linkState, { success, error = '' } = {}) {
     status: success ? 'success' : 'error',
     error: success ? '' : String(error || 'discord_link_failed'),
     returnTo,
+    linkedDiscordId: success ? String(linkedUser?.discord_id || oauthProfile?.providerId || '') : '',
+    linkedDiscordUsername: success ? String(oauthProfile?.username || '') : '',
   };
 
   return res
@@ -375,9 +377,17 @@ if (discordOauthEnabled) {
 
       if (authResult.linkState) {
         try {
-          await authService.linkDiscordAccount(authResult.linkState.userId, authResult.oauthProfile);
+          const linkedUser = await authService.linkDiscordAccount(authResult.linkState.userId, authResult.oauthProfile);
+          wsServer.broadcastToUser(String(authResult.linkState.userId), {
+            event: 'account:profileUpdated',
+            data: { reason: 'discord_linked' },
+          });
           if (authResult.linkState.mode === 'popup') {
-            return renderDiscordLinkPopup(res, authResult.linkState, { success: true });
+            return renderDiscordLinkPopup(res, authResult.linkState, {
+              success: true,
+              linkedUser,
+              oauthProfile: authResult.oauthProfile,
+            });
           }
           return res.redirect(buildFrontendRedirect(authResult.linkState.returnTo, { discord_linked: '1' }));
         } catch (linkError) {

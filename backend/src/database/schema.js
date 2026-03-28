@@ -96,6 +96,20 @@ const SCHEMA = [
     UNIQUE(guild_id, user_id)
   )`,
 
+  `CREATE TABLE IF NOT EXISTS guild_access_codes (
+    id              TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    code            TEXT NOT NULL UNIQUE,
+    access_role     TEXT NOT NULL DEFAULT 'admin' CHECK(access_role IN ('admin','moderator','viewer')),
+    created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    expires_at      TEXT,
+    used_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    used_at         TEXT,
+    revoked_at      TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
   `CREATE TABLE IF NOT EXISTS collaboration_audit_log (
     id              TEXT PRIMARY KEY,
     guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,

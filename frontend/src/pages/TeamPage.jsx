@@ -37,9 +37,10 @@ import {
   Zap,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { teamAPI } from '../services/api'
-import { useGuildStore } from '../stores'
+import { authAPI, teamAPI } from '../services/api'
+import { useAuthStore, useGuildStore } from '../stores'
 import { wsService } from '../services/websocket'
+import { openDiscordLinkPopup } from '../utils/discordLinkPopup'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,40 @@ function initials(name) {
     .join('') || '?'
 }
 
+function formatAuditValue(key, value) {
+  if (value == null || value === '') return null
+  if (typeof value === 'boolean') return value ? 'oui' : 'non'
+  if (key === 'expires_in_hours' && Number(value) > 0) return `${value}h`
+  return String(value)
+}
+
+function describeAuditDetails(details = {}) {
+  const entries = Object.entries(details)
+    .map(([key, value]) => {
+      const label = String(key)
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (match) => match.toUpperCase())
+      const displayValue = formatAuditValue(key, value)
+      if (!displayValue) return null
+      return `${label}: ${displayValue}`
+    })
+    .filter(Boolean)
+
+  return entries.length > 0 ? entries.join(' · ') : ''
+}
+
+async function connectDiscordAccountWithPopup(returnTo, fetchMe) {
+  const response = await authAPI.createDiscordLink({ return_to: returnTo, mode: 'popup' })
+  const nextUrl = response?.data?.url
+  if (!nextUrl) throw new Error('Lien Discord indisponible')
+  const result = await openDiscordLinkPopup(nextUrl)
+  if (result?.status !== 'success') {
+    throw new Error(result?.error || 'discord_link_failed')
+  }
+  await fetchMe()
+  return result
+}
+
 const EXPIRY_OPTIONS = [
   { value: 0, label: 'Permanent' },
   { value: 1, label: '1 heure' },
@@ -106,6 +141,9 @@ const ROLE_CONFIG = {
 
 const AUDIT_ACTION_CONFIG = {
   invite:           { label: 'Invitation envoyee',       icon: UserPlus,  bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
+  code_create:      { label: 'Code genere',              icon: Plus,      bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20',    text: 'text-cyan-400' },
+  code_redeem:      { label: 'Equipe rejointe',          icon: UserCheck, bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
+  code_revoke:      { label: 'Code revoque',             icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
   revoke:           { label: 'Acces retire',             icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
   role_change:      { label: 'Role modifie',             icon: Shield,    bg: 'bg-violet-500/10',  border: 'border-violet-500/20',  text: 'text-violet-400' },
   suspend:          { label: 'Compte suspendu',          icon: Pause,     bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   text: 'text-amber-400' },
@@ -263,12 +301,15 @@ function StatPill({ icon: Icon, label, value, tone = 'cyan' }) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 export default function TeamPage() {
-  const { guilds, selectedGuildId } = useGuildStore()
+  const { user, fetchMe } = useAuthStore()
+  const { guilds, selectedGuildId, selectGuild } = useGuildStore()
   const guild = guilds.find((entry) => entry.id === selectedGuildId)
   const [overview, setOverview] = useState({ access: null, collaborators: [], snapshots: [] })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
   const [inviteForm, setInviteForm] = useState({ target: '', access_role: 'admin', expires_in_hours: 0 })
+  const [codeForm, setCodeForm] = useState({ access_role: 'admin', expires_in_hours: 1 })
+  const [joinCode, setJoinCode] = useState('')
   const [snapshotLabel, setSnapshotLabel] = useState('')
   const [activeTab, setActiveTab] = useState('team')
   const [auditData, setAuditData] = useState({ items: [], total: 0, page: 1 })
@@ -278,11 +319,14 @@ export default function TeamPage() {
   const locale = typeof navigator !== 'undefined' ? navigator.language || 'fr-FR' : 'fr-FR'
   const isOwner = !!overview.access?.is_owner
   const collaborators = overview.collaborators || []
+  const joinCodes = overview.join_codes || []
   const snapshots = overview.snapshots || []
   const nonOwnerCollabs = useMemo(() => collaborators.filter((c) => !c.is_owner), [collaborators])
   const activeCollabs = useMemo(() => nonOwnerCollabs.filter((c) => !c.is_suspended), [nonOwnerCollabs])
   const suspendedCollabs = useMemo(() => nonOwnerCollabs.filter((c) => c.is_suspended), [nonOwnerCollabs])
   const hasCollaborators = nonOwnerCollabs.length > 0
+  const ownGuilds = useMemo(() => guilds.filter((entry) => entry.is_owner), [guilds])
+  const sharedGuilds = useMemo(() => guilds.filter((entry) => !entry.is_owner), [guilds])
 
   // ── Data fetching ──────────────────────────────────────────────────────────
 
@@ -313,6 +357,8 @@ export default function TeamPage() {
   // Reset on guild change
   useEffect(() => {
     setInviteForm({ target: '', access_role: 'admin', expires_in_hours: 0 })
+    setCodeForm({ access_role: 'admin', expires_in_hours: 1 })
+    setJoinCode('')
     setSnapshotLabel('')
     setOverview({ access: null, collaborators: [], snapshots: [] })
     setActiveTab('team')
@@ -385,6 +431,71 @@ export default function TeamPage() {
       toast.success('Acces partage ajoute')
     } catch (error) {
       toast.error(getErrorMessage(error))
+    } finally {
+      setSaving('')
+    }
+  }
+
+  const handleCreateCode = async () => {
+    if (!selectedGuildId) return
+    setSaving('code:create')
+    try {
+      const response = await teamAPI.createCode(selectedGuildId, {
+        access_role: codeForm.access_role,
+        expires_in_hours: codeForm.expires_in_hours,
+      })
+      setOverview(response.data)
+      toast.success('Code genere')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSaving('')
+    }
+  }
+
+  const handleRevokeCode = async (codeId) => {
+    if (!selectedGuildId || !codeId) return
+    setSaving(`code:revoke:${codeId}`)
+    try {
+      const response = await teamAPI.revokeCode(selectedGuildId, codeId)
+      setOverview(response.data)
+      toast.success('Code revoque')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSaving('')
+    }
+  }
+
+  const handleRedeemCode = async () => {
+    if (!joinCode.trim()) return
+    setSaving('code:redeem')
+    try {
+      const response = await teamAPI.redeemCode({ code: joinCode.trim() })
+      await fetchMe()
+      await useGuildStore.getState().fetchGuilds()
+      if (response?.data?.guild?.id) {
+        selectGuild(response.data.guild.id)
+      }
+      setJoinCode('')
+      toast.success('Equipe rejointe')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSaving('')
+    }
+  }
+
+  const handleConnectDiscord = async () => {
+    setSaving('discord:link')
+    try {
+      const returnTo = '/dashboard/team'
+      await connectDiscordAccountWithPopup(returnTo, fetchMe)
+      toast.success('Compte Discord connecte')
+    } catch (error) {
+      if (String(error?.message || '') !== 'Popup fermee') {
+        toast.error(getErrorMessage(error))
+      }
     } finally {
       setSaving('')
     }
@@ -482,15 +593,30 @@ export default function TeamPage() {
 
   if (!selectedGuildId) {
     return (
-      <div className="px-4 pt-20 pb-5 sm:p-6 sm:pt-24 max-w-2xl mx-auto">
+      <div className="px-4 pt-20 pb-5 sm:p-6 sm:pt-24 max-w-5xl mx-auto space-y-5">
+        <JoinTeamCard
+          user={user}
+          joinCode={joinCode}
+          setJoinCode={setJoinCode}
+          saving={saving}
+          onRedeem={handleRedeemCode}
+          onConnectDiscord={handleConnectDiscord}
+        />
+        <WorkspaceSwitchCard
+          guilds={guilds}
+          ownGuilds={ownGuilds}
+          sharedGuilds={sharedGuilds}
+          selectedGuildId={selectedGuildId}
+          onSelectGuild={selectGuild}
+        />
         <div className="spotlight-card p-10 text-center">
           <div className="w-16 h-16 rounded-2xl border border-white/[0.06] bg-white/[0.02] flex items-center justify-center mx-auto mb-5">
             <Users className="w-7 h-7 text-white/15" />
           </div>
-          <p className="font-display font-700 text-white text-xl">Selectionne un serveur</p>
-          <p className="text-white/35 mt-2 text-sm max-w-sm mx-auto">La section Equipe est disponible des qu'un serveur est selectionne dans la barre laterale.</p>
+          <p className="font-display font-700 text-white text-xl">Selectionne un espace</p>
+          <p className="text-white/35 mt-2 text-sm max-w-sm mx-auto">Choisis ton propre serveur ou rejoins une equipe avec un code d acces a usage unique.</p>
           <Link to="/dashboard/servers" className="inline-flex items-center gap-2 mt-6 px-5 py-3 rounded-xl bg-neon-cyan/10 border border-neon-cyan/25 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/20 transition-all">
-            Choisir un serveur
+            Voir les serveurs
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
@@ -588,11 +714,26 @@ export default function TeamPage() {
               activeCollabs={activeCollabs}
               suspendedCollabs={suspendedCollabs}
               saving={saving}
+              user={user}
               inviteForm={inviteForm}
               setInviteForm={setInviteForm}
+              codeForm={codeForm}
+              setCodeForm={setCodeForm}
+              joinCode={joinCode}
+              setJoinCode={setJoinCode}
+              joinCodes={joinCodes}
               overview={overview}
               locale={locale}
+              guilds={guilds}
+              ownGuilds={ownGuilds}
+              sharedGuilds={sharedGuilds}
+              selectedGuildId={selectedGuildId}
+              onSelectGuild={selectGuild}
               onInvite={handleInvite}
+              onCreateCode={handleCreateCode}
+              onRevokeCode={handleRevokeCode}
+              onRedeemCode={handleRedeemCode}
+              onConnectDiscord={handleConnectDiscord}
               onMemberRole={handleMemberRole}
               onSuspend={handleSuspend}
               onRemoveMember={handleRemoveMember}
@@ -631,10 +772,214 @@ export default function TeamPage() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TEAM TAB
+// TEAM HELPERS / TEAM TAB
 // ══════════════════════════════════════════════════════════════════════════════
 
-function TeamTab({ isOwner, collaborators, nonOwnerCollabs, activeCollabs, suspendedCollabs, saving, inviteForm, setInviteForm, overview, locale, onInvite, onMemberRole, onSuspend, onRemoveMember }) {
+function WorkspaceSwitchCard({ ownGuilds, sharedGuilds, selectedGuildId, onSelectGuild }) {
+  const renderGuilds = (items, emptyMessage) => {
+    if (!items.length) {
+      return <p className="text-xs text-white/28">{emptyMessage}</p>
+    }
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {items.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => onSelectGuild(entry.id)}
+            className={`rounded-xl border px-3 py-2 text-left text-sm transition-all ${
+              selectedGuildId === entry.id
+                ? 'border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan'
+                : 'border-white/[0.06] bg-white/[0.03] text-white/65 hover:border-white/12 hover:text-white'
+            }`}
+          >
+            <span className="block font-display font-600">{entry.name}</span>
+            <span className="mt-1 block text-[11px] font-mono text-white/30">
+              {entry.is_owner ? 'Espace principal' : 'Espace partage'}
+            </span>
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="spotlight-card p-5 space-y-4">
+      <SectionTitle
+        icon={ArrowRight}
+        title="Basculer d espace"
+        subtitle="Passe de ton espace principal a un espace partage sans te deconnecter."
+        tone="cyan"
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Mes espaces</p>
+          {renderGuilds(ownGuilds, 'Aucun espace principal disponible.')}
+        </div>
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Espaces partages</p>
+          {renderGuilds(sharedGuilds, 'Aucune equipe rejointe pour le moment.')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function JoinTeamCard({ user, joinCode, setJoinCode, saving, onRedeem, onConnectDiscord }) {
+  const linked = Boolean(user?.discord_id)
+
+  return (
+    <div className="spotlight-card p-5 space-y-4">
+      <SectionTitle
+        icon={UserPlus}
+        title="Rejoindre une equipe"
+        subtitle="Le code est a usage unique. Un compte Discord lie est obligatoire avant validation."
+        tone="emerald"
+      />
+      {!linked ? (
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-display font-600 text-amber-100">Compte Discord requis</p>
+            <p className="mt-1 text-sm text-amber-100/70">Lie ton compte Discord une fois, puis les codes equipe marcheront instantanement.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onConnectDiscord}
+            disabled={saving === 'discord:link'}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300/25 bg-amber-400/10 px-4 py-3 text-sm font-mono text-amber-100 transition-all hover:bg-amber-400/15 disabled:opacity-50"
+          >
+            <Link2 className="w-4 h-4" />
+            {saving === 'discord:link' ? 'Connexion...' : 'Lier mon compte Discord'}
+          </button>
+        </div>
+      ) : null}
+      <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+        <input
+          className="input-field"
+          value={joinCode}
+          onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+          onKeyDown={(event) => event.key === 'Enter' && linked && onRedeem()}
+          placeholder="Code d acces a usage unique"
+        />
+        <button
+          type="button"
+          onClick={onRedeem}
+          disabled={!linked || saving === 'code:redeem' || !joinCode.trim()}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-5 py-3 text-sm font-mono text-emerald-300 transition-all hover:bg-emerald-400/20 disabled:opacity-40"
+        >
+          {saving === 'code:redeem' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+          {saving === 'code:redeem' ? 'Connexion...' : 'Rejoindre'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateCode, onRevokeCode }) {
+  return (
+    <div className="spotlight-card p-5 space-y-4">
+      <SectionTitle
+        icon={Shield}
+        title="Codes d acces rapides"
+        subtitle="Genere un code a usage unique, choisis le role et sa duree, puis partage-le."
+        tone="violet"
+      />
+      <div className="grid gap-3 sm:grid-cols-[180px_160px_auto]">
+        <select
+          className="select-field"
+          value={codeForm.access_role}
+          onChange={(event) => setCodeForm((current) => ({ ...current, access_role: event.target.value }))}
+        >
+          <option value="admin">Admin</option>
+          <option value="moderator">Moderateur</option>
+          <option value="viewer">Lecture seule</option>
+        </select>
+        <select
+          className="select-field"
+          value={codeForm.expires_in_hours}
+          onChange={(event) => setCodeForm((current) => ({ ...current, expires_in_hours: Number(event.target.value) }))}
+        >
+          {EXPIRY_OPTIONS.filter((option) => option.value !== 0).map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={onCreateCode}
+          disabled={saving === 'code:create'}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/10 px-5 py-3 text-sm font-mono text-violet-300 transition-all hover:bg-violet-500/20 disabled:opacity-40"
+        >
+          {saving === 'code:create' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {saving === 'code:create' ? 'Generation...' : 'Generer un code'}
+        </button>
+      </div>
+      {joinCodes.length === 0 ? (
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-sm text-white/35">
+          Aucun code actif pour l instant.
+        </div>
+      ) : (
+        <div className="grid gap-3 xl:grid-cols-2">
+          {joinCodes.map((entry) => (
+            <div key={entry.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-display text-lg font-700 text-white tracking-[0.18em]">{entry.code}</p>
+                  <p className="mt-1 text-xs text-white/32 font-mono">
+                    {ROLE_CONFIG[entry.access_role]?.label || entry.access_role} · expire {formatRelativeTime(entry.expires_at)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRevokeCode(entry.id)}
+                  disabled={saving === `code:revoke:${entry.id}`}
+                  className="inline-flex items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300 transition-all hover:bg-red-500/20 disabled:opacity-40"
+                >
+                  {saving === `code:revoke:${entry.id}` ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs text-white/35">
+                <span>Cree {timeAgo(entry.created_at)}</span>
+                <span className="font-mono">1 seule utilisation</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TeamTab({
+  isOwner,
+  collaborators,
+  nonOwnerCollabs,
+  activeCollabs,
+  suspendedCollabs,
+  saving,
+  user,
+  inviteForm,
+  setInviteForm,
+  codeForm,
+  setCodeForm,
+  joinCode,
+  setJoinCode,
+  joinCodes,
+  locale,
+  guilds,
+  ownGuilds,
+  sharedGuilds,
+  selectedGuildId,
+  onSelectGuild,
+  onInvite,
+  onCreateCode,
+  onRevokeCode,
+  onRedeemCode,
+  onConnectDiscord,
+  onMemberRole,
+  onSuspend,
+  onRemoveMember,
+}) {
   const [showInviteForm, setShowInviteForm] = useState(false)
   const ownerEntry = collaborators.find((c) => c.is_owner)
 

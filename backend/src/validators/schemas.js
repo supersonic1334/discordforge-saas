@@ -134,6 +134,15 @@ const guildAccessInviteSchema = z.object({
   expires_in_hours: z.number().int().min(0).max(8760).optional().default(0),
 });
 
+const guildAccessCodeCreateSchema = z.object({
+  access_role: z.enum(['admin', 'moderator', 'viewer']).optional().default('admin'),
+  expires_in_hours: z.number().int().min(0).max(8760).optional().default(1),
+});
+
+const guildAccessCodeRedeemSchema = z.object({
+  code: z.string().trim().min(6).max(64),
+});
+
 const guildAccessRoleSchema = z.object({
   access_role: z.enum(['admin', 'moderator', 'viewer']),
 });
@@ -330,6 +339,8 @@ module.exports = {
   guildDmConfigSchema,
   directMessageSchema,
   guildAccessInviteSchema,
+  guildAccessCodeCreateSchema,
+  guildAccessCodeRedeemSchema,
   guildAccessRoleSchema,
   guildAccessSuspendSchema,
   guildSnapshotCreateSchema,

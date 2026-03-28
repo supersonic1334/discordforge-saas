@@ -59,12 +59,12 @@ const UI = {
     promptEditPlaceholder: 'Exemple : remplace la réponse par une version plus courte et plus propre',
     voiceStart: 'Parler',
     voiceStop: 'Stop micro',
-    voiceListening: 'Ecoute en cours...',
+    voiceListening: 'Dictee en cours',
     voicePreparing: 'Autorisation micro...',
-    voiceStopDictation: 'Arreter la dictee',
-    voiceSendTranscript: 'Transcrire et generer',
-    voiceLiveTranscript: 'Transcription en direct',
-    voiceTranscriptPlaceholder: 'Parle librement. La transcription apparait ici en temps reel.',
+    voiceStopDictation: 'Arreter',
+    voiceSendTranscript: 'Envoyer des que pret',
+    voiceLiveTranscript: 'Micro simple',
+    voiceTranscriptPlaceholder: 'Parle librement. Apres 3 secondes de silence, le texte sera insere ici.',
     voiceUnsupported: 'Micro non pris en charge sur ce navigateur.',
     voiceDenied: 'Autorise le micro pour utiliser la dictée.',
     voiceError: 'La dictée vocale a rencontré un problème.',
@@ -120,12 +120,12 @@ const UI = {
     promptEditPlaceholder: 'Example: replace the response with a shorter and cleaner version',
     voiceStart: 'Speak',
     voiceStop: 'Stop mic',
-    voiceListening: 'Listening...',
+    voiceListening: 'Dictation in progress',
     voicePreparing: 'Requesting mic...',
-    voiceStopDictation: 'Stop dictation',
-    voiceSendTranscript: 'Transcribe and generate',
-    voiceLiveTranscript: 'Live transcript',
-    voiceTranscriptPlaceholder: 'Speak naturally. The live transcript appears here in real time.',
+    voiceStopDictation: 'Stop',
+    voiceSendTranscript: 'Send when ready',
+    voiceLiveTranscript: 'Simple microphone',
+    voiceTranscriptPlaceholder: 'Speak naturally. After 3 seconds of silence, the text is inserted here.',
     voiceUnsupported: 'Microphone is not supported on this browser.',
     voiceDenied: 'Allow microphone access to use voice dictation.',
     voiceError: 'Voice dictation ran into an issue.',
@@ -181,12 +181,12 @@ const UI = {
     promptEditPlaceholder: 'Ejemplo: reemplaza la respuesta por una version mas corta y mas limpia',
     voiceStart: 'Hablar',
     voiceStop: 'Detener micro',
-    voiceListening: 'Escuchando...',
+    voiceListening: 'Dictado en curso',
     voicePreparing: 'Autorizando micro...',
-    voiceStopDictation: 'Detener dictado',
-    voiceSendTranscript: 'Transcribir y generar',
-    voiceLiveTranscript: 'Transcripcion en vivo',
-    voiceTranscriptPlaceholder: 'Habla con normalidad. La transcripcion aparece aqui en tiempo real.',
+    voiceStopDictation: 'Detener',
+    voiceSendTranscript: 'Enviar cuando este listo',
+    voiceLiveTranscript: 'Micro simple',
+    voiceTranscriptPlaceholder: 'Habla con normalidad. Tras 3 segundos de silencio, el texto se inserta aqui.',
     voiceUnsupported: 'El micro no es compatible con este navegador.',
     voiceDenied: 'Autoriza el micro para usar la dictado por voz.',
     voiceError: 'El dictado por voz encontro un problema.',
@@ -229,10 +229,10 @@ Object.assign(UI.fr, {
   slashNameHint: 'Exemple : music',
   promptPlaceholder: 'Exemple : crée une commande annonce qui répond en embed avec le titre Infos du serveur',
   promptEditPlaceholder: 'Exemple : remplace la réponse par une version plus courte et plus propre',
-  voiceListening: 'Écoute en cours...',
+  voiceListening: 'Dictee en cours',
   voicePreparing: 'Autorisation du micro...',
-  voiceStopDictation: 'Arrêter et insérer',
-  voiceSendTranscript: 'Transcrire et générer',
+  voiceStopDictation: 'Arreter',
+  voiceSendTranscript: 'Envoyer des que pret',
   voiceDenied: 'Autorise le micro pour utiliser la dictée.',
   voiceError: 'La dictée vocale a rencontré un problème.',
   saveTrigger: 'Enregistrer le declencheur',
@@ -956,7 +956,7 @@ export default function CommandsPage() {
 
     const resolvedPrompt = String(overridePrompt || '').trim()
       ? String(overridePrompt || '').trim()
-      : (speech.isListening ? await speech.stop() : prompt)
+      : (speech.isListening || speech.isProcessing ? await speech.stop() : prompt)
     const cleanPrompt = String(resolvedPrompt || '').trim()
     if (!cleanPrompt) {
       if (editingCommand && canSaveTriggerOnly) {
@@ -1416,7 +1416,7 @@ export default function CommandsPage() {
                       <button
                         type="button"
                         onClick={stopCommandDictation}
-                        disabled={speech.isRequestingPermission || speech.isProcessing}
+                        disabled={speech.isRequestingPermission || assistantLoading}
                         className="flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] text-white/88 transition-all disabled:opacity-55"
                         title={ui.voiceStopDictation}
                       >
@@ -1425,7 +1425,7 @@ export default function CommandsPage() {
                       <button
                         type="button"
                         onClick={sendCommandDictation}
-                        disabled={speech.isRequestingPermission || speech.isProcessing || assistantLoading}
+                        disabled={speech.isRequestingPermission || assistantLoading}
                         className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan text-white shadow-neon-violet transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                         title={ui.voiceSendTranscript}
                       >
@@ -1463,9 +1463,9 @@ export default function CommandsPage() {
                   active={speech.isListening}
                   processing={speech.isRequestingPermission || speech.isProcessing}
                   statusLabel={speech.isRequestingPermission ? ui.voicePreparing : speech.isProcessing ? ui.voiceSendTranscript : ui.voiceListening}
-                  liveLabel={ui.voiceLiveTranscript}
-                  transcript={speech.liveTranscript || speech.interimTranscript}
-                  placeholder={ui.voiceTranscriptPlaceholder}
+                  helperText={speech.isProcessing
+                    ? ui.voiceSendTranscript
+                    : ui.voiceTranscriptPlaceholder}
                 />
               )}
             </div>

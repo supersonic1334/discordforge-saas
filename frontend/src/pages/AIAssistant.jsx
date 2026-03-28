@@ -11,28 +11,28 @@ import VoiceComposerPanel from '../components/VoiceComposerPanel'
 
 const VOICE_UI = {
   fr: {
-    insert: 'Arrêter et insérer',
-    send: 'Transcrire et envoyer',
-    live: 'Transcription en direct',
-    listening: 'Écoute en cours',
+    insert: 'Arreter',
+    send: 'Envoyer des que pret',
+    live: 'Micro simple',
+    listening: 'Dictee en cours',
     preparing: 'Autorisation du micro…',
-    placeholder: 'Parle librement. La transcription apparait ici en temps reel.',
+    placeholder: 'Parle librement. Apres 3 secondes de silence, le texte sera insere ici.',
   },
   en: {
-    insert: 'Stop and insert',
-    send: 'Transcribe and send',
-    live: 'Live transcript',
-    listening: 'Listening',
+    insert: 'Stop',
+    send: 'Send when ready',
+    live: 'Simple microphone',
+    listening: 'Dictation in progress',
     preparing: 'Allowing microphone…',
-    placeholder: 'Speak naturally. The live transcript appears here in real time.',
+    placeholder: 'Speak naturally. After 3 seconds of silence, the text is inserted here.',
   },
   es: {
-    insert: 'Detener e insertar',
-    send: 'Transcribir y enviar',
-    live: 'Transcripcion en vivo',
-    listening: 'Escuchando',
+    insert: 'Detener',
+    send: 'Enviar cuando este listo',
+    live: 'Micro simple',
+    listening: 'Dictado en curso',
     preparing: 'Autorizando microfono…',
-    placeholder: 'Habla con normalidad. La transcripcion aparece aqui en tiempo real.',
+    placeholder: 'Habla con normalidad. Tras 3 segundos de silencio, el texto se inserta aqui.',
   },
 }
 
@@ -341,9 +341,7 @@ export default function AIAssistant() {
                   active={speech.isListening}
                   processing={speech.isRequestingPermission || speech.isProcessing}
                   statusLabel={speech.isRequestingPermission ? voiceUi.preparing : speech.isProcessing ? voiceUi.send : voiceUi.listening}
-                  liveLabel={voiceUi.live}
-                  transcript={speech.liveTranscript || speech.interimTranscript}
-                  placeholder={voiceUi.placeholder}
+                  helperText={speech.isProcessing ? voiceUi.send : voiceUi.placeholder}
                 />
               </motion.div>
             )}
@@ -371,7 +369,7 @@ export default function AIAssistant() {
                   <motion.button
                     type="button"
                     onClick={stopDictation}
-                    disabled={speech.isRequestingPermission || speech.isProcessing}
+                    disabled={speech.isRequestingPermission || loading}
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
                     className="h-11 w-11 rounded-full border border-white/12 bg-white/[0.06] text-white/88 flex items-center justify-center transition-all shrink-0 disabled:opacity-55"
@@ -382,7 +380,7 @@ export default function AIAssistant() {
                   <motion.button
                     type="button"
                     onClick={sendDictation}
-                    disabled={speech.isRequestingPermission || speech.isProcessing || loading}
+                    disabled={speech.isRequestingPermission || loading}
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
                     className="h-11 w-11 rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan flex items-center justify-center text-white shadow-neon-violet disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"

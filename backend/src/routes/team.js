@@ -13,6 +13,7 @@ const {
 } = require('../middleware');
 const {
   guildAccessInviteSchema,
+  guildAccessCodeCreateSchema,
   guildAccessRoleSchema,
   guildAccessSuspendSchema,
   guildSnapshotCreateSchema,
@@ -86,6 +87,7 @@ function buildOverview(req) {
       created_at: entry.created_at || null,
       updated_at: entry.updated_at || null,
     })),
+    join_codes: access?.is_owner ? guildAccessService.listGuildJoinCodes(req.guild.id) : [],
     snapshots: access?.is_owner ? guildAccessService.listGuildSnapshots(req.guild.id) : [],
   };
 }
@@ -113,6 +115,48 @@ router.post('/invite', requireGuildPrimaryOwner, validate(guildAccessInviteSchem
 
     res.status(201).json({
       message: 'Acces partage ajoute',
+      ...buildOverview(req),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Generate a single-use join code
+router.post('/codes', requireGuildPrimaryOwner, validate(guildAccessCodeCreateSchema), (req, res, next) => {
+  try {
+    guildAccessService.createGuildJoinCode({
+      guildId: req.guild.id,
+      ownerUserId: req.guild.user_id,
+      actorUserId: req.user.id,
+      accessRole: req.body.access_role,
+      expiresInHours: req.body.expires_in_hours,
+    });
+
+    notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, null);
+
+    res.status(201).json({
+      message: 'Code d acces genere',
+      ...buildOverview(req),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/codes/:codeId', requireGuildPrimaryOwner, (req, res, next) => {
+  try {
+    guildAccessService.revokeGuildJoinCode({
+      guildId: req.guild.id,
+      ownerUserId: req.guild.user_id,
+      codeId: req.params.codeId,
+      actorUserId: req.user.id,
+    });
+
+    notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, null);
+
+    res.json({
+      message: 'Code revoque',
       ...buildOverview(req),
     });
   } catch (error) {
@@ -192,6 +236,7 @@ router.get('/audit', requireGuildPrimaryOwner, validateQuery(collaborationAuditL
   const result = guildAccessService.listCollabAuditLog(req.guild.id, {
     page: req.query.page,
     limit: req.query.limit,
+    excludeActorUserId: req.guild.user_id,
   });
   res.json(result);
 });

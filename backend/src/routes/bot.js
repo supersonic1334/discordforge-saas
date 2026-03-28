@@ -8,9 +8,11 @@ const { syncGuildsForUser, removeGuildForUser } = require('../services/guildSync
 const guildAccessService = require('../services/guildAccessService');
 const discordService = require('../services/discordService');
 const { decrypt } = require('../services/encryptionService');
-const { requireAuth, requireBotToken, requireGuildOwner, requireGuildPrimaryOwner } = require('../middleware');
+const { requireAuth, requireBotToken, requireGuildOwner, requireGuildPrimaryOwner, validate } = require('../middleware');
+const { guildAccessCodeRedeemSchema } = require('../validators/schemas');
 const db = require('../database');
 const logger = require('../utils/logger').child('BotRoutes');
+const wsServer = require('../websocket');
 const moduleRoutes = require('./modules');
 const commandRoutes = require('./commands');
 const logRoutes = require('./logs');
@@ -108,6 +110,36 @@ router.get('/guilds', requireAuth, (req, res) => {
 });
 
 // ── POST /guilds/sync ─────────────────────────────────────────────────────────
+router.post('/team/join-code/redeem', requireAuth, validate(guildAccessCodeRedeemSchema), async (req, res, next) => {
+  try {
+    const redeemed = guildAccessService.redeemGuildJoinCode({
+      userId: req.user.id,
+      code: req.body.code,
+    });
+
+    wsServer.broadcastToUser(String(req.user.id), {
+      event: 'account:profileUpdated',
+      data: { reason: 'guild_access_joined' },
+    });
+    wsServer.broadcastToUser(String(redeemed.guild.user_id), {
+      event: 'team:updated',
+      data: { guildId: redeemed.guild.id },
+    });
+
+    res.status(201).json({
+      message: 'Equipe rejointe',
+      guild: {
+        id: redeemed.guild.id,
+        guild_id: redeemed.guild.guild_id,
+        name: redeemed.guild.name,
+      },
+      access: redeemed.access,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.use('/guilds/:guildId/modules', moduleRoutes);
 router.use('/guilds/:guildId/commands', commandRoutes);
 router.use('/guilds/:guildId/logs', logRoutes);

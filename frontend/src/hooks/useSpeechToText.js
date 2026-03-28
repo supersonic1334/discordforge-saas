@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aiAPI } from '../services/api'
 
-const IDLE_BARS = [0.16, 0.24, 0.2, 0.3, 0.22, 0.28, 0.18, 0.24]
-const RESTARTABLE_ERRORS = new Set(['no-speech', 'audio-capture'])
+const IDLE_BARS = [0.18, 0.24, 0.2, 0.3, 0.22, 0.28, 0.2, 0.24]
+const VOLUME_THRESHOLD = 0.038
+const PEAK_THRESHOLD = 0.14
+const DEFAULT_SILENCE_MS = 3000
 const ERROR_COOLDOWN_MS = 1800
 
-function getRecognitionConstructor() {
-  if (typeof window === 'undefined') return null
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null
+function detectEngine() {
+  if (typeof window === 'undefined') return 'unsupported'
+  if (window.MediaRecorder && navigator?.mediaDevices?.getUserMedia) return 'server'
+  return 'unsupported'
 }
 
 function normalizeLocale(locale) {
@@ -16,32 +19,6 @@ function normalizeLocale(locale) {
   if (key.startsWith('es')) return 'es-ES'
   if (key.startsWith('en')) return 'en-US'
   return 'fr-FR'
-}
-
-function getRecordingLabel(locale) {
-  const key = String(locale || 'fr').toLowerCase()
-  if (key.startsWith('en')) return 'Recording in progress...'
-  if (key.startsWith('es')) return 'Grabacion en curso...'
-  return 'Enregistrement en cours...'
-}
-
-function mergeTranscript(...parts) {
-  return parts
-    .map((part) => String(part || '').trim())
-    .filter(Boolean)
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function detectSpeechEngine() {
-  if (typeof window === 'undefined') return 'unsupported'
-
-  const recognition = getRecognitionConstructor()
-  const hasRecorder = Boolean(window.MediaRecorder && navigator?.mediaDevices?.getUserMedia)
-  if (recognition) return 'native'
-  if (hasRecorder) return 'server'
-  return 'unsupported'
 }
 
 function getPreferredMimeType() {
@@ -53,6 +30,15 @@ function getPreferredMimeType() {
     'audio/ogg;codecs=opus',
   ]
   return candidates.find((candidate) => window.MediaRecorder.isTypeSupported(candidate)) || 'audio/webm'
+}
+
+function mergeTranscript(...parts) {
+  return parts
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function blobToBase64(blob) {
@@ -68,33 +54,35 @@ function blobToBase64(blob) {
   })
 }
 
-export function useSpeechToText({ value, onChange, locale, onError }) {
-  const recognitionRef = useRef(null)
+export function useSpeechToText({
+  value,
+  onChange,
+  locale,
+  onError,
+  silenceMs = DEFAULT_SILENCE_MS,
+}) {
+  const mountedRef = useRef(true)
   const mediaRecorderRef = useRef(null)
-  const recorderMimeTypeRef = useRef('audio/webm')
-  const recordedChunksRef = useRef([])
-  const restartTimeoutRef = useRef(null)
-  const stopResolverRef = useRef(null)
-  const animationFrameRef = useRef(null)
+  const streamRef = useRef(null)
   const audioContextRef = useRef(null)
   const analyserRef = useRef(null)
   const sourceRef = useRef(null)
-  const streamRef = useRef(null)
-  const mountedRef = useRef(true)
-  const shouldResumeRef = useRef(false)
+  const animationFrameRef = useRef(null)
+  const recorderMimeTypeRef = useRef('audio/webm')
+  const recordedChunksRef = useRef([])
   const baseValueRef = useRef('')
   const finalTranscriptRef = useRef('')
-  const interimTranscriptRef = useRef('')
-  const activeEngineRef = useRef('unsupported')
+  const heardSpeechRef = useRef(false)
+  const lastSpeechAtRef = useRef(0)
+  const pendingPromiseRef = useRef(null)
   const lastErrorRef = useRef({ code: '', at: 0 })
 
+  const [engine, setEngine] = useState(() => detectEngine())
   const [isListening, setIsListening] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [finalTranscript, setFinalTranscript] = useState('')
-  const [interimTranscript, setInterimTranscript] = useState('')
   const [audioBars, setAudioBars] = useState(IDLE_BARS)
-  const [engine, setEngine] = useState(() => detectSpeechEngine())
+  const [finalTranscript, setFinalTranscript] = useState('')
 
   const isSupported = useMemo(() => engine !== 'unsupported', [engine])
 
@@ -102,8 +90,8 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     const normalizedCode = String(code || 'speech-error')
     const now = Date.now()
     if (
-      lastErrorRef.current.code === normalizedCode
-      && now - lastErrorRef.current.at < ERROR_COOLDOWN_MS
+      lastErrorRef.current.code === normalizedCode &&
+      now - lastErrorRef.current.at < ERROR_COOLDOWN_MS
     ) {
       return
     }
@@ -112,21 +100,11 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     onError?.(normalizedCode)
   }, [onError])
 
-  const clearRestartTimeout = useCallback(() => {
-    if (restartTimeoutRef.current) {
-      window.clearTimeout(restartTimeoutRef.current)
-      restartTimeoutRef.current = null
-    }
+  const resetBars = useCallback(() => {
+    setAudioBars(IDLE_BARS)
   }, [])
 
-  const resolveStop = useCallback((nextValue) => {
-    if (stopResolverRef.current) {
-      stopResolverRef.current(nextValue)
-      stopResolverRef.current = null
-    }
-  }, [])
-
-  const stopAudioMeter = useCallback((stopTracks = true) => {
+  const cleanupAudio = useCallback(() => {
     if (typeof window !== 'undefined' && animationFrameRef.current) {
       window.cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
@@ -147,53 +125,77 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       audioContextRef.current = null
     }
 
-    if (stopTracks && streamRef.current) {
+    if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
     }
 
-    setAudioBars(IDLE_BARS)
+    resetBars()
+  }, [resetBars])
+
+  const resolvePending = useCallback((nextValue) => {
+    if (pendingPromiseRef.current?.resolve) {
+      pendingPromiseRef.current.resolve(nextValue)
+      pendingPromiseRef.current = null
+    }
   }, [])
 
-  const resetTranscripts = useCallback(() => {
-    finalTranscriptRef.current = ''
-    interimTranscriptRef.current = ''
-    setFinalTranscript('')
-    setInterimTranscript('')
+  const ensurePendingPromise = useCallback(() => {
+    if (!pendingPromiseRef.current) {
+      let resolve
+      const promise = new Promise((nextResolve) => {
+        resolve = nextResolve
+      })
+      pendingPromiseRef.current = { promise, resolve }
+    }
+    return pendingPromiseRef.current.promise
   }, [])
 
-  const finalizeSession = useCallback((nextValue) => {
-    clearRestartTimeout()
-    shouldResumeRef.current = false
-    recognitionRef.current = null
+  const finalizeSession = useCallback((nextValue, transcript = '') => {
     mediaRecorderRef.current = null
     recordedChunksRef.current = []
-    activeEngineRef.current = 'idle'
-    stopAudioMeter(true)
-    setIsListening(false)
-    setIsRequestingPermission(false)
-    setIsProcessing(false)
-    resetTranscripts()
-    onChange(nextValue)
-    resolveStop(nextValue)
-    return nextValue
-  }, [clearRestartTimeout, onChange, resetTranscripts, resolveStop, stopAudioMeter])
+    heardSpeechRef.current = false
+    lastSpeechAtRef.current = 0
+    finalTranscriptRef.current = transcript
+    cleanupAudio()
 
-  const startAudioMeter = useCallback(async (stream) => {
+    if (mountedRef.current) {
+      setIsListening(false)
+      setIsRequestingPermission(false)
+      setIsProcessing(false)
+      setFinalTranscript(transcript)
+      onChange(nextValue)
+    }
+
+    resolvePending(nextValue)
+    return nextValue
+  }, [cleanupAudio, onChange, resolvePending])
+
+  const stopRecorder = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      setIsListening(false)
+      setIsProcessing(true)
+      try {
+        mediaRecorderRef.current.stop()
+      } catch {
+        finalizeSession(baseValueRef.current, '')
+      }
+    }
+  }, [finalizeSession])
+
+  const startAudioMonitor = useCallback(async (stream) => {
     if (typeof window === 'undefined' || !stream) return
 
     const AudioContextClass = window.AudioContext || window.webkitAudioContext
     if (!AudioContextClass) return
 
-    stopAudioMeter(false)
-
     const context = new AudioContextClass()
     const analyser = context.createAnalyser()
     const source = context.createMediaStreamSource(stream)
-    const frequencyData = new Uint8Array(256)
+    const timeDomainData = new Uint8Array(256)
 
     analyser.fftSize = 512
-    analyser.smoothingTimeConstant = 0.72
+    analyser.smoothingTimeConstant = 0.7
     source.connect(analyser)
 
     audioContextRef.current = context
@@ -208,107 +210,45 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     const tick = () => {
       if (!mountedRef.current || !analyserRef.current) return
 
-      analyserRef.current.getByteFrequencyData(frequencyData)
-      const bucketSize = Math.max(1, Math.floor(frequencyData.length / IDLE_BARS.length))
+      analyserRef.current.getByteTimeDomainData(timeDomainData)
+
+      let peak = 0
+      const bucketSize = Math.max(1, Math.floor(timeDomainData.length / IDLE_BARS.length))
       const nextBars = Array.from({ length: IDLE_BARS.length }, (_, index) => {
         const start = index * bucketSize
-        const end = Math.min(frequencyData.length, start + bucketSize)
-        let peak = 0
+        const end = Math.min(timeDomainData.length, start + bucketSize)
+        let bucketPeak = 0
+
         for (let cursor = start; cursor < end; cursor += 1) {
-          peak = Math.max(peak, frequencyData[cursor])
+          const delta = Math.abs((timeDomainData[cursor] - 128) / 128)
+          bucketPeak = Math.max(bucketPeak, delta)
+          peak = Math.max(peak, delta)
         }
-        const normalized = Math.max(0.12, Math.min(1.2, peak / 118))
-        return normalized
+
+        return Math.max(0.14, Math.min(1.05, bucketPeak * 3.4))
       })
 
       setAudioBars(nextBars)
+
+      if (peak >= PEAK_THRESHOLD || nextBars.some((bar) => bar >= VOLUME_THRESHOLD * 3.2)) {
+        heardSpeechRef.current = true
+        lastSpeechAtRef.current = Date.now()
+      }
+
+      if (
+        heardSpeechRef.current &&
+        lastSpeechAtRef.current > 0 &&
+        Date.now() - lastSpeechAtRef.current >= silenceMs
+      ) {
+        stopRecorder()
+        return
+      }
+
       animationFrameRef.current = window.requestAnimationFrame(tick)
     }
 
     animationFrameRef.current = window.requestAnimationFrame(tick)
-  }, [stopAudioMeter])
-
-  const createRecognition = useCallback(() => {
-    const Recognition = getRecognitionConstructor()
-    if (!Recognition) return null
-
-    const recognition = new Recognition()
-    recognition.lang = normalizeLocale(locale)
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.maxAlternatives = 3
-
-    recognition.onresult = (event) => {
-      let nextFinal = ''
-      let nextInterim = ''
-
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const chunk = String(event.results[index]?.[0]?.transcript || '').trim()
-        if (!chunk) continue
-
-        if (event.results[index].isFinal) {
-          nextFinal = mergeTranscript(nextFinal, chunk)
-        } else {
-          nextInterim = mergeTranscript(nextInterim, chunk)
-        }
-      }
-
-      if (nextFinal) {
-        finalTranscriptRef.current = mergeTranscript(finalTranscriptRef.current, nextFinal)
-        setFinalTranscript(finalTranscriptRef.current)
-      }
-
-      interimTranscriptRef.current = nextInterim
-      setInterimTranscript(nextInterim)
-      onChange(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, nextInterim))
-    }
-
-    recognition.onerror = (event) => {
-      const code = event?.error || 'speech-error'
-      if (code === 'aborted') return
-
-      if (code === 'not-allowed' || code === 'service-not-allowed') {
-        shouldResumeRef.current = false
-        emitError(code)
-        finalizeSession(baseValueRef.current)
-        return
-      }
-
-      if (!RESTARTABLE_ERRORS.has(code)) {
-        emitError(code)
-      }
-    }
-
-    recognition.onend = () => {
-      recognitionRef.current = null
-
-      if (shouldResumeRef.current && mountedRef.current && activeEngineRef.current === 'native') {
-        clearRestartTimeout()
-        restartTimeoutRef.current = window.setTimeout(() => {
-          if (!shouldResumeRef.current || !mountedRef.current) return
-          const nextRecognition = createRecognition()
-          if (!nextRecognition) {
-            finalizeSession(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current))
-            return
-          }
-          recognitionRef.current = nextRecognition
-          try {
-            nextRecognition.start()
-            setIsListening(true)
-            setIsProcessing(false)
-          } catch (error) {
-            emitError(error?.message || 'speech-restart-error')
-            finalizeSession(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current))
-          }
-        }, 160)
-        return
-      }
-
-      finalizeSession(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current))
-    }
-
-    return recognition
-  }, [clearRestartTimeout, emitError, finalizeSession, locale, onChange])
+  }, [silenceMs, stopRecorder])
 
   const transcribeRecordedAudio = useCallback(async (blob) => {
     const audioBase64 = await blobToBase64(blob)
@@ -321,20 +261,23 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   }, [locale])
 
   const start = useCallback(async () => {
-    if (isListening || isRequestingPermission || isProcessing) return
+    if (isListening || isProcessing || isRequestingPermission) return
 
-    const detectedEngine = detectSpeechEngine()
-    setEngine(detectedEngine)
-    activeEngineRef.current = detectedEngine
-
-    if (detectedEngine === 'unsupported') {
+    const nextEngine = detectEngine()
+    setEngine(nextEngine)
+    if (nextEngine === 'unsupported') {
       emitError('unsupported')
       return
     }
 
     setIsRequestingPermission(true)
+    setFinalTranscript('')
+    finalTranscriptRef.current = ''
     baseValueRef.current = String(value || '')
-    resetTranscripts()
+    recordedChunksRef.current = []
+    heardSpeechRef.current = false
+    lastSpeechAtRef.current = 0
+    ensurePendingPromise()
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -345,147 +288,107 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
         },
       })
 
-      await startAudioMeter(stream)
+      await startAudioMonitor(stream)
 
-      if (detectedEngine === 'server') {
-        const mimeType = getPreferredMimeType()
-        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-        recorderMimeTypeRef.current = recorder.mimeType || mimeType || 'audio/webm'
-        recordedChunksRef.current = []
+      const mimeType = getPreferredMimeType()
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      recorderMimeTypeRef.current = recorder.mimeType || mimeType || 'audio/webm'
+      mediaRecorderRef.current = recorder
 
-        recorder.ondataavailable = (event) => {
-          if (event.data && event.data.size > 0) {
-            recordedChunksRef.current.push(event.data)
-          }
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data)
         }
+      }
 
-        recorder.onstop = async () => {
-          try {
-            setIsListening(false)
-            setIsProcessing(true)
+      recorder.onstop = async () => {
+        try {
+          const blob = new Blob(recordedChunksRef.current, {
+            type: recorderMimeTypeRef.current || 'audio/webm',
+          })
 
-            const blob = new Blob(recordedChunksRef.current, {
-              type: recorderMimeTypeRef.current || 'audio/webm',
-            })
-
-            if (!blob.size) {
-              finalizeSession(baseValueRef.current)
-              return
-            }
+          if (!blob.size) {
+            finalizeSession(baseValueRef.current, '')
+            return
+          }
 
           const transcript = await transcribeRecordedAudio(blob)
           const nextValue = mergeTranscript(baseValueRef.current, transcript)
-          finalTranscriptRef.current = transcript
-          setFinalTranscript(transcript)
-          finalizeSession(nextValue)
+          finalizeSession(nextValue, transcript)
         } catch (error) {
           emitError(error?.response?.data?.error || error?.message || 'transcription-error')
-          finalizeSession(baseValueRef.current)
+          finalizeSession(baseValueRef.current, '')
         }
       }
 
-        mediaRecorderRef.current = recorder
-        recorder.start(250)
-        setIsRequestingPermission(false)
-        setIsListening(true)
-        setIsProcessing(false)
-        return
-      }
-
-      const recognition = createRecognition()
-      if (!recognition) {
-        throw new Error('unsupported')
-      }
-
-      shouldResumeRef.current = true
-      recognitionRef.current = recognition
-      recognition.start()
+      recorder.start(250)
       setIsRequestingPermission(false)
       setIsListening(true)
       setIsProcessing(false)
     } catch (error) {
-      const code = error?.name === 'NotAllowedError' ? 'not-allowed' : (error?.message || 'speech-start-error')
-      stopAudioMeter(true)
+      cleanupAudio()
       setIsRequestingPermission(false)
       setIsListening(false)
       setIsProcessing(false)
-      emitError(code)
+      pendingPromiseRef.current = null
+      emitError(error?.name === 'NotAllowedError' ? 'not-allowed' : (error?.message || 'speech-start-error'))
     }
-  }, [createRecognition, emitError, finalizeSession, isListening, isProcessing, isRequestingPermission, resetTranscripts, startAudioMeter, stopAudioMeter, transcribeRecordedAudio, value])
+  }, [
+    cleanupAudio,
+    emitError,
+    ensurePendingPromise,
+    finalizeSession,
+    isListening,
+    isProcessing,
+    isRequestingPermission,
+    startAudioMonitor,
+    transcribeRecordedAudio,
+    value,
+  ])
 
   const stop = useCallback(() => {
-    const currentValue = mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current)
-    if (!isListening && !isProcessing && !isRequestingPermission) {
-      return Promise.resolve(currentValue || String(value || ''))
+    const currentValue = mergeTranscript(baseValueRef.current, finalTranscriptRef.current)
+
+    if (isListening) {
+      const promise = ensurePendingPromise()
+      stopRecorder()
+      return promise
     }
 
-    return new Promise((resolve) => {
-      stopResolverRef.current = resolve
+    if (isProcessing) {
+      return ensurePendingPromise()
+    }
 
-      if (activeEngineRef.current === 'server' && mediaRecorderRef.current) {
-        setIsListening(false)
-        setIsProcessing(true)
-        try {
-          mediaRecorderRef.current.stop()
-        } catch {
-          finalizeSession(baseValueRef.current)
-        }
-        return
-      }
-
-      if (recognitionRef.current) {
-        shouldResumeRef.current = false
-        setIsListening(false)
-        setIsProcessing(true)
-        try {
-          recognitionRef.current.stop()
-        } catch {
-          finalizeSession(currentValue)
-        }
-        return
-      }
-
-      finalizeSession(currentValue)
-    })
-  }, [finalizeSession, isListening, isProcessing, isRequestingPermission, value])
+    return Promise.resolve(currentValue || String(value || ''))
+  }, [ensurePendingPromise, isListening, isProcessing, stopRecorder, value])
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
-      clearRestartTimeout()
-      shouldResumeRef.current = false
       try {
-        recognitionRef.current?.abort?.()
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop()
+        }
       } catch {}
-      try {
-        mediaRecorderRef.current?.stop?.()
-      } catch {}
-      stopAudioMeter(true)
+      cleanupAudio()
     }
-  }, [clearRestartTimeout, stopAudioMeter])
+  }, [cleanupAudio])
 
   useEffect(() => {
-    const nextEngine = detectSpeechEngine()
-    setEngine(nextEngine)
+    setEngine(detectEngine())
   }, [])
 
-  const liveTranscript = useMemo(() => {
-    if (activeEngineRef.current === 'server' && isListening) {
-      return getRecordingLabel(locale)
-    }
-    return mergeTranscript(finalTranscript, interimTranscript)
-  }, [finalTranscript, interimTranscript, isListening, locale])
-
   return {
+    engine,
     isSupported,
     isListening,
     isRequestingPermission,
     isProcessing,
     audioBars,
     finalTranscript,
-    interimTranscript,
-    liveTranscript,
-    engine,
+    interimTranscript: '',
+    liveTranscript: finalTranscript,
     start,
     stop,
   }

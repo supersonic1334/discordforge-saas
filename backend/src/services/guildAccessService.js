@@ -1,6 +1,7 @@
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
+const { randomBytes } = require('crypto');
 
 const db = require('../database');
 const { initializeDefaultModules } = require('./guildSyncService');
@@ -13,6 +14,16 @@ function normalizeLookup(value) {
 
 function normalizeAccessRole(value) {
   return ACCESS_ROLES.includes(value) ? value : 'admin';
+}
+
+function buildAccessCode() {
+  return randomBytes(5).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+}
+
+function maskAccessCode(code) {
+  const raw = String(code || '').trim().toUpperCase();
+  if (!raw) return '';
+  return raw.length <= 4 ? raw : `${raw.slice(0, 4)}••••`;
 }
 
 function parseJson(value, fallback) {
@@ -38,15 +49,28 @@ function logCollabAction({ guildId, actorUserId, actorUsername, actionType, targ
   });
 }
 
-function listCollabAuditLog(guildId, { page = 1, limit = 30 } = {}) {
+function listCollabAuditLog(guildId, { page = 1, limit = 30, excludeActorUserId = null } = {}) {
   const offset = (page - 1) * limit;
-  const total = db.db.prepare('SELECT COUNT(*) AS cnt FROM collaboration_audit_log WHERE guild_id = ?').get(guildId)?.cnt || 0;
+  const whereSql = excludeActorUserId
+    ? 'WHERE log.guild_id = ? AND log.actor_user_id != ?'
+    : 'WHERE log.guild_id = ?';
+  const countParams = excludeActorUserId ? [guildId, excludeActorUserId] : [guildId];
+  const total = db.db.prepare(`
+    SELECT COUNT(*) AS cnt
+    FROM collaboration_audit_log log
+    ${whereSql}
+  `).get(...countParams)?.cnt || 0;
   const rows = db.db.prepare(`
-    SELECT * FROM collaboration_audit_log
-    WHERE guild_id = ?
-    ORDER BY created_at DESC
+    SELECT
+      log.*,
+      users.avatar_url AS actor_avatar_url,
+      users.discord_id AS actor_discord_id
+    FROM collaboration_audit_log log
+    LEFT JOIN users ON users.id = log.actor_user_id
+    ${whereSql}
+    ORDER BY log.created_at DESC
     LIMIT ? OFFSET ?
-  `).all(guildId, limit, offset);
+  `).all(...countParams, limit, offset);
 
   return {
     items: rows.map((row) => ({
@@ -72,6 +96,30 @@ function cleanupExpiredAccess(guildId) {
     DELETE FROM guild_access_members
     WHERE guild_id = ? AND expires_at IS NOT NULL AND expires_at <= ?
   `).run(guildId, now);
+  return result.changes || 0;
+}
+
+function cleanupExpiredCodes(guildId = null) {
+  const now = new Date().toISOString();
+  if (guildId) {
+    const result = db.db.prepare(`
+      DELETE FROM guild_access_codes
+      WHERE guild_id = ?
+        AND used_at IS NULL
+        AND revoked_at IS NULL
+        AND expires_at IS NOT NULL
+        AND expires_at <= ?
+    `).run(guildId, now);
+    return result.changes || 0;
+  }
+
+  const result = db.db.prepare(`
+    DELETE FROM guild_access_codes
+    WHERE used_at IS NULL
+      AND revoked_at IS NULL
+      AND expires_at IS NOT NULL
+      AND expires_at <= ?
+  `).run(now);
   return result.changes || 0;
 }
 
@@ -236,6 +284,34 @@ function listGuildCollaborators(guildId) {
   return rows;
 }
 
+function listGuildJoinCodes(guildId) {
+  cleanupExpiredCodes(guildId);
+
+  return db.db.prepare(`
+    SELECT
+      codes.*,
+      users.username AS created_by_username,
+      users.avatar_url AS created_by_avatar_url
+    FROM guild_access_codes codes
+    LEFT JOIN users ON users.id = codes.created_by_user_id
+    WHERE codes.guild_id = ?
+      AND codes.used_at IS NULL
+      AND codes.revoked_at IS NULL
+    ORDER BY codes.created_at DESC
+  `).all(guildId).map((row) => ({
+    id: row.id,
+    code: row.code,
+    code_masked: maskAccessCode(row.code),
+    access_role: normalizeAccessRole(row.access_role),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    expires_at: row.expires_at || null,
+    created_by_user_id: row.created_by_user_id || null,
+    created_by_username: row.created_by_username || 'Inconnu',
+    created_by_avatar_url: row.created_by_avatar_url || null,
+  }));
+}
+
 function resolveUserForInvite(target) {
   const normalized = normalizeLookup(target);
   if (!normalized) return null;
@@ -253,6 +329,192 @@ function resolveUserForInvite(target) {
     ORDER BY CASE WHEN lower(trim(email)) = ? THEN 0 ELSE 1 END, created_at ASC
     LIMIT 1
   `).get(normalized, normalized, String(target || '').trim(), String(target || '').trim(), normalized) ?? null;
+}
+
+function createGuildJoinCode({ guildId, ownerUserId, actorUserId, accessRole, expiresInHours }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  cleanupExpiredCodes(guildId);
+
+  const now = new Date().toISOString();
+  const expiresAt = expiresInHours && expiresInHours > 0
+    ? new Date(Date.now() + expiresInHours * 3600000).toISOString()
+    : null;
+
+  let code = '';
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const candidate = buildAccessCode();
+    const existing = db.db.prepare('SELECT id FROM guild_access_codes WHERE code = ? LIMIT 1').get(candidate);
+    if (!existing) {
+      code = candidate;
+      break;
+    }
+  }
+
+  if (!code) {
+    throw Object.assign(new Error('Impossible de generer un code pour le moment'), { status: 503 });
+  }
+
+  const created = db.insert('guild_access_codes', {
+    guild_id: guildId,
+    code,
+    access_role: normalizeAccessRole(accessRole),
+    created_by_user_id: actorUserId,
+    expires_at: expiresAt,
+    used_by_user_id: null,
+    used_at: null,
+    revoked_at: null,
+    created_at: now,
+    updated_at: now,
+  });
+
+  const actor = db.findOne('users', { id: actorUserId });
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: actor?.username,
+    actionType: 'code_create',
+    target: maskAccessCode(code),
+    details: {
+      role: normalizeAccessRole(accessRole),
+      expires_in_hours: expiresInHours || null,
+      single_use: true,
+    },
+  });
+
+  return db.findOne('guild_access_codes', { id: created.id });
+}
+
+function revokeGuildJoinCode({ guildId, ownerUserId, codeId, actorUserId = ownerUserId }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const codeRow = db.db.prepare(`
+    SELECT *
+    FROM guild_access_codes
+    WHERE id = ? AND guild_id = ?
+    LIMIT 1
+  `).get(codeId, guildId);
+
+  if (!codeRow || codeRow.used_at || codeRow.revoked_at) {
+    throw Object.assign(new Error('Code introuvable'), { status: 404 });
+  }
+
+  db.db.prepare(`
+    UPDATE guild_access_codes
+    SET revoked_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(new Date().toISOString(), new Date().toISOString(), codeId);
+
+  const actor = db.findOne('users', { id: actorUserId });
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: actor?.username,
+    actionType: 'code_revoke',
+    target: maskAccessCode(codeRow.code),
+    details: {
+      role: normalizeAccessRole(codeRow.access_role),
+    },
+  });
+}
+
+function redeemGuildJoinCode({ userId, code }) {
+  cleanupExpiredCodes();
+
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  const user = db.findOne('users', { id: userId });
+  if (!user || !user.is_active) {
+    throw Object.assign(new Error('Compte introuvable'), { status: 404 });
+  }
+  if (!user.discord_id) {
+    throw Object.assign(new Error('Connecte d abord ton compte Discord pour rejoindre une equipe'), { status: 403 });
+  }
+
+  const codeRow = db.db.prepare(`
+    SELECT *
+    FROM guild_access_codes
+    WHERE code = ?
+      AND used_at IS NULL
+      AND revoked_at IS NULL
+    LIMIT 1
+  `).get(normalizedCode);
+
+  if (!codeRow) {
+    throw Object.assign(new Error('Code invalide ou deja utilise'), { status: 404 });
+  }
+
+  if (codeRow.expires_at && new Date(codeRow.expires_at) <= new Date()) {
+    db.remove('guild_access_codes', { id: codeRow.id });
+    throw Object.assign(new Error('Ce code a expire'), { status: 410 });
+  }
+
+  const guild = db.findOne('guilds', { id: codeRow.guild_id });
+  if (!guild || !guild.is_active) {
+    throw Object.assign(new Error('Serveur introuvable'), { status: 404 });
+  }
+  if (guild.user_id === userId) {
+    throw Object.assign(new Error('Tu es deja proprietaire de cet espace'), { status: 400 });
+  }
+
+  ensureAutoBackupOnFirstInvite(guild.id, guild.user_id);
+
+  const now = new Date().toISOString();
+  const existing = db.db.prepare(`
+    SELECT id
+    FROM guild_access_members
+    WHERE guild_id = ? AND user_id = ?
+    LIMIT 1
+  `).get(guild.id, userId);
+
+  if (existing) {
+    db.db.prepare(`
+      UPDATE guild_access_members
+      SET access_role = ?, invited_by_user_id = ?, is_suspended = 0, expires_at = NULL, accepted_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(normalizeAccessRole(codeRow.access_role), codeRow.created_by_user_id, now, now, existing.id);
+  } else {
+    db.insert('guild_access_members', {
+      guild_id: guild.id,
+      user_id: userId,
+      access_role: normalizeAccessRole(codeRow.access_role),
+      invited_by_user_id: codeRow.created_by_user_id,
+      is_suspended: 0,
+      expires_at: null,
+      accepted_at: now,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
+  db.db.prepare(`
+    UPDATE guild_access_codes
+    SET used_by_user_id = ?, used_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(userId, now, now, codeRow.id);
+
+  logCollabAction({
+    guildId: guild.id,
+    actorUserId: userId,
+    actorUsername: user.username,
+    actionType: 'code_redeem',
+    target: user.username,
+    details: {
+      role: normalizeAccessRole(codeRow.access_role),
+      code: maskAccessCode(codeRow.code),
+      source: 'join_code',
+    },
+  });
+
+  return {
+    guild,
+    access: getGuildAccess(userId, guild.id),
+  };
 }
 
 // ── Auto-backup on first invite ────────────────────────────────────────────────
@@ -672,7 +934,11 @@ module.exports = {
   getGuildAccess,
   listAccessibleGuilds,
   listGuildCollaborators,
+  listGuildJoinCodes,
   inviteGuildCollaborator,
+  createGuildJoinCode,
+  revokeGuildJoinCode,
+  redeemGuildJoinCode,
   updateGuildCollaboratorRole,
   suspendGuildCollaborator,
   removeGuildCollaborator,
