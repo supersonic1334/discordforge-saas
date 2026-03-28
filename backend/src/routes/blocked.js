@@ -172,9 +172,11 @@ async function handleBlacklistRemoval(req, res, next) {
 }
 
 router.delete('/bans/:discordUserId', handleUnban);
+router.get('/bans/:discordUserId/unban', handleUnban);
 router.post('/bans/:discordUserId/unban', handleUnban);
 
 router.delete('/blacklist/:discordUserId', handleBlacklistRemoval);
+router.get('/blacklist/:discordUserId/remove', handleBlacklistRemoval);
 router.post('/blacklist/:discordUserId/remove', handleBlacklistRemoval);
 
 module.exports = router;

@@ -122,6 +122,10 @@ function postNoBody(url, config = {}) {
   return requestWithoutJsonBody('POST', url, config)
 }
 
+function getNoBody(url, config = {}) {
+  return requestWithoutJsonBody('GET', url, config)
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
   register:       (data)     => api.post('/auth/register', data),
@@ -174,8 +178,8 @@ export const modAPI = {
 
 export const blockedAPI = {
   list:         (guildId, params) => api.get(`/bot/guilds/${guildId}/blocked`, { params }),
-  unban:        (guildId, userId) => postNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`),
-  unblacklist:  (guildId, userId) => postNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`),
+  unban:        (guildId, userId) => getNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`),
+  unblacklist:  (guildId, userId) => getNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`),
 }
 
 export const messagesAPI = {

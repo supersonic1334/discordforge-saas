@@ -465,6 +465,13 @@
   .glow-violet { box-shadow: 0 0 30px rgba(176,78,255,0.15); }
   .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
   .scrollbar-none::-webkit-scrollbar { display: none; }
+  .app-main-scroll {
+    overscroll-behavior-y: contain;
+    overflow-anchor: none;
+    scroll-behavior: auto;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* ── Animated gradient border ──────────────────────────────────────────────── */

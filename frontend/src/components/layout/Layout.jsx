@@ -502,7 +502,7 @@ export default function Layout() {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
+        <main className="app-main-scroll flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
           <Outlet />
         </main>
       </div>
