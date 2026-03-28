@@ -68,6 +68,10 @@ function buildConnectSources() {
 
 const cspConnectSources = buildConnectSources();
 
+function isBlockedActionPath(pathname = '') {
+  return /^\/api\/v1\/bot\/guilds\/[^/]+\/blocked\/(?:bans|blacklist)\/[^/]+\/(?:unban|remove)$/.test(pathname);
+}
+
 app.set('trust proxy', true);
 app.disable('x-powered-by');
 
@@ -148,6 +152,12 @@ app.use(cors((req, cb) => {
 app.use((req, res, next) => {
   const contentType = String(req.headers['content-type'] || '').toLowerCase();
   const contentLength = String(req.headers['content-length'] || '').trim();
+  const blockedActionRoute = isBlockedActionPath(req.path || '');
+
+  if (blockedActionRoute) {
+    delete req.headers['content-type'];
+    return next();
+  }
 
   if (
     ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
@@ -163,7 +173,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true, limit: '8mb' }));
 app.use((error, req, res, next) => {
-  const blockedActionRoute = /^\/api\/v1\/bot\/guilds\/[^/]+\/blocked\/(?:bans|blacklist)\/[^/]+\/(?:unban|remove)$/.test(req.path || '');
+  const blockedActionRoute = isBlockedActionPath(req.path || '');
 
   if (blockedActionRoute && error?.type === 'entity.parse.failed') {
     logger.warn('Ignoring invalid JSON body on blocked action route', {

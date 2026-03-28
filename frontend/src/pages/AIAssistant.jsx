@@ -11,19 +11,25 @@ import VoiceMeter from '../components/VoiceMeter'
 
 const VOICE_UI = {
   fr: {
-    stop: 'Arreter la dictee',
+    insert: 'Arrêter et insérer',
     send: 'Transcrire et envoyer',
     live: 'Transcription en direct',
+    listening: 'Écoute en cours',
+    preparing: 'Autorisation du micro…',
   },
   en: {
-    stop: 'Stop dictation',
+    insert: 'Stop and insert',
     send: 'Transcribe and send',
     live: 'Live transcript',
+    listening: 'Listening',
+    preparing: 'Allowing microphone…',
   },
   es: {
-    stop: 'Detener dictado',
+    insert: 'Detener e insertar',
     send: 'Transcribir y enviar',
     live: 'Transcripcion en vivo',
+    listening: 'Escuchando',
+    preparing: 'Autorizando microfono…',
   },
 }
 
@@ -145,13 +151,13 @@ function getAssistantCopy(locale) {
 
   return {
     heroTitle: 'Copilote DiscordForger',
-    heroText: 'Specialise Discord, workflows du bot, commandes, moderation et accompagnement du dashboard.',
+    heroText: 'Spécialisé Discord, workflows du bot, commandes, modération et accompagnement du dashboard.',
     helpLabel: 'Help',
-    helpAction: 'Aide-moi a comprendre tout ce que tu peux faire sur DiscordForger, y compris les commandes, la moderation, la protection, les messages et le contexte du serveur actuel.',
+    helpAction: 'Aide-moi à comprendre tout ce que tu peux faire sur DiscordForger, y compris les commandes, la modération, la protection, les messages et le contexte du serveur actuel.',
     cards: [
-      { icon: Server, title: 'Serveur', text: 'Construire, cloner, organiser et securiser des serveurs Discord.' },
-      { icon: Shield, title: 'Protection', text: 'Expliquer les modules, la moderation et les actions sures.' },
-      { icon: Terminal, title: 'Commandes', text: 'Guider ou generer des idees de commandes plus riches.' },
+      { icon: Server, title: 'Serveur', text: 'Construire, cloner, organiser et sécuriser des serveurs Discord.' },
+      { icon: Shield, title: 'Protection', text: 'Expliquer les modules, la modération et les actions sûres.' },
+      { icon: Terminal, title: 'Commandes', text: 'Guider ou générer des idées de commandes plus riches.' },
     ],
   }
 }
@@ -191,6 +197,7 @@ export default function AIAssistant() {
       toast.error(t('assistant.voiceError'))
     },
   })
+  const speechActive = speech.isListening || speech.isRequestingPermission || speech.isProcessing
 
   useEffect(() => {
     aiAPI.status().then((r) => setAiStatus(r.data)).catch(() => {})
@@ -205,7 +212,7 @@ export default function AIAssistant() {
 
     const resolvedText = typeof text === 'string' && text.trim()
       ? text.trim()
-      : (speech.isListening ? await speech.stop() : input.trim())
+      : (speechActive ? await speech.stop() : input.trim())
     const msg = resolvedText.trim()
     if (!msg || loading) return
     setInput('')
@@ -318,7 +325,7 @@ export default function AIAssistant() {
       <div className="p-3 sm:p-4 border-t border-white/[0.06] shrink-0">
         <div className="space-y-2">
           <AnimatePresence>
-            {(speech.isListening || speech.isRequestingPermission) && (
+            {speechActive && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -331,16 +338,16 @@ export default function AIAssistant() {
                       <VoiceMeter
                         bars={speech.audioBars}
                         active={speech.isListening}
-                        processing={speech.isRequestingPermission}
+                        processing={speech.isRequestingPermission || speech.isProcessing}
                         accent={speech.isRequestingPermission ? 'amber' : 'violet'}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-violet/80'}`}>
-                          {speech.isRequestingPermission ? t('assistant.voicePreparing') : t('assistant.voiceListening')}
+                        <p className={`text-xs font-mono ${speech.isRequestingPermission || speech.isProcessing ? 'text-amber-300/80' : 'text-neon-violet/80'}`}>
+                          {speech.isRequestingPermission ? voiceUi.preparing : speech.isProcessing ? voiceUi.send : voiceUi.listening}
                         </p>
                         <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{voiceUi.live}</p>
-                        <p className="mt-2 max-w-full truncate text-sm text-white/65">
-                          {speech.liveTranscript || speech.interimTranscript || '...'}
+                        <p className="mt-2 max-w-full rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-sm text-white/78">
+                          {speech.liveTranscript || speech.interimTranscript || '…'}
                         </p>
                       </div>
                     </div>
@@ -349,16 +356,16 @@ export default function AIAssistant() {
                         type="button"
                         onClick={stopDictation}
                         disabled={speech.isRequestingPermission}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-mono text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-xs font-mono text-white/80 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
                       >
                         <Square className="h-3.5 w-3.5 fill-current" />
-                        {voiceUi.stop}
+                        {voiceUi.insert}
                       </button>
                       <button
                         type="button"
                         onClick={sendDictation}
                         disabled={speech.isRequestingPermission || loading}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-neon-violet/25 bg-neon-violet/10 px-4 py-2.5 text-xs font-mono text-violet-200 transition-all hover:bg-neon-violet/15 disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-neon-violet/25 bg-neon-violet/12 px-4 py-2.5 text-xs font-mono text-violet-100 transition-all hover:bg-neon-violet/18 disabled:opacity-50"
                       >
                         <ArrowUp className="h-3.5 w-3.5" />
                         {voiceUi.send}
@@ -387,23 +394,23 @@ export default function AIAssistant() {
               style={{ height: 'auto' }}
             />
             <div className="absolute right-3 bottom-3 flex items-center gap-2">
-              {speech.isListening || speech.isRequestingPermission ? (
+              {speechActive ? (
                 <>
                   <motion.button
                     type="button"
                     onClick={stopDictation}
-                    disabled={speech.isRequestingPermission}
+                    disabled={speech.isRequestingPermission || speech.isProcessing}
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
                     className="h-11 w-11 rounded-full border border-white/12 bg-white/[0.06] text-white/88 flex items-center justify-center transition-all shrink-0 disabled:opacity-55"
-                    title={voiceUi.stop}
+                    title={voiceUi.insert}
                   >
                     <Square className="h-4 w-4 fill-current" />
                   </motion.button>
                   <motion.button
                     type="button"
                     onClick={sendDictation}
-                    disabled={speech.isRequestingPermission || loading}
+                    disabled={speech.isRequestingPermission || speech.isProcessing || loading}
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
                     className="h-11 w-11 rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan flex items-center justify-center text-white shadow-neon-violet disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"

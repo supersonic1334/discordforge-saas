@@ -23,10 +23,10 @@ function mergeTranscript(...parts) {
 }
 
 const IDLE_BARS = [0.18, 0.26, 0.22, 0.34, 0.28, 0.24, 0.3, 0.22, 0.16]
+const RESTARTABLE_ERRORS = new Set(['no-speech', 'audio-capture'])
 
 export function useSpeechToText({ value, onChange, locale, onError }) {
   const recognitionRef = useRef(null)
-  const permissionStateRef = useRef('unknown')
   const baseValueRef = useRef('')
   const finalTranscriptRef = useRef('')
   const interimTranscriptRef = useRef('')
@@ -35,19 +35,45 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   const sourceRef = useRef(null)
   const streamRef = useRef(null)
   const animationFrameRef = useRef(null)
-  const stopModeRef = useRef('commit')
   const stopResolverRef = useRef(null)
   const stopTimeoutRef = useRef(null)
+  const restartTimeoutRef = useRef(null)
+  const sessionModeRef = useRef('idle')
+  const shouldResumeRef = useRef(false)
+  const lastSpeechErrorRef = useRef(null)
+  const mountedRef = useRef(true)
   const [isListening, setIsListening] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [finalTranscript, setFinalTranscript] = useState('')
   const [interimTranscript, setInterimTranscript] = useState('')
   const [audioBars, setAudioBars] = useState(IDLE_BARS)
 
   const isSupported = useMemo(() => !!getRecognitionConstructor(), [])
 
+  const clearStopTimeout = useCallback(() => {
+    if (stopTimeoutRef.current) {
+      window.clearTimeout(stopTimeoutRef.current)
+      stopTimeoutRef.current = null
+    }
+  }, [])
+
+  const clearRestartTimeout = useCallback(() => {
+    if (restartTimeoutRef.current) {
+      window.clearTimeout(restartTimeoutRef.current)
+      restartTimeoutRef.current = null
+    }
+  }, [])
+
+  const resolveStopPromise = useCallback((valueToResolve) => {
+    if (stopResolverRef.current) {
+      stopResolverRef.current(valueToResolve)
+      stopResolverRef.current = null
+    }
+  }, [])
+
   const stopAudioMeter = useCallback(() => {
-    if (animationFrameRef.current) {
+    if (typeof window !== 'undefined' && animationFrameRef.current) {
       window.cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
     }
@@ -75,56 +101,10 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     setAudioBars(IDLE_BARS)
   }, [])
 
-  const clearStopTimeout = useCallback(() => {
-    if (stopTimeoutRef.current) {
-      window.clearTimeout(stopTimeoutRef.current)
-      stopTimeoutRef.current = null
-    }
-  }, [])
-
-  const resolveStopPromise = useCallback((valueToResolve) => {
-    if (stopResolverRef.current) {
-      stopResolverRef.current(valueToResolve)
-      stopResolverRef.current = null
-    }
-  }, [])
-
-  const finalizeRecognition = useCallback((mode = 'commit') => {
-    clearStopTimeout()
-    stopAudioMeter()
-    setIsListening(false)
-
-    const baseValue = String(baseValueRef.current || '').trim()
-    const nextValue = mode === 'commit'
-      ? mergeTranscript(baseValue, finalTranscriptRef.current, interimTranscriptRef.current)
-      : baseValue
-
-    finalTranscriptRef.current = ''
-    interimTranscriptRef.current = ''
-    setFinalTranscript('')
-    setInterimTranscript('')
-    onChange(nextValue)
-    resolveStopPromise(nextValue)
-    return nextValue
-  }, [clearStopTimeout, onChange, resolveStopPromise, stopAudioMeter])
-
-  const scheduleForcedFinalize = useCallback((mode) => {
-    clearStopTimeout()
-    stopTimeoutRef.current = window.setTimeout(() => {
-      if (!recognitionRef.current) {
-        return
-      }
-
-      recognitionRef.current.onend = null
-      recognitionRef.current = null
-      finalizeRecognition(mode)
-    }, 1200)
-  }, [clearStopTimeout, finalizeRecognition])
-
   const startAudioMeter = useCallback(async (stream) => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !stream) return
     const AudioContextClass = window.AudioContext || window.webkitAudioContext
-    if (!AudioContextClass || !stream) return
+    if (!AudioContextClass) return
 
     stopAudioMeter()
 
@@ -148,7 +128,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     }
 
     const tick = () => {
-      if (!analyserRef.current) return
+      if (!analyserRef.current || !mountedRef.current) return
 
       analyserRef.current.getByteFrequencyData(frequencyData)
       analyserRef.current.getByteTimeDomainData(timeDomainData)
@@ -174,7 +154,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
         }
 
         const average = end > start ? sum / (end - start) : 0
-        const normalized = Math.min(1.1, (average / 95) + (peak / 255) * 0.38 + rms * 3.2)
+        const normalized = Math.min(1.18, (average / 92) + (peak / 255) * 0.44 + rms * 3.6)
         return Math.max(0.12, normalized)
       })
 
@@ -185,49 +165,127 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     animationFrameRef.current = window.requestAnimationFrame(tick)
   }, [stopAudioMeter])
 
-  const stop = useCallback(() => {
-    stopModeRef.current = 'commit'
-
-    if (recognitionRef.current) {
-      return new Promise((resolve) => {
-        stopResolverRef.current = resolve
-        scheduleForcedFinalize('commit')
-        recognitionRef.current.stop()
-      })
-    }
-
-    const committed = mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current)
-    finalTranscriptRef.current = ''
-    interimTranscriptRef.current = ''
-    setFinalTranscript('')
-    setInterimTranscript('')
-    onChange(committed)
+  const finalizeRecognition = useCallback((mode = 'commit') => {
+    clearStopTimeout()
+    clearRestartTimeout()
+    shouldResumeRef.current = false
+    sessionModeRef.current = 'idle'
+    lastSpeechErrorRef.current = null
     stopAudioMeter()
     setIsListening(false)
-    return Promise.resolve(committed)
-  }, [onChange, scheduleForcedFinalize, stopAudioMeter])
-
-  const cancel = useCallback(() => {
-    stopModeRef.current = 'cancel'
-
-    if (recognitionRef.current) {
-      return new Promise((resolve) => {
-        stopResolverRef.current = resolve
-        scheduleForcedFinalize('cancel')
-        recognitionRef.current.abort()
-      })
-    }
+    setIsRequestingPermission(false)
+    setIsProcessing(false)
 
     const baseValue = String(baseValueRef.current || '').trim()
+    const nextValue = mode === 'commit'
+      ? mergeTranscript(baseValue, finalTranscriptRef.current, interimTranscriptRef.current)
+      : baseValue
+
     finalTranscriptRef.current = ''
     interimTranscriptRef.current = ''
     setFinalTranscript('')
     setInterimTranscript('')
-    onChange(baseValue)
-    stopAudioMeter()
-    setIsListening(false)
-    return Promise.resolve(baseValue)
-  }, [onChange, scheduleForcedFinalize, stopAudioMeter])
+    onChange(nextValue)
+    resolveStopPromise(nextValue)
+    return nextValue
+  }, [clearRestartTimeout, clearStopTimeout, onChange, resolveStopPromise, stopAudioMeter])
+
+  const scheduleForcedFinalize = useCallback((mode) => {
+    clearStopTimeout()
+    stopTimeoutRef.current = window.setTimeout(() => {
+      if (!recognitionRef.current) return
+      recognitionRef.current.onend = null
+      recognitionRef.current = null
+      finalizeRecognition(mode)
+    }, 1800)
+  }, [clearStopTimeout, finalizeRecognition])
+
+  const createRecognition = useCallback(() => {
+    const Recognition = getRecognitionConstructor()
+    if (!Recognition) return null
+
+    const recognition = new Recognition()
+    recognition.lang = normalizeLocale(locale)
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.maxAlternatives = 5
+
+    recognition.onresult = (event) => {
+      let nextFinal = ''
+      let nextInterim = ''
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const chunk = String(event.results[index]?.[0]?.transcript || '').trim()
+        if (!chunk) continue
+
+        if (event.results[index].isFinal) {
+          nextFinal = mergeTranscript(nextFinal, chunk)
+        } else {
+          nextInterim = mergeTranscript(nextInterim, chunk)
+        }
+      }
+
+      if (nextFinal) {
+        finalTranscriptRef.current = mergeTranscript(finalTranscriptRef.current, nextFinal)
+        setFinalTranscript(finalTranscriptRef.current)
+      }
+
+      interimTranscriptRef.current = nextInterim
+      setInterimTranscript(nextInterim)
+      lastSpeechErrorRef.current = null
+      onChange(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, nextInterim))
+    }
+
+    recognition.onerror = (event) => {
+      const code = event?.error || 'speech-error'
+      lastSpeechErrorRef.current = code
+
+      if (code === 'aborted') return
+
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        shouldResumeRef.current = false
+        sessionModeRef.current = 'cancel'
+        onError?.(code)
+        return
+      }
+
+      if (!RESTARTABLE_ERRORS.has(code)) {
+        onError?.(code)
+      }
+    }
+
+    recognition.onend = () => {
+      clearStopTimeout()
+      recognitionRef.current = null
+
+      if (shouldResumeRef.current && sessionModeRef.current === 'listening') {
+        clearRestartTimeout()
+        restartTimeoutRef.current = window.setTimeout(() => {
+          if (!shouldResumeRef.current || sessionModeRef.current !== 'listening' || !mountedRef.current) return
+          try {
+            const nextRecognition = createRecognition()
+            if (!nextRecognition) {
+              finalizeRecognition('commit')
+              return
+            }
+            recognitionRef.current = nextRecognition
+            nextRecognition.start()
+            setIsListening(true)
+            setIsProcessing(false)
+          } catch (error) {
+            shouldResumeRef.current = false
+            onError?.(lastSpeechErrorRef.current || error?.name || 'speech-restart-error')
+            finalizeRecognition('commit')
+          }
+        }, 120)
+        return
+      }
+
+      finalizeRecognition(sessionModeRef.current === 'cancel' ? 'cancel' : 'commit')
+    }
+
+    return recognition
+  }, [clearRestartTimeout, clearStopTimeout, finalizeRecognition, locale, onChange, onError])
 
   const start = useCallback(async () => {
     const Recognition = getRecognitionConstructor()
@@ -236,9 +294,15 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       return false
     }
 
-    if (isListening || isRequestingPermission) return true
+    if (isListening || isRequestingPermission || isProcessing || recognitionRef.current) return true
 
+    clearRestartTimeout()
+    clearStopTimeout()
     setIsRequestingPermission(true)
+    setIsProcessing(false)
+    shouldResumeRef.current = true
+    sessionModeRef.current = 'listening'
+    lastSpeechErrorRef.current = null
 
     try {
       let stream = null
@@ -250,61 +314,19 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
             autoGainControl: true,
           },
         })
-        permissionStateRef.current = 'granted'
         await startAudioMeter(stream)
       }
-
-      const recognition = new Recognition()
-      recognition.lang = normalizeLocale(locale)
-      recognition.continuous = true
-      recognition.interimResults = true
-      recognition.maxAlternatives = 5
 
       baseValueRef.current = String(value || '').trim()
       finalTranscriptRef.current = ''
       interimTranscriptRef.current = ''
       setFinalTranscript('')
-      stopModeRef.current = 'commit'
       setInterimTranscript('')
 
-      recognition.onresult = (event) => {
-        let nextFinal = ''
-        let nextInterim = ''
-
-        for (let index = event.resultIndex; index < event.results.length; index += 1) {
-          const chunk = String(event.results[index]?.[0]?.transcript || '').trim()
-          if (!chunk) continue
-
-          if (event.results[index].isFinal) {
-            nextFinal = mergeTranscript(nextFinal, chunk)
-          } else {
-            nextInterim = mergeTranscript(nextInterim, chunk)
-          }
-        }
-
-        if (nextFinal) {
-          finalTranscriptRef.current = mergeTranscript(finalTranscriptRef.current, nextFinal)
-          setFinalTranscript(finalTranscriptRef.current)
-        }
-
-        interimTranscriptRef.current = nextInterim
-        setInterimTranscript(nextInterim)
-        onChange(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, nextInterim))
-      }
-
-      recognition.onerror = (event) => {
-        if (event?.error && event.error !== 'aborted') {
-          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-            permissionStateRef.current = 'denied'
-          }
-          onError?.(event.error)
-        }
-      }
-
-      recognition.onend = () => {
-        clearStopTimeout()
-        recognitionRef.current = null
-        finalizeRecognition(stopModeRef.current)
+      const recognition = createRecognition()
+      if (!recognition) {
+        onError?.('unsupported')
+        return false
       }
 
       recognitionRef.current = recognition
@@ -312,9 +334,13 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       setIsListening(true)
       return true
     } catch (error) {
+      shouldResumeRef.current = false
+      sessionModeRef.current = 'idle'
+      setIsListening(false)
+      setIsProcessing(false)
       stopAudioMeter()
+
       if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') {
-        permissionStateRef.current = 'denied'
         onError?.('not-allowed')
       } else if (error?.name === 'NotFoundError') {
         onError?.('not-found')
@@ -325,24 +351,66 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       }
       return false
     } finally {
-      setIsRequestingPermission(false)
+      if (mountedRef.current) {
+        setIsRequestingPermission(false)
+      }
     }
-  }, [clearStopTimeout, finalizeRecognition, isListening, isRequestingPermission, locale, onChange, onError, startAudioMeter, stopAudioMeter, value])
+  }, [clearRestartTimeout, clearStopTimeout, createRecognition, isListening, isProcessing, isRequestingPermission, onError, startAudioMeter, stopAudioMeter, value])
 
-  useEffect(() => () => {
-    clearStopTimeout()
+  const stop = useCallback(() => {
+    shouldResumeRef.current = false
+    sessionModeRef.current = 'commit'
+    clearRestartTimeout()
+
     if (recognitionRef.current) {
-      recognitionRef.current.onend = null
-      recognitionRef.current.abort()
-      recognitionRef.current = null
+      setIsProcessing(true)
+      return new Promise((resolve) => {
+        stopResolverRef.current = resolve
+        scheduleForcedFinalize('commit')
+        recognitionRef.current.stop()
+      })
     }
-    stopAudioMeter()
-  }, [clearStopTimeout, stopAudioMeter])
+
+    return Promise.resolve(finalizeRecognition('commit'))
+  }, [clearRestartTimeout, finalizeRecognition, scheduleForcedFinalize])
+
+  const cancel = useCallback(() => {
+    shouldResumeRef.current = false
+    sessionModeRef.current = 'cancel'
+    clearRestartTimeout()
+
+    if (recognitionRef.current) {
+      setIsProcessing(true)
+      return new Promise((resolve) => {
+        stopResolverRef.current = resolve
+        scheduleForcedFinalize('cancel')
+        recognitionRef.current.abort()
+      })
+    }
+
+    return Promise.resolve(finalizeRecognition('cancel'))
+  }, [clearRestartTimeout, finalizeRecognition, scheduleForcedFinalize])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      clearStopTimeout()
+      clearRestartTimeout()
+      if (recognitionRef.current) {
+        recognitionRef.current.onend = null
+        recognitionRef.current.abort()
+        recognitionRef.current = null
+      }
+      stopAudioMeter()
+    }
+  }, [clearRestartTimeout, clearStopTimeout, stopAudioMeter])
 
   return {
     isSupported,
     isListening,
     isRequestingPermission,
+    isProcessing,
     liveTranscript: mergeTranscript(finalTranscript, interimTranscript),
     interimTranscript,
     audioBars,

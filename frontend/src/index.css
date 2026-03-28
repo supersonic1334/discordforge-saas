@@ -467,7 +467,7 @@
   .scrollbar-none::-webkit-scrollbar { display: none; }
   .app-main-scroll {
     overscroll-behavior-y: contain;
-    overflow-anchor: none;
+    overflow-anchor: auto;
     scroll-behavior: auto;
     scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;

@@ -55,10 +55,6 @@ export default function Layout() {
   const [sidebarWidthReady, setSidebarWidthReady] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const mainScrollRef = useRef(null)
-  const lastScrollTopRef = useRef(0)
-  const userScrollTimeoutRef = useRef(null)
-  const isUserScrollingRef = useRef(false)
-  const restoreFrameRef = useRef(null)
   const { user, logout } = useAuthStore()
   const { guilds, selectedGuildId, clearSelectedGuild, hydrateSelectedGuild } = useGuildStore()
   const { status, ping, bot, fetchStatus, setStatus } = useBotStore()
@@ -83,13 +79,13 @@ export default function Layout() {
   const navItems = [
     { icon: LayoutDashboard, label: t('layout.nav.dashboard'), path: '/dashboard' },
     { icon: Server, label: t('layout.nav.servers'), path: '/dashboard/servers' },
-    { icon: Users, label: t('layout.nav.team', 'Equipe'), path: '/dashboard/team', needsGuild: true },
+    { icon: Users, label: t('layout.nav.team', 'Équipe'), path: '/dashboard/team', needsGuild: true },
     { icon: Shield, label: t('layout.nav.protection', 'Protection'), path: '/dashboard/protection', needsGuild: true },
     { icon: Search, label: t('layout.nav.search', 'Search'), path: '/dashboard/search', needsGuild: true },
     { icon: ScrollText, label: t('layout.nav.logs', 'Logs'), path: '/dashboard/logs', needsGuild: true },
     { icon: Send, label: t('layout.nav.messages', 'Messages'), path: '/dashboard/messages', needsGuild: true },
     { icon: BellRing, label: t('layout.nav.notifications', 'Notifications'), path: '/dashboard/notifications', needsGuild: true },
-    { icon: Ban, label: t('layout.nav.blocked', 'Controle d\'Acces'), path: '/dashboard/blocked', needsGuild: true },
+    { icon: Ban, label: t('layout.nav.blocked', 'Contrôle d’accès'), path: '/dashboard/blocked', needsGuild: true },
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
@@ -192,81 +188,6 @@ export default function Layout() {
       window.removeEventListener('mouseup', stopResize)
     }
   }, [isResizing])
-
-  useEffect(() => {
-    const mainElement = mainScrollRef.current
-    if (!mainElement) return undefined
-
-    const handleScroll = () => {
-      lastScrollTopRef.current = mainElement.scrollTop
-      isUserScrollingRef.current = true
-
-      if (userScrollTimeoutRef.current) {
-        window.clearTimeout(userScrollTimeoutRef.current)
-      }
-
-      userScrollTimeoutRef.current = window.setTimeout(() => {
-        isUserScrollingRef.current = false
-      }, 140)
-    }
-
-    mainElement.addEventListener('scroll', handleScroll, { passive: true })
-
-    return () => {
-      mainElement.removeEventListener('scroll', handleScroll)
-      if (userScrollTimeoutRef.current) {
-        window.clearTimeout(userScrollTimeoutRef.current)
-        userScrollTimeoutRef.current = null
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    const mainElement = mainScrollRef.current
-    if (!mainElement || typeof MutationObserver === 'undefined') return undefined
-
-    const isManagedScrollRoute =
-      location.pathname !== '/dashboard/ai'
-      && location.pathname !== '/dashboard/commands'
-
-    if (!isManagedScrollRoute) {
-      return undefined
-    }
-
-    const stabilizeScroll = () => {
-      if (restoreFrameRef.current) {
-        window.cancelAnimationFrame(restoreFrameRef.current)
-      }
-
-      restoreFrameRef.current = window.requestAnimationFrame(() => {
-        restoreFrameRef.current = null
-
-        if (isUserScrollingRef.current) return
-        if (document.activeElement && mainElement.contains(document.activeElement)) return
-        if (lastScrollTopRef.current <= 0) return
-
-        const drift = mainElement.scrollTop - lastScrollTopRef.current
-        if (Math.abs(drift) > 2) {
-          mainElement.scrollTop = lastScrollTopRef.current
-        }
-      })
-    }
-
-    const observer = new MutationObserver(stabilizeScroll)
-    observer.observe(mainElement, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    })
-
-    return () => {
-      observer.disconnect()
-      if (restoreFrameRef.current) {
-        window.cancelAnimationFrame(restoreFrameRef.current)
-        restoreFrameRef.current = null
-      }
-    }
-  }, [location.pathname])
 
   useEffect(() => {
     if (mustStayOnServers) {

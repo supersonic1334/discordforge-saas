@@ -75,6 +75,7 @@ function requestWithoutJsonBody(method, url, config = {}) {
     method,
     headers,
     credentials: 'same-origin',
+    cache: 'no-store',
   }).then(async (response) => {
     const raw = await response.text()
     let payload = null
@@ -178,8 +179,8 @@ export const modAPI = {
 
 export const blockedAPI = {
   list:         (guildId, params) => api.get(`/bot/guilds/${guildId}/blocked`, { params }),
-  unban:        (guildId, userId) => getNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`),
-  unblacklist:  (guildId, userId) => getNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`),
+  unban:        (guildId, userId) => postNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`, { params: { _: Date.now() } }),
+  unblacklist:  (guildId, userId) => postNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`, { params: { _: Date.now() } }),
 }
 
 export const messagesAPI = {

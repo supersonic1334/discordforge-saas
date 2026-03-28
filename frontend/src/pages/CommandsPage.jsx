@@ -29,34 +29,34 @@ import VoiceMeter from '../components/VoiceMeter'
 const UI = {
   fr: {
     title: 'Commandes',
-    subtitle: 'Tu choisis le prefixe ou le slash, puis tu decris la commande a l assistant.',
+    subtitle: 'Tu choisis le préfixe ou le slash, puis tu décris la commande à l’assistant.',
     selectServerTitle: "Choisis d'abord un serveur",
-    selectServerText: 'Les commandes se creent serveur par serveur.',
+    selectServerText: 'Les commandes se créent serveur par serveur.',
     selectServerAction: 'Choisir un serveur',
     new: 'Nouvelle commande IA',
     edit: 'Modifier avec IA',
     refresh: 'Actualiser',
     assistantTitle: 'Assistant de commandes',
-    assistantCreate: 'Creation guidee',
-    assistantEdit: 'Modification guidee',
+    assistantCreate: 'Création guidée',
+    assistantEdit: 'Modification guidée',
     editingTarget: 'Commande en cours',
     cancelEdit: 'Annuler',
-    assistantCreateHint: 'Explique simplement ce que tu veux. Exemple: cree une commande bonjour qui repond bonjour {mention}.',
-    assistantCreateEmpty: "Le chat IA va creer la commande automatiquement et l'enregistrer directement.",
-    assistantEditHint: 'Decris seulement la modification a faire. La commande actuelle sera mise a jour directement.',
-    assistantEditEmpty: "Ecris ce que tu veux changer. L'assistant appliquera la modification sur cette commande existante.",
-    assistantHint: 'Explique simplement ce que tu veux. Exemple: cree une commande bonjour qui repond bonjour {mention}.',
-    assistantEmpty: "Le chat IA va creer la commande automatiquement et l'enregistrer directement.",
+    assistantCreateHint: 'Explique simplement ce que tu veux. Exemple : crée une commande bonjour qui répond bonjour {mention}.',
+    assistantCreateEmpty: "Le chat IA va créer la commande automatiquement et l'enregistrer directement.",
+    assistantEditHint: 'Décris seulement la modification à faire. La commande actuelle sera mise à jour directement.',
+    assistantEditEmpty: "Écris ce que tu veux changer. L'assistant appliquera la modification sur cette commande existante.",
+    assistantHint: 'Explique simplement ce que tu veux. Exemple : crée une commande bonjour qui répond bonjour {mention}.',
+    assistantEmpty: "Le chat IA va créer la commande automatiquement et l'enregistrer directement.",
     modeLabel: 'Type de commande',
-    modePrefix: 'Prefixe texte',
+    modePrefix: 'Préfixe texte',
     modeSlash: 'Slash Discord',
-    prefixLabel: 'Commande texte ou prefixe',
-    prefixHint: 'Exemple: !music ou !',
+    prefixLabel: 'Commande texte ou préfixe',
+    prefixHint: 'Exemple : !music ou !',
     slashNameLabel: 'Nom de la commande slash',
-    slashNameHint: 'Exemple: music',
+    slashNameHint: 'Exemple : music',
     promptLabel: 'Ce que tu veux',
-    promptPlaceholder: 'Exemple: cree une commande annonce qui repond en embed avec le titre Infos du serveur',
-    promptEditPlaceholder: 'Exemple: remplace la reponse par une version plus courte et plus propre',
+    promptPlaceholder: 'Exemple : crée une commande annonce qui répond en embed avec le titre Infos du serveur',
+    promptEditPlaceholder: 'Exemple : remplace la réponse par une version plus courte et plus propre',
     voiceStart: 'Parler',
     voiceStop: 'Stop micro',
     voiceListening: 'Ecoute en cours...',
@@ -199,6 +199,41 @@ const UI = {
     botReady: 'El comando queda guardado y sincronizado automaticamente con el bot.',
   },
 }
+
+Object.assign(UI.fr, {
+  subtitle: 'Tu choisis le préfixe ou le slash, puis tu décris la commande à l’assistant.',
+  selectServerText: 'Les commandes se créent serveur par serveur.',
+  assistantCreate: 'Création guidée',
+  assistantEdit: 'Modification guidée',
+  assistantCreateHint: 'Explique simplement ce que tu veux. Exemple : crée une commande bonjour qui répond bonjour {mention}.',
+  assistantCreateEmpty: "Le chat IA va créer la commande automatiquement et l'enregistrer directement.",
+  assistantEditHint: 'Décris seulement la modification à faire. La commande actuelle sera mise à jour directement.',
+  assistantEditEmpty: "Écris ce que tu veux changer. L'assistant appliquera la modification sur cette commande existante.",
+  assistantHint: 'Explique simplement ce que tu veux. Exemple : crée une commande bonjour qui répond bonjour {mention}.',
+  assistantEmpty: "Le chat IA va créer la commande automatiquement et l'enregistrer directement.",
+  modePrefix: 'Préfixe texte',
+  prefixLabel: 'Commande texte ou préfixe',
+  prefixHint: 'Exemple : !music ou !',
+  slashNameHint: 'Exemple : music',
+  promptPlaceholder: 'Exemple : crée une commande annonce qui répond en embed avec le titre Infos du serveur',
+  promptEditPlaceholder: 'Exemple : remplace la réponse par une version plus courte et plus propre',
+  voiceListening: 'Écoute en cours...',
+  voicePreparing: 'Autorisation du micro...',
+  voiceStopDictation: 'Arrêter et insérer',
+  voiceSendTranscript: 'Transcrire et générer',
+  voiceDenied: 'Autorise le micro pour utiliser la dictée.',
+  voiceError: 'La dictée vocale a rencontré un problème.',
+  send: 'Générer la commande',
+  generating: 'Génération...',
+  created: 'Commande créée',
+  updated: 'Commande mise à jour',
+  deleted: 'Commande supprimée',
+  emptyHint: "Crée la première avec l'assistant IA.",
+  disabled: 'Désactivée',
+  assistantReplyFallback: 'Commande préparée et enregistrée.',
+  prefixBadge: 'Préfixe',
+  botReady: 'La commande est enregistrée et synchronisée automatiquement avec le bot.',
+})
 
 function getErrorMessage(error) {
   return error?.response?.data?.error || error?.message || 'Unexpected error'
@@ -1239,19 +1274,20 @@ export default function CommandsPage() {
                   onChange={(event) => setPrompt(event.target.value)}
                 />
                 <div className="absolute bottom-3 right-3 flex items-center gap-2">
-                  {(speech.isListening || speech.isRequestingPermission) && (
+                  {(speech.isListening || speech.isRequestingPermission || speech.isProcessing) && (
                     <VoiceMeter
                       bars={speech.audioBars}
                       active={speech.isListening}
+                      processing={speech.isRequestingPermission || speech.isProcessing}
                       accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
                     />
                   )}
-                  {speech.isListening || speech.isRequestingPermission ? (
+                  {speech.isListening || speech.isRequestingPermission || speech.isProcessing ? (
                     <>
                       <button
                         type="button"
                         onClick={stopCommandDictation}
-                        disabled={speech.isRequestingPermission}
+                        disabled={speech.isRequestingPermission || speech.isProcessing}
                         className="flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] text-white/88 transition-all disabled:opacity-55"
                         title={ui.voiceStopDictation}
                       >
@@ -1260,7 +1296,7 @@ export default function CommandsPage() {
                       <button
                         type="button"
                         onClick={sendCommandDictation}
-                        disabled={speech.isRequestingPermission || assistantLoading}
+                        disabled={speech.isRequestingPermission || speech.isProcessing || assistantLoading}
                         className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan text-white shadow-neon-violet transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                         title={ui.voiceSendTranscript}
                       >
@@ -1290,30 +1326,32 @@ export default function CommandsPage() {
                   )}
                 </div>
               </div>
-              {(speech.isListening || speech.isRequestingPermission) && (
+              {(speech.isListening || speech.isRequestingPermission || speech.isProcessing) && (
                 <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-3">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <VoiceMeter
                         bars={speech.audioBars}
                         active={speech.isListening}
-                        processing={speech.isRequestingPermission}
+                        processing={speech.isRequestingPermission || speech.isProcessing}
                         accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className={`text-xs font-mono ${speech.isRequestingPermission ? 'text-amber-300/80' : 'text-neon-cyan/75'}`}>
-                          {speech.isRequestingPermission ? ui.voicePreparing : ui.voiceListening}
+                        <p className={`text-xs font-mono ${speech.isRequestingPermission || speech.isProcessing ? 'text-amber-300/80' : 'text-neon-cyan/75'}`}>
+                          {speech.isRequestingPermission ? ui.voicePreparing : speech.isProcessing ? ui.voiceSendTranscript : ui.voiceListening}
                         </p>
                         <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{ui.voiceLiveTranscript}</p>
-                        <p className="mt-2 truncate text-sm text-white/65">{speech.liveTranscript || speech.interimTranscript || '...'}</p>
+                        <p className="mt-2 rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-sm text-white/78">
+                          {speech.liveTranscript || speech.interimTranscript || '…'}
+                        </p>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={stopCommandDictation}
-                        disabled={speech.isRequestingPermission}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-mono text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
+                        disabled={speech.isRequestingPermission || speech.isProcessing}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-xs font-mono text-white/80 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
                       >
                         <Square className="h-3.5 w-3.5 fill-current" />
                         {ui.voiceStopDictation}
@@ -1321,8 +1359,8 @@ export default function CommandsPage() {
                       <button
                         type="button"
                         onClick={sendCommandDictation}
-                        disabled={speech.isRequestingPermission || assistantLoading}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-2.5 text-xs font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-50"
+                        disabled={speech.isRequestingPermission || speech.isProcessing || assistantLoading}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/12 px-4 py-2.5 text-xs font-mono text-cyan-100 transition-all hover:bg-neon-cyan/18 disabled:opacity-50"
                       >
                         <ArrowUp className="h-3.5 w-3.5" />
                         {ui.voiceSendTranscript}
