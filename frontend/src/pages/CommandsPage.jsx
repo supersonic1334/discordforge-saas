@@ -255,6 +255,13 @@ function upsertCommand(list, command) {
   return list.map((entry) => (entry.id === command.id ? command : entry))
 }
 
+function getCommandInputValue(command) {
+  if (!command) return ''
+  return command.command_type === 'slash'
+    ? `/${command.command_name || ''}`
+    : (command.display_trigger || command.trigger || '!')
+}
+
 function extractCommandDraft(text) {
   const match = String(text || '').match(/```command\s*([\s\S]*?)```/i)
   if (!match) return null
@@ -420,15 +427,18 @@ function formatCooldownLabel(value) {
 
 function buildFallbackPayload({ draft, commandInput, currentCommand }) {
   const requestedMeta = buildRequestedCommandMeta(commandInput, currentCommand)
-  const commandType = requestedMeta.command_type
+  const pinRequestedCommand = shouldPinRequestedCommand(commandInput, currentCommand)
+  const commandType = pinRequestedCommand
+    ? requestedMeta.command_type
+    : (draft?.command_type || currentCommand?.command_type || requestedMeta.command_type)
   const commandPrefix = commandType === 'slash'
     ? '/'
-    : requestedMeta.command_prefix
-  const commandName = requestedMeta.command_name || sanitizeCommandName(
+    : (pinRequestedCommand ? requestedMeta.command_prefix : normalizeCommandPrefix(draft?.command_prefix || currentCommand?.command_prefix || requestedMeta.command_prefix))
+  const commandName = (pinRequestedCommand ? requestedMeta.command_name : '') || sanitizeCommandName(
     draft?.command_name || currentCommand?.command_name || 'commande',
     commandType
   )
-  const trigger = requestedMeta.isExactTrigger
+  const trigger = pinRequestedCommand && requestedMeta.isExactTrigger
     ? requestedMeta.trigger
     : buildCommandTrigger(commandType, commandPrefix, commandName)
 
@@ -451,6 +461,13 @@ function buildFallbackPayload({ draft, commandInput, currentCommand }) {
   }
 }
 
+function shouldPinRequestedCommand(commandInput, currentCommand) {
+  const requested = normalizeCommandInput(commandInput)
+  if (!requested) return false
+  if (!currentCommand) return true
+  return requested !== normalizeCommandInput(getCommandInputValue(currentCommand))
+}
+
 function buildAssistantFallbackPrompt({ commandInput, prompt, currentCommand, locale }) {
   const language = String(locale || 'fr').toLowerCase().startsWith('fr')
     ? 'francais'
@@ -458,13 +475,16 @@ function buildAssistantFallbackPrompt({ commandInput, prompt, currentCommand, lo
       ? 'espagnol'
       : 'anglais'
   const requestedMeta = buildRequestedCommandMeta(commandInput, currentCommand)
-  const requestedInstruction = requestedMeta.command_type === 'slash'
-    ? (requestedMeta.command_name ? `Nom exact impose pour la commande slash: ${requestedMeta.command_name}` : '')
-    : requestedMeta.isExactTrigger
-      ? `Declencheur texte exact impose: ${requestedMeta.trigger}`
-      : requestedMeta.command_name
-        ? `Nom de commande voulu: ${requestedMeta.command_name} (prefixe ${requestedMeta.command_prefix})`
-        : `Prefixe impose: ${requestedMeta.command_prefix}`
+  const pinRequestedCommand = shouldPinRequestedCommand(commandInput, currentCommand)
+  const requestedInstruction = pinRequestedCommand
+    ? (requestedMeta.command_type === 'slash'
+      ? (requestedMeta.command_name ? `Nom exact impose pour la commande slash: ${requestedMeta.command_name}` : '')
+      : requestedMeta.isExactTrigger
+        ? `Declencheur texte exact impose: ${requestedMeta.trigger}`
+        : requestedMeta.command_name
+          ? `Nom de commande voulu: ${requestedMeta.command_name} (prefixe ${requestedMeta.command_prefix})`
+          : `Prefixe impose: ${requestedMeta.command_prefix}`)
+    : (currentCommand ? 'Tu peux conserver ou changer le declencheur si la demande implique une vraie refonte.' : '')
 
   const existingBlock = currentCommand
     ? `Commande actuelle:
@@ -512,9 +532,10 @@ Regles:
 - si l'utilisateur veut un faux panel, un hub, un menu ou un centre d'aide, transforme ca en commande embed premium, bien structuree, avec sections, usage_hint et args si utile
 - pas de JavaScript, pas de webhook, pas de boutons Discord non supportes
 - placeholders autorises: {mention} {username} {server} {channel} {memberCount} {args} {arg1} {arg2}
-- pour les commandes de contenu (blagues, faits, citations), utilise la syntaxe [[random: option 1 || option 2 || option 3 || option 4 || option 5 || option 6]] avec du contenu vraiment different
+- pour les commandes de contenu (blagues, faits, citations), utilise soit [[combo: segment 1A || segment 1B || segment 1C :: segment 2A || segment 2B || segment 2C :: segment 3A || segment 3B || segment 3C]] soit au moins [[random: option 1 || option 2 || option 3 || option 4 || option 5 || option 6 || option 7 || option 8 || option 9 || option 10]]
 - les descriptions doivent etre concises mais engageantes
 - Les reponses doivent etre riches, bien formatees, et professionnelles.
+- si tu modifies une commande existante, retourne sa version finale complete, pas juste une variation minimale de l'ancienne.
 
 Format attendu:
 \`\`\`command
@@ -792,9 +813,7 @@ export default function CommandsPage() {
 
   function openEdit(command) {
     setEditingCommand(command)
-    setCommandInput(command.command_type === 'slash'
-      ? `/${command.command_name || ''}`
-      : (command.display_trigger || command.trigger || '!'))
+    setCommandInput(getCommandInputValue(command))
     setPrompt('')
     setMessages([])
   }
@@ -854,11 +873,12 @@ export default function CommandsPage() {
       let response
 
       try {
+        const pinRequestedCommand = shouldPinRequestedCommand(commandInput, editingCommand)
         response = await commandsAPI.assistant(selectedGuildId, {
           mode,
           prefix: mode === 'prefix' ? requestedMeta.command_prefix : undefined,
-          trigger: mode === 'prefix' && requestedMeta.isExactTrigger ? requestedMeta.trigger : undefined,
-          command_name: requestedMeta.command_name || undefined,
+          trigger: mode === 'prefix' && pinRequestedCommand && requestedMeta.isExactTrigger ? requestedMeta.trigger : undefined,
+          command_name: pinRequestedCommand ? (requestedMeta.command_name || undefined) : undefined,
           prompt: userMessage.content,
           command_id: editingCommand?.id,
           conversation_history: conversationHistory,
@@ -875,6 +895,7 @@ export default function CommandsPage() {
       setMessages((current) => [...current, { role: 'assistant', content: assistantMessage }])
       setCommands((current) => upsertCommand(current, command))
       setEditingCommand(command)
+      setCommandInput(getCommandInputValue(command))
       setQuota(response.data.quota || null)
       toast.success(response.data.updated ? ui.updated : ui.created)
     } catch (error) {
@@ -1274,14 +1295,6 @@ export default function CommandsPage() {
                   onChange={(event) => setPrompt(event.target.value)}
                 />
                 <div className="absolute bottom-3 right-3 flex items-center gap-2">
-                  {(speech.isListening || speech.isRequestingPermission || speech.isProcessing) && (
-                    <VoiceMeter
-                      bars={speech.audioBars}
-                      active={speech.isListening}
-                      processing={speech.isRequestingPermission || speech.isProcessing}
-                      accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
-                    />
-                  )}
                   {speech.isListening || speech.isRequestingPermission || speech.isProcessing ? (
                     <>
                       <button
@@ -1341,7 +1354,7 @@ export default function CommandsPage() {
                           {speech.isRequestingPermission ? ui.voicePreparing : speech.isProcessing ? ui.voiceSendTranscript : ui.voiceListening}
                         </p>
                         <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{ui.voiceLiveTranscript}</p>
-                        <p className="mt-2 rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-sm text-white/78">
+                        <p className="mt-2 min-h-[54px] rounded-2xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-white/78">
                           {speech.liveTranscript || speech.interimTranscript || '…'}
                         </p>
                       </div>

@@ -184,21 +184,70 @@ function buildLogEmbed(event, data, ac) {
 }
 
 const commandCooldowns = new Map();
+const dynamicBlockHistory = new Map();
 
-function resolveRandomBlocks(template) {
-  return String(template || '').replace(/\[\[random:(.*?)\]\]/gis, (_, rawOptions) => {
+function pickDynamicOption(options, historyKey) {
+  if (!Array.isArray(options) || !options.length) return '';
+  if (options.length === 1) return options[0];
+
+  const previousIndex = dynamicBlockHistory.get(historyKey);
+  let nextIndex = Math.floor(Math.random() * options.length);
+
+  if (typeof previousIndex === 'number') {
+    let guard = 0;
+    while (nextIndex === previousIndex && guard < 12) {
+      nextIndex = Math.floor(Math.random() * options.length);
+      guard += 1;
+    }
+  }
+
+  dynamicBlockHistory.set(historyKey, nextIndex);
+  return options[nextIndex];
+}
+
+function resolveComboBlocks(template, commandKey = '') {
+  return String(template || '').replace(/\[\[combo:(.*?)\]\]/gis, (_, rawGroups) => {
+    const groups = String(rawGroups || '')
+      .split('::')
+      .map((group) => group.trim())
+      .filter(Boolean);
+
+    if (!groups.length) return '';
+
+    const parts = groups.map((group, index) => {
+      const options = group
+        .split('||')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+
+      if (!options.length) return '';
+      return pickDynamicOption(options, `${commandKey}:combo:${index}:${group}`);
+    }).filter(Boolean);
+
+    return parts
+      .join(' ')
+      .replace(/\s+([!?;:,])/g, '$1')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  });
+}
+
+function resolveRandomBlocks(template, commandKey = '') {
+  const withCombo = resolveComboBlocks(template, commandKey);
+
+  return String(withCombo || '').replace(/\[\[random:(.*?)\]\]/gis, (_, rawOptions) => {
     const options = String(rawOptions || '')
       .split('||')
       .map((entry) => entry.trim())
       .filter(Boolean);
 
     if (!options.length) return '';
-    return options[Math.floor(Math.random() * options.length)];
+    return pickDynamicOption(options, `${commandKey}:random:${rawOptions}`);
   });
 }
 
-function replaceCommandVariables(template, context) {
-  return resolveRandomBlocks(template)
+function replaceCommandVariables(template, context, commandKey = '') {
+  return resolveRandomBlocks(template, commandKey)
     .replace(/{user}/gi, `<@${context.author.id}>`)
     .replace(/{mention}/gi, `<@${context.author.id}>`)
     .replace(/{username}/gi, context.author.username)
@@ -240,7 +289,8 @@ function buildCommandPayload(command, context) {
     mention_user,
   } = command;
   const { guild, author, channel, argsText, args } = context;
-  const text = replaceCommandVariables(response, { guild, author, channel, argsText, args });
+  const dynamicKey = String(command?.id || command?.trigger || 'command');
+  const text = replaceCommandVariables(response, { guild, author, channel, argsText, args }, dynamicKey);
   const mode = response_mode || (reply_in_dm ? 'dm' : 'channel');
   const content = mention_user && mode !== 'dm'
     ? `<@${author.id}> ${text}`.trim()
@@ -253,7 +303,7 @@ function buildCommandPayload(command, context) {
       ? {
           content: mode === 'channel' ? mentionOnlyContent : undefined,
           embeds: [{
-            title: replaceCommandVariables(embed_title || trigger, { guild, author, channel, argsText, args }),
+            title: replaceCommandVariables(embed_title || trigger, { guild, author, channel, argsText, args }, `${dynamicKey}:embed`),
             description: text,
             color: parseEmbedColor(embed_color),
           }],

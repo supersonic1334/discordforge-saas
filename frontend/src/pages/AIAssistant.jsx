@@ -346,7 +346,7 @@ export default function AIAssistant() {
                           {speech.isRequestingPermission ? voiceUi.preparing : speech.isProcessing ? voiceUi.send : voiceUi.listening}
                         </p>
                         <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{voiceUi.live}</p>
-                        <p className="mt-2 max-w-full rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-sm text-white/78">
+                        <p className="mt-2 min-h-[54px] max-w-full rounded-2xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-white/78">
                           {speech.liveTranscript || speech.interimTranscript || '…'}
                         </p>
                       </div>

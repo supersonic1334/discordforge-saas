@@ -456,7 +456,11 @@ STYLE DIRECTIVE: ${varietyOpener}
 SYSTEM CAPABILITIES:
 - You can build strong text commands, embed commands, guided argument flows, rich help commands, FAQ-style commands, announcement commands, onboarding prompts, and pseudo-panel experiences using premium embed formatting.
 - If the user asks for buttons, menus, or a full interactive panel that this command system cannot truly store, convert it into the richest supported alternative: an embed-based command, clear numbered sections, optional args, a usage hint, and smart response mode.
-- For content commands, you MAY use [[random: option A || option B || option C]] inside response or embed_title. The runtime will pick one option at execution time. Use at least 6 genuinely different options when the request is for jokes, facts, quotes, tips, roasts, or rotating content.
+- For rotating content, you MAY use:
+  - [[random: option A || option B || option C]]
+  - [[combo: opener A || opener B || opener C :: body A || body B || body C :: ending A || ending B || ending C]]
+  The runtime picks dynamic variants at execution time and avoids immediate repeats.
+- For jokes, quotes, facts, roasts, icebreakers, or highly varied content, prefer [[combo: ...]] or at least 10 genuinely different [[random: ...]] options.
 
 SUPPORTED OUTPUT FIELDS ONLY:
 - command_name
@@ -488,6 +492,9 @@ STRICT RULES:
 13. Descriptions should be concise but creative — avoid generic phrasing like "A simple command that...".
 14. Add usage_hint when args are useful. Set require_args=true when the command clearly needs user input.
 15. Use cooldown_ms when spam or abuse would make the command annoying.
+16. If you are editing an existing command, return the FULL final version of the command after applying the requested changes. Do not preserve the previous response just because it existed.
+17. If the user asks to replace, rewrite, refactor, modernize, or completely change the command, overwrite the previous behavior with the new final behavior.
+18. Never return a shallow variation of the existing command when the user clearly asked for a stronger or different result.
 
 JSON shape:
 \`\`\`command
@@ -530,12 +537,12 @@ function normalizeAssistantDraft(draft, mode, prefix, currentCommand = null, req
     command_prefix: commandPrefix,
     command_name: commandName,
     trigger,
-    description: String(draft?.description || currentCommand?.description || '').trim().slice(0, 100),
-    response: String(draft?.response || currentCommand?.response || '').trim().slice(0, 2000),
+    description: String(draft?.description ?? '').trim().slice(0, 100) || String(currentCommand?.description || '').trim().slice(0, 100),
+    response: String(draft?.response ?? '').trim().slice(0, 2000) || String(currentCommand?.response || '').trim().slice(0, 2000),
     response_mode: ['channel', 'reply', 'dm'].includes(draft?.response_mode) ? draft.response_mode : (currentCommand?.response_mode || 'reply'),
-    embed_enabled: draft?.embed_enabled ?? currentCommand?.embed_enabled ?? false,
-    embed_title: String(draft?.embed_title || currentCommand?.embed_title || '').trim().slice(0, 256),
-    embed_color: normalizeColor(draft?.embed_color || currentCommand?.embed_color || '#22d3ee'),
+    embed_enabled: typeof draft?.embed_enabled === 'boolean' ? draft.embed_enabled : (currentCommand?.embed_enabled ?? false),
+    embed_title: String(draft?.embed_title ?? '').trim().slice(0, 256),
+    embed_color: normalizeColor(draft?.embed_color ?? currentCommand?.embed_color ?? '#22d3ee'),
     mention_user: draft?.mention_user ?? currentCommand?.mention_user ?? false,
     delete_trigger: draft?.delete_trigger ?? currentCommand?.delete_trigger ?? false,
     allowed_roles: [],
@@ -544,7 +551,7 @@ function normalizeAssistantDraft(draft, mode, prefix, currentCommand = null, req
     cooldown_ms: Number(draft?.cooldown_ms ?? currentCommand?.cooldown_ms ?? 0),
     delete_response_after_ms: 0,
     require_args: draft?.require_args ?? currentCommand?.require_args ?? false,
-    usage_hint: String(draft?.usage_hint || currentCommand?.usage_hint || '').trim().slice(0, 200),
+    usage_hint: String(draft?.usage_hint ?? '').trim().slice(0, 200),
   }, currentCommand);
 }
 

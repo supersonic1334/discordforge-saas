@@ -176,7 +176,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     setIsRequestingPermission(false)
     setIsProcessing(false)
 
-    const baseValue = String(baseValueRef.current || '').trim()
+    const baseValue = String(baseValueRef.current || '')
     const nextValue = mode === 'commit'
       ? mergeTranscript(baseValue, finalTranscriptRef.current, interimTranscriptRef.current)
       : baseValue
@@ -197,7 +197,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       recognitionRef.current.onend = null
       recognitionRef.current = null
       finalizeRecognition(mode)
-    }, 1800)
+    }, 900)
   }, [clearStopTimeout, finalizeRecognition])
 
   const createRecognition = useCallback(() => {
@@ -317,7 +317,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
         await startAudioMeter(stream)
       }
 
-      baseValueRef.current = String(value || '').trim()
+      baseValueRef.current = String(value || '')
       finalTranscriptRef.current = ''
       interimTranscriptRef.current = ''
       setFinalTranscript('')
@@ -406,12 +406,21 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     }
   }, [clearRestartTimeout, clearStopTimeout, stopAudioMeter])
 
+  const liveTranscript = mergeTranscript(finalTranscript, interimTranscript)
+  const phase = isRequestingPermission || isProcessing
+    ? 'processing'
+    : isListening
+      ? 'listening'
+      : 'idle'
+
   return {
     isSupported,
     isListening,
     isRequestingPermission,
     isProcessing,
-    liveTranscript: mergeTranscript(finalTranscript, interimTranscript),
+    phase,
+    hasTranscript: !!liveTranscript.trim(),
+    liveTranscript,
     interimTranscript,
     audioBars,
     start,
