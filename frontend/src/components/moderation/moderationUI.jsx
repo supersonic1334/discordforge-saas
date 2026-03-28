@@ -71,21 +71,33 @@ export function initials(name) {
 }
 
 export function renderAvatar(url, label, accent = 'from-cyan-500/25 to-violet-500/25', size = 'w-12 h-12') {
-  if (url) {
-    return (
-      <img
-        src={url}
-        alt={label}
-        className={`${size} rounded-2xl object-cover border border-white/10 shadow-[0_14px_36px_rgba(0,0,0,0.24)]`}
-      />
-    )
-  }
-
-  return (
+  const fallback = (
     <div className={`${size} rounded-2xl border border-white/10 bg-gradient-to-br ${accent} flex items-center justify-center text-white/75 font-mono text-xs shadow-[0_14px_36px_rgba(0,0,0,0.24)]`}>
       {initials(label)}
     </div>
   )
+
+  if (url) {
+    return (
+      <div className={`${size} relative shrink-0`}>
+        <img
+          src={url}
+          alt={label}
+          className="w-full h-full rounded-2xl object-cover border border-white/10 shadow-[0_14px_36px_rgba(0,0,0,0.24)]"
+          onError={(event) => {
+            event.currentTarget.style.display = 'none'
+            const fallbackNode = event.currentTarget.nextElementSibling
+            if (fallbackNode) fallbackNode.style.display = 'flex'
+          }}
+        />
+        <div className="absolute inset-0 hidden">
+          {fallback}
+        </div>
+      </div>
+    )
+  }
+
+  return fallback
 }
 
 export function SummaryCard({ label, value, tone }) {

@@ -434,7 +434,7 @@ export default function LogsPage() {
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
-                  {renderAvatar(log.target_username, null)}
+                  {renderAvatar(log.metadata?.target_avatar_url || null, log.target_username || log.target_user_id)}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-display font-700 text-white truncate">{log.target_username || log.target_user_id}</p>
@@ -479,7 +479,7 @@ export default function LogsPage() {
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
-                  {renderAvatar(log.target_username, null)}
+                  {renderAvatar(log.metadata?.target_avatar_url || null, log.target_username || log.target_user_id)}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-display font-700 text-white truncate">{log.target_username || log.target_user_id}</p>
