@@ -99,7 +99,7 @@ const addWarningSchema = z.object({
 const modActionSchema = z.object({
   target_user_id: z.string().regex(/^\d+$/, 'Must be a Discord user ID'),
   target_username: z.string().optional(),
-  action: z.enum(['warn', 'timeout', 'kick', 'ban', 'unban', 'untimeout']),
+  action: z.enum(['warn', 'timeout', 'kick', 'ban', 'unban', 'untimeout', 'blacklist']),
   reason: z.string().min(1).max(500).optional(),
   duration_ms: z.number().int().min(60000).max(2419200000).optional(), // 1 min – 28 days
   points: z.number().int().min(1).max(10).optional().default(1),

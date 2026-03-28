@@ -10,6 +10,7 @@ const discordService = require('../services/discordService');
 const { safeSendModerationDm } = require('../services/moderationDmService');
 const { decrypt } = require('../services/encryptionService');
 const authService = require('../services/authService');
+const botBlacklistService = require('../services/botBlacklistService');
 const db = require('../database');
 
 router.use(requireAuth, requireBotToken, requireGuildOwner);
@@ -30,6 +31,7 @@ const QUICK_ACTION_PERMISSION = {
   kick: DISCORD_PERMISSIONS.KICK_MEMBERS,
   ban: DISCORD_PERMISSIONS.BAN_MEMBERS,
   unban: DISCORD_PERMISSIONS.BAN_MEMBERS,
+  blacklist: DISCORD_PERMISSIONS.BAN_MEMBERS,
 };
 
 const DISCORD_HISTORY_ACTIONS = new Set([20, 22, 23, 24, 25, 26, 27, 28, 72, 73, 74, 75, 145]);
@@ -544,6 +546,7 @@ function buildViewerCapabilities(req, member, guildRoleMap) {
       can_kick: true,
       can_ban: true,
       can_unban: true,
+      can_blacklist_network: true,
       can_view_audit_log: true,
     };
   }
@@ -556,6 +559,7 @@ function buildViewerCapabilities(req, member, guildRoleMap) {
     can_kick: memberHasPermission(member, DISCORD_PERMISSIONS.KICK_MEMBERS, permissionContext),
     can_ban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, permissionContext),
     can_unban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, permissionContext),
+    can_blacklist_network: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, permissionContext),
     can_view_audit_log: memberHasPermission(member, DISCORD_PERMISSIONS.VIEW_AUDIT_LOG, permissionContext),
   };
 }
@@ -793,8 +797,9 @@ function discordActionHistoryEntry(entry, executorMap, userId) {
 async function buildUserModerationProfile(req, token, userId) {
   const guildId = req.guild.guild_id;
   const guildRowId = req.guild.id;
+  const ownerUserId = req.guildOwnerUserId || req.user.id;
 
-  const [guildRoles, member, ban, remoteUser, warningRows, siteActionRows, auditPayload, viewerMember] = await Promise.all([
+  const [guildRoles, member, ban, remoteUser, warningRows, siteActionRows, auditPayload, viewerMember, blacklistEntry] = await Promise.all([
     discordService.getGuildRoles(token, guildId).catch(() => []),
     getGuildMemberSafe(token, guildId, userId),
     getGuildBanSafe(token, guildId, userId),
@@ -813,6 +818,7 @@ async function buildUserModerationProfile(req, token, userId) {
     ),
     discordService.getGuildAuditLogs(token, guildId, { limit: 100 }).catch(() => ({ audit_log_entries: [], users: [] })),
     req.user.discord_id ? getGuildMemberSafe(token, guildId, req.user.discord_id) : Promise.resolve(null),
+    Promise.resolve(botBlacklistService.getBlacklistEntry(ownerUserId, userId)),
   ]);
 
   const roleMap = new Map((Array.isArray(guildRoles) ? guildRoles : []).map((role) => [role.id, role]));
@@ -844,6 +850,13 @@ async function buildUserModerationProfile(req, token, userId) {
       in_server: Boolean(member),
       banned: Boolean(ban),
       ban_reason: ban?.reason || '',
+      network_blacklisted: Boolean(blacklistEntry),
+      blacklist: blacklistEntry ? {
+        reason: blacklistEntry.reason || '',
+        source_module: blacklistEntry.source_module || 'SYSTEM',
+        created_at: blacklistEntry.created_at || null,
+        updated_at: blacklistEntry.updated_at || null,
+      } : null,
     },
     viewer: buildViewerCapabilities(req, viewerMember, roleMap),
     site: {
@@ -1106,26 +1119,47 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
       case 'unban':
         await discordService.unbanMember(token, guildId, target_user_id, reason ?? 'Manual unban');
         break;
+      case 'blacklist':
+        await safeSendModerationDm({
+          botToken: token,
+          guildRow: req.guild,
+          actionType: 'blacklist',
+          targetUserId: target_user_id,
+          reason,
+          moderatorName: moderatorUsername,
+          moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+        });
+        await botBlacklistService.banUserAcrossBotNetwork(
+          req.guildOwnerUserId || req.user.id,
+          target_user_id,
+          target.username,
+          token,
+          reason ?? 'Blacklist reseau manuelle',
+          'MANUAL'
+        );
+        break;
       default:
         return res.status(400).json({ error: 'Unknown action' });
     }
 
-    await recordModAction(
-      guildId,
-      action,
-      target_user_id,
-      target.username,
-      moderatorId,
-      moderatorUsername,
-      reason,
-      duration_ms,
-      'MANUAL',
-      {
-        ...moderatorMetadata,
-        target_avatar_url: target.avatarUrl,
-        points,
-      }
-    );
+    if (action !== 'blacklist') {
+      await recordModAction(
+        guildId,
+        action,
+        target_user_id,
+        target.username,
+        moderatorId,
+        moderatorUsername,
+        reason,
+        duration_ms,
+        'MANUAL',
+        {
+          ...moderatorMetadata,
+          target_avatar_url: target.avatarUrl,
+          points,
+        }
+      );
+    }
 
     if (action === 'timeout') {
       await safeSendModerationDm({
@@ -1144,6 +1178,7 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
       message: `${action} executed successfully`,
       moderator: moderatorMetadata,
       targetUsername: target.username,
+      network_blacklisted: action === 'blacklist',
     });
   } catch (err) {
     if (err.httpStatus === 403) return res.status(403).json({ error: err.message || 'Action interdite' });

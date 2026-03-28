@@ -5,6 +5,7 @@ import {
   Ban,
   Clock3,
   Copy,
+  Fingerprint,
   History,
   LogOut,
   MessageCircle,
@@ -43,6 +44,7 @@ const QUICK_ACTIONS = [
   { id: 'untimeout', label: 'Retirer timeout', icon: XCircle, tone: 'border-sky-500/20 bg-sky-500/10 text-sky-300' },
   { id: 'kick', label: 'Kick', icon: LogOut, tone: 'border-orange-500/20 bg-orange-500/10 text-orange-300' },
   { id: 'ban', label: 'Ban', icon: Ban, tone: 'border-red-500/20 bg-red-500/10 text-red-300' },
+  { id: 'blacklist', label: 'Blacklist reseau', icon: Fingerprint, tone: 'border-violet-500/20 bg-violet-500/10 text-violet-300' },
   { id: 'unban', label: 'Deban', icon: UserCheck, tone: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' },
 ]
 
@@ -178,7 +180,7 @@ function ActionModal({ action, target, values, onChange, canUseDiscordActions, l
                 <div>
                   <p className="font-display font-700 text-sm text-amber-100">Connexion Discord requise</p>
                   <p className="mt-1 text-sm leading-6 text-amber-100/75">
-                    Pour warn, timeout, kick ou ban, tu dois lier ton compte Discord au site. La verification des permissions se fera ensuite automatiquement.
+                    Pour warn, timeout, kick, ban ou blacklist reseau, tu dois lier ton compte Discord au site. La verification des permissions se fera ensuite automatiquement.
                   </p>
                 </div>
               </div>
@@ -537,6 +539,7 @@ export default function SearchPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="font-display font-800 text-3xl text-white truncate">{profile.display_name || profile.username || profile.id}</h2>
                           {profile.banned ? <span className="badge-error">Banni</span> : null}
+                          {profile.network_blacklisted ? <span className="badge-warning">Blacklist reseau</span> : null}
                           {profile.in_server ? <span className="badge-online">Dans le serveur</span> : null}
                           {!profile.in_server && !profile.banned ? <span className="badge-offline">Hors serveur</span> : null}
                           {timeoutActive ? <span className="badge-warning">Timeout actif</span> : null}
@@ -580,9 +583,11 @@ export default function SearchPage() {
                           || (entry.id === 'untimeout' && !viewer?.can_timeout)
                           || (entry.id === 'kick' && !viewer?.can_kick)
                           || (entry.id === 'ban' && !viewer?.can_ban)
+                          || (entry.id === 'blacklist' && !viewer?.can_blacklist_network)
                           || (entry.id === 'unban' && !viewer?.can_unban)
                         )
                         if (entry.id === 'ban' && profile.banned) return null
+                        if (entry.id === 'blacklist' && profile.network_blacklisted) return null
                         if (entry.id === 'unban' && !profile.banned) return null
                         if (entry.id === 'untimeout' && !timeoutActive) return null
                         return <button key={entry.id} type="button" disabled={disabledForPermissions} onClick={() => { setActionValues({ reason: '', duration: '', points: '1' }); setActionModal(entry.id) }} className={`spotlight-card w-full rounded-[22px] border px-4 py-4 text-left transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35 ${entry.tone}`}><div className="flex items-start gap-3"><div><div className="flex items-center gap-2"><Icon className="w-4 h-4" /><span className="font-mono text-sm">{entry.label}</span></div><p className="mt-3 text-xs text-white/55">{viewer?.linked_discord ? 'Action rapide sans quitter la fiche.' : 'Clique pour connecter Discord puis executer l action.'}</p></div></div></button>
@@ -591,7 +596,7 @@ export default function SearchPage() {
                   </div>
                 </div>
                 <div className="space-y-5">
-                  <div className="spotlight-card p-5"><div className="relative z-[1] space-y-4"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl border border-violet-500/20 bg-violet-500/10 flex items-center justify-center shrink-0"><History className="w-5 h-5 text-violet-300" /></div><div><p className="font-display font-700 text-white">Permissions</p><p className="mt-1 text-sm text-white/40">Ce moderateur peut faire maintenant.</p></div></div><div className="flex flex-wrap gap-2">{viewer?.can_warn ? <span className="badge-online">Warn</span> : <span className="badge-offline">Warn</span>}{viewer?.can_timeout ? <span className="badge-online">Timeout</span> : <span className="badge-offline">Timeout</span>}{viewer?.can_kick ? <span className="badge-online">Kick</span> : <span className="badge-offline">Kick</span>}{viewer?.can_ban ? <span className="badge-online">Ban</span> : <span className="badge-offline">Ban</span>}{viewer?.can_unban ? <span className="badge-online">Unban</span> : <span className="badge-offline">Unban</span>}</div></div></div>
+                  <div className="spotlight-card p-5"><div className="relative z-[1] space-y-4"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl border border-violet-500/20 bg-violet-500/10 flex items-center justify-center shrink-0"><History className="w-5 h-5 text-violet-300" /></div><div><p className="font-display font-700 text-white">Permissions</p><p className="mt-1 text-sm text-white/40">Ce moderateur peut faire maintenant.</p></div></div><div className="flex flex-wrap gap-2">{viewer?.can_warn ? <span className="badge-online">Warn</span> : <span className="badge-offline">Warn</span>}{viewer?.can_timeout ? <span className="badge-online">Timeout</span> : <span className="badge-offline">Timeout</span>}{viewer?.can_kick ? <span className="badge-online">Kick</span> : <span className="badge-offline">Kick</span>}{viewer?.can_ban ? <span className="badge-online">Ban</span> : <span className="badge-offline">Ban</span>}{viewer?.can_blacklist_network ? <span className="badge-online">Blacklist reseau</span> : <span className="badge-offline">Blacklist reseau</span>}{viewer?.can_unban ? <span className="badge-online">Unban</span> : <span className="badge-offline">Unban</span>}</div></div></div>
                   <div className="spotlight-card p-5"><div className="relative z-[1] space-y-4"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl border border-white/10 bg-white/[0.04] flex items-center justify-center shrink-0"><Users className="w-5 h-5 text-white/70" /></div><div><p className="font-display font-700 text-white">Roles visibles</p><p className="mt-1 text-sm text-white/40">Resume propre des roles detectes.</p></div></div><div className="flex flex-wrap gap-2">{roles.length > 0 ? roles.slice(0, 10).map((role) => <span key={role.id} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-mono text-white/70">@{role.name}</span>) : <span className="text-sm text-white/35">Aucun role visible.</span>}</div></div></div>
                 </div>
               </div>

@@ -8,6 +8,7 @@ export const ACTION_LABELS = {
   kick: 'Kick',
   ban: 'Ban',
   unban: 'Deban',
+  blacklist: 'Blacklist reseau',
   member_update: 'Mise a jour du membre',
   role_update: 'Mise a jour des roles',
   voice_move: 'Deplacement vocal',
@@ -27,6 +28,7 @@ export const ACTION_COLORS = {
   kick: 'border-orange-500/20 bg-orange-500/10 text-orange-300',
   ban: 'border-red-500/20 bg-red-500/10 text-red-300',
   unban: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+  blacklist: 'border-violet-500/20 bg-violet-500/10 text-violet-300',
   message_delete: 'border-pink-500/20 bg-pink-500/10 text-pink-300',
   message_bulk_delete: 'border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-300',
 }

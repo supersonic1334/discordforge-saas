@@ -43,6 +43,7 @@ const ACTIONS = [
   { id: 'timeout', label: 'Timeout', icon: Clock3, tone: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300' },
   { id: 'kick', label: 'Kick', icon: Shield, tone: 'border-orange-500/20 bg-orange-500/10 text-orange-300' },
   { id: 'ban', label: 'Ban', icon: Ban, tone: 'border-red-500/20 bg-red-500/10 text-red-300' },
+  { id: 'blacklist', label: 'Blacklist reseau', icon: Fingerprint, tone: 'border-violet-500/20 bg-violet-500/10 text-violet-300' },
 ]
 
 const SCAN_DISCORD_LINK_STATE_KEY = 'discordforger.scan.discord-link-state'
@@ -385,6 +386,7 @@ export default function ScanPage() {
     can_timeout: Boolean(user?.is_primary_founder && user?.discord_id),
     can_kick: Boolean(user?.is_primary_founder && user?.discord_id),
     can_ban: Boolean(user?.is_primary_founder && user?.discord_id),
+    can_blacklist_network: Boolean(user?.is_primary_founder && user?.discord_id),
   }
 
   useEffect(() => {
@@ -825,6 +827,7 @@ export default function ScanPage() {
                         <RiskBadge tier={detail.risk_tier} label={detail.risk_label} />
                         {detail.bot ? <span className="badge-offline">Bot</span> : null}
                         {detail.selfbot_suspect ? <span className="badge-error">Self-bot suspect</span> : null}
+                        {detail.blacklist ? <span className="badge-warning">Blacklist reseau</span> : null}
                       </div>
                       <p className="mt-1 text-sm text-white/45">@{detail.username || detail.id}</p>
                       <div className="mt-3 flex flex-wrap gap-3 text-xs font-mono text-white/35">
@@ -878,7 +881,7 @@ export default function ScanPage() {
                 {!viewer?.linked_discord ? (
                   <div className="rounded-[20px] border border-amber-500/20 bg-amber-500/10 p-4 space-y-4">
                     <p className="text-sm leading-6 text-amber-100/80">
-                      Pour lancer warn, timeout, kick ou ban ici, connecte d'abord ton compte Discord au site.
+                      Pour lancer warn, timeout, kick, ban ou blacklist reseau ici, connecte d'abord ton compte Discord au site.
                     </p>
                     <button
                       type="button"
@@ -919,7 +922,9 @@ export default function ScanPage() {
                           || (action.id === 'timeout' && !viewer.can_timeout)
                           || (action.id === 'kick' && !viewer.can_kick)
                           || (action.id === 'ban' && !viewer.can_ban)
+                          || (action.id === 'blacklist' && !viewer.can_blacklist_network)
                         )
+                        if (action.id === 'blacklist' && detail.blacklist) return null
 
                         return (
                           <button
@@ -945,6 +950,7 @@ export default function ScanPage() {
                   <span className={viewer?.can_timeout ? 'badge-online' : 'badge-offline'}>Timeout</span>
                   <span className={viewer?.can_kick ? 'badge-online' : 'badge-offline'}>Kick</span>
                   <span className={viewer?.can_ban ? 'badge-online' : 'badge-offline'}>Ban</span>
+                  <span className={viewer?.can_blacklist_network ? 'badge-online' : 'badge-offline'}>Blacklist reseau</span>
                 </div>
               </DetailBlock>
 

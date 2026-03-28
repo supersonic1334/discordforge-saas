@@ -157,6 +157,7 @@ function buildViewer(member, user, context = {}) {
       can_timeout: false,
       can_kick: false,
       can_ban: false,
+      can_blacklist_network: false,
     };
   }
 
@@ -169,6 +170,7 @@ function buildViewer(member, user, context = {}) {
       can_timeout: true,
       can_kick: true,
       can_ban: true,
+      can_blacklist_network: true,
     };
   }
 
@@ -181,6 +183,7 @@ function buildViewer(member, user, context = {}) {
       can_timeout: false,
       can_kick: false,
       can_ban: false,
+      can_blacklist_network: false,
     };
   }
 
@@ -192,6 +195,7 @@ function buildViewer(member, user, context = {}) {
     can_timeout: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS, context),
     can_kick: memberHasPermission(member, DISCORD_PERMISSIONS.KICK_MEMBERS, context),
     can_ban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, context),
+    can_blacklist_network: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, context),
   };
 }
 
