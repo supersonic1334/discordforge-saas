@@ -48,7 +48,7 @@ api.interceptors.response.use(
   }
 )
 
-function deleteNoBody(url, config = {}) {
+function requestWithoutJsonBody(method, url, config = {}) {
   const token = localStorage.getItem('token')
   const deviceId = getDeviceId()
   const headers = {
@@ -72,7 +72,7 @@ function deleteNoBody(url, config = {}) {
   }
 
   return fetch(requestUrl.toString(), {
-    method: 'DELETE',
+    method,
     headers,
     credentials: 'same-origin',
   }).then(async (response) => {
@@ -112,6 +112,14 @@ function deleteNoBody(url, config = {}) {
       headers: Object.fromEntries(response.headers.entries()),
     }
   })
+}
+
+function deleteNoBody(url, config = {}) {
+  return requestWithoutJsonBody('DELETE', url, config)
+}
+
+function postNoBody(url, config = {}) {
+  return requestWithoutJsonBody('POST', url, config)
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -166,8 +174,8 @@ export const modAPI = {
 
 export const blockedAPI = {
   list:         (guildId, params) => api.get(`/bot/guilds/${guildId}/blocked`, { params }),
-  unban:        (guildId, userId) => api.post(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`, {}),
-  unblacklist:  (guildId, userId) => api.post(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`, {}),
+  unban:        (guildId, userId) => postNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`),
+  unblacklist:  (guildId, userId) => postNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`),
 }
 
 export const messagesAPI = {

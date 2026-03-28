@@ -150,7 +150,7 @@ app.use((req, res, next) => {
   const contentLength = String(req.headers['content-length'] || '').trim();
 
   if (
-    req.method === 'DELETE'
+    ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
     && contentType.includes('application/json')
     && (!contentLength || contentLength === '0')
   ) {

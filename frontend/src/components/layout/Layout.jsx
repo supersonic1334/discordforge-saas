@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -54,8 +54,6 @@ export default function Layout() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
   const [sidebarWidthReady, setSidebarWidthReady] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
-  const mainRef = useRef(null)
-  const scrollPositionsRef = useRef(new Map())
   const { user, logout } = useAuthStore()
   const { guilds, selectedGuildId, clearSelectedGuild, hydrateSelectedGuild } = useGuildStore()
   const { status, ping, bot, fetchStatus, setStatus } = useBotStore()
@@ -197,14 +195,6 @@ export default function Layout() {
     }
   }, [mustStayOnServers, navigate])
 
-  useLayoutEffect(() => {
-    const container = mainRef.current
-    if (!container) return
-
-    const savedPosition = scrollPositionsRef.current.get(location.pathname) || 0
-    container.scrollTop = savedPosition
-  }, [location.pathname])
-
   const handleLogout = () => {
     setStatus({
       status: 'stopped',
@@ -242,11 +232,6 @@ export default function Layout() {
       setSidebarWidth(clampSidebarWidth(event.clientX))
     }
     setIsResizing(true)
-  }
-
-  const handleMainScroll = (event) => {
-    const scrollTop = event.currentTarget.scrollTop
-    scrollPositionsRef.current.set(location.pathname, scrollTop)
   }
 
   const renderSidebarLink = ({ icon: Icon, label, path, needsGuild }) => {
@@ -517,11 +502,7 @@ export default function Layout() {
           </div>
         )}
 
-        <main
-          ref={mainRef}
-          onScroll={handleMainScroll}
-          className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom"
-        >
+        <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
           <Outlet />
         </main>
       </div>

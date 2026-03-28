@@ -37,6 +37,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   const animationFrameRef = useRef(null)
   const stopModeRef = useRef('commit')
   const stopResolverRef = useRef(null)
+  const stopTimeoutRef = useRef(null)
   const [isListening, setIsListening] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
   const [finalTranscript, setFinalTranscript] = useState('')
@@ -74,6 +75,13 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     setAudioBars(IDLE_BARS)
   }, [])
 
+  const clearStopTimeout = useCallback(() => {
+    if (stopTimeoutRef.current) {
+      window.clearTimeout(stopTimeoutRef.current)
+      stopTimeoutRef.current = null
+    }
+  }, [])
+
   const resolveStopPromise = useCallback((valueToResolve) => {
     if (stopResolverRef.current) {
       stopResolverRef.current(valueToResolve)
@@ -82,6 +90,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   }, [])
 
   const finalizeRecognition = useCallback((mode = 'commit') => {
+    clearStopTimeout()
     stopAudioMeter()
     setIsListening(false)
 
@@ -97,7 +106,20 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     onChange(nextValue)
     resolveStopPromise(nextValue)
     return nextValue
-  }, [onChange, resolveStopPromise, stopAudioMeter])
+  }, [clearStopTimeout, onChange, resolveStopPromise, stopAudioMeter])
+
+  const scheduleForcedFinalize = useCallback((mode) => {
+    clearStopTimeout()
+    stopTimeoutRef.current = window.setTimeout(() => {
+      if (!recognitionRef.current) {
+        return
+      }
+
+      recognitionRef.current.onend = null
+      recognitionRef.current = null
+      finalizeRecognition(mode)
+    }, 1200)
+  }, [clearStopTimeout, finalizeRecognition])
 
   const startAudioMeter = useCallback(async (stream) => {
     if (typeof window === 'undefined') return
@@ -169,6 +191,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     if (recognitionRef.current) {
       return new Promise((resolve) => {
         stopResolverRef.current = resolve
+        scheduleForcedFinalize('commit')
         recognitionRef.current.stop()
       })
     }
@@ -182,7 +205,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     stopAudioMeter()
     setIsListening(false)
     return Promise.resolve(committed)
-  }, [onChange, stopAudioMeter])
+  }, [onChange, scheduleForcedFinalize, stopAudioMeter])
 
   const cancel = useCallback(() => {
     stopModeRef.current = 'cancel'
@@ -190,6 +213,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     if (recognitionRef.current) {
       return new Promise((resolve) => {
         stopResolverRef.current = resolve
+        scheduleForcedFinalize('cancel')
         recognitionRef.current.abort()
       })
     }
@@ -203,7 +227,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     stopAudioMeter()
     setIsListening(false)
     return Promise.resolve(baseValue)
-  }, [onChange, stopAudioMeter])
+  }, [onChange, scheduleForcedFinalize, stopAudioMeter])
 
   const start = useCallback(async () => {
     const Recognition = getRecognitionConstructor()
@@ -278,6 +302,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       }
 
       recognition.onend = () => {
+        clearStopTimeout()
         recognitionRef.current = null
         finalizeRecognition(stopModeRef.current)
       }
@@ -302,16 +327,17 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     } finally {
       setIsRequestingPermission(false)
     }
-  }, [finalizeRecognition, isListening, isRequestingPermission, locale, onChange, onError, startAudioMeter, stopAudioMeter, value])
+  }, [clearStopTimeout, finalizeRecognition, isListening, isRequestingPermission, locale, onChange, onError, startAudioMeter, stopAudioMeter, value])
 
   useEffect(() => () => {
+    clearStopTimeout()
     if (recognitionRef.current) {
       recognitionRef.current.onend = null
       recognitionRef.current.abort()
       recognitionRef.current = null
     }
     stopAudioMeter()
-  }, [stopAudioMeter])
+  }, [clearStopTimeout, stopAudioMeter])
 
   return {
     isSupported,
