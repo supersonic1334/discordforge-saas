@@ -11,6 +11,37 @@ function getErrorMessage(error) {
   return error?.response?.data?.error || error?.message || 'Erreur inattendue'
 }
 
+function isInvalidJsonBodyError(error) {
+  const text = String(getErrorMessage(error) || '').toLowerCase()
+  return text.includes('invalid json') || text.includes('request body')
+}
+
+async function runBlockedActionWithFallback(kind, guildId, userId) {
+  const actions = kind === 'ban'
+    ? [
+        () => blockedAPI.unbanDelete(guildId, userId),
+        () => blockedAPI.unban(guildId, userId),
+        () => blockedAPI.unbanGet(guildId, userId),
+      ]
+    : [
+        () => blockedAPI.unblacklistDelete(guildId, userId),
+        () => blockedAPI.unblacklist(guildId, userId),
+        () => blockedAPI.unblacklistGet(guildId, userId),
+      ]
+
+  let lastError = null
+  for (let index = 0; index < actions.length; index += 1) {
+    try {
+      return await actions[index]()
+    } catch (error) {
+      lastError = error
+      if (!isInvalidJsonBodyError(error)) break
+    }
+  }
+
+  throw lastError || new Error('Action impossible')
+}
+
 function formatDate(locale, value) {
   if (!value) return '—'
   try {
@@ -214,7 +245,7 @@ export default function AccessControlPage() {
     setActioningId(`ban:${entry.id}`)
 
     try {
-      await blockedAPI.unban(selectedGuildId, entry.id)
+      await runBlockedActionWithFallback('ban', selectedGuildId, entry.id)
       removeEntryLocally('ban', entry.id)
       toast.success('Utilisateur debanni avec succes')
       await loadBlocked({ silent: true })
@@ -231,7 +262,7 @@ export default function AccessControlPage() {
     setActioningId(`blacklist:${entry.id}`)
 
     try {
-      await blockedAPI.unblacklist(selectedGuildId, entry.id)
+      await runBlockedActionWithFallback('blacklist', selectedGuildId, entry.id)
       removeEntryLocally('blacklist', entry.id)
       toast.success('Utilisateur retire de la blacklist avec succes')
       await loadBlocked({ silent: true })

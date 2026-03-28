@@ -179,8 +179,12 @@ export const modAPI = {
 
 export const blockedAPI = {
   list:         (guildId, params) => api.get(`/bot/guilds/${guildId}/blocked`, { params }),
-  unban:        (guildId, userId) => postNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`, { params: { _: Date.now() } }),
-  unblacklist:  (guildId, userId) => postNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`, { params: { _: Date.now() } }),
+  unban:        (guildId, userId) => deleteNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}`, { params: { _: Date.now() } }),
+  unblacklist:  (guildId, userId) => deleteNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}`, { params: { _: Date.now() } }),
+  unbanGet:     (guildId, userId) => getNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}/unban`, { params: { _: Date.now() } }),
+  unblacklistGet: (guildId, userId) => getNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}/remove`, { params: { _: Date.now() } }),
+  unbanDelete:  (guildId, userId) => deleteNoBody(`/bot/guilds/${guildId}/blocked/bans/${userId}`, { params: { _: Date.now() } }),
+  unblacklistDelete: (guildId, userId) => deleteNoBody(`/bot/guilds/${guildId}/blocked/blacklist/${userId}`, { params: { _: Date.now() } }),
 }
 
 export const messagesAPI = {
