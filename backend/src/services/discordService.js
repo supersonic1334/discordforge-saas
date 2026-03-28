@@ -15,12 +15,21 @@ const rateLimitBuckets = new Map(); // bucket -> { reset, remaining }
 // ── Core fetch with retry + rate limit handling ───────────────────────────────
 async function discordFetch(endpoint, token, options = {}, retryCount = 0) {
   const url = `${DISCORD_API}${endpoint}`;
+  const hasBody = Object.prototype.hasOwnProperty.call(options, 'body')
+    && options.body !== undefined
+    && options.body !== null;
   const headers = {
     Authorization: `Bot ${token}`,
-    'Content-Type': 'application/json',
     'User-Agent': 'DiscordBot (https://discord-saas.example.com, 1.0.0)',
     ...options.headers,
   };
+
+  if (hasBody) {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  } else {
+    delete headers['Content-Type'];
+    delete headers['Content-Length'];
+  }
 
   // Check known rate limits before sending
   const bucket = rateLimitBuckets.get(endpoint);
