@@ -505,7 +505,7 @@ export default function SearchPage() {
               <div className="flex gap-3">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-white/25 absolute left-4 top-1/2 -translate-y-1/2" />
-                  <input className="input-field pl-11" placeholder="Exemple: Dream ou 123456789" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleSearch() } }} />
+                  <input className="input-field pl-11" placeholder="Exemple: pseudo ou ID Discord" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleSearch() } }} />
                 </div>
                 <button type="button" onClick={handleSearch} disabled={!query.trim() || loadingResults} className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-50"><Search className={`w-4 h-4 ${loadingResults ? 'animate-pulse' : ''}`} />Rechercher</button>
               </div>

@@ -208,7 +208,7 @@ export default function MessagesPage() {
                 <Search className="w-4 h-4 text-white/25 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   className="input-field pl-11"
-                  placeholder="Exemple: Dream ou 123456789"
+                  placeholder="Exemple: pseudo ou ID Discord"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={(event) => {
