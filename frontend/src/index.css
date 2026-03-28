@@ -269,6 +269,13 @@
       border-color 260ms ease,
       background-color 260ms ease;
   }
+  .sidebar-scroll-area {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    overflow-anchor: none;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+  }
   .sidebar-shell:hover {
     box-shadow:
       24px 0 68px rgba(0,0,0,0.32),

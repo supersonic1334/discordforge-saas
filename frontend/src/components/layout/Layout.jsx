@@ -248,7 +248,6 @@ export default function Layout() {
     return (
       <motion.div
         key={path}
-        layout
         whileHover={disabled ? undefined : { x: collapsed ? 0 : 5, y: -2, scale: 1.012 }}
         whileTap={disabled ? undefined : { scale: 0.988 }}
         transition={{ type: 'spring', stiffness: 340, damping: 24 }}
@@ -281,8 +280,8 @@ export default function Layout() {
   }
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      <div className={`flex items-center gap-3 p-4 border-b border-white/[0.06] ${collapsed ? 'justify-center' : ''}`}>
+    <div className="flex flex-col h-full min-h-0">
+      <div className={`shrink-0 flex items-center gap-3 p-4 border-b border-white/[0.06] ${collapsed ? 'justify-center' : ''}`}>
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center shrink-0 overflow-hidden p-0.5 shadow-[0_8px_24px_rgba(92,138,255,0.16)]">
           <img src={brandAvatarSrc} className="w-full h-full object-cover" alt={brandAvatarAlt} />
         </div>
@@ -295,7 +294,7 @@ export default function Layout() {
       </div>
 
       {!collapsed && (
-        <div className="mx-3 mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+        <div className="shrink-0 mx-3 mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <StatusDot status={status} />
@@ -339,11 +338,11 @@ export default function Layout() {
         </div>
       )}
 
-      <nav className="flex-1 px-3 pt-3 pb-5 space-y-1.5 overflow-y-auto scrollbar-none mt-2">
+      <nav className="sidebar-scroll-area flex-1 min-h-0 px-3 pt-3 pb-5 space-y-1.5 scrollbar-none mt-2">
         {navItems.map(renderSidebarLink)}
       </nav>
 
-      <div className="mt-3 p-3 border-t border-white/[0.06] space-y-1">
+      <div className="shrink-0 mt-3 p-3 border-t border-white/[0.06] space-y-1">
         <Link
           to="/dashboard/reviews"
           onClick={() => setMobileOpen(false)}
