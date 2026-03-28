@@ -8,6 +8,7 @@ const router = express.Router({ mergeParams: true });
 const { requireAuth, requireBotToken, requireGuildOwner, validateQuery } = require('../middleware');
 const { decrypt } = require('../services/encryptionService');
 const discordService = require('../services/discordService');
+const authService = require('../services/authService');
 const db = require('../database');
 
 router.use(requireAuth, requireBotToken, requireGuildOwner);
@@ -41,6 +42,10 @@ const scanQuerySchema = z.object({
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
   }, z.boolean().optional().default(false)),
 });
+
+function isPrimaryFounder(user) {
+  return authService.isPrimaryFounderEmail(user?.email);
+}
 
 function parseJson(value, fallback = {}) {
   try {
@@ -91,8 +96,8 @@ function getRiskTier(score) {
 
 function formatRiskLabel(tier) {
   if (tier === 'critical') return 'Critique';
-  if (tier === 'high') return 'Eleve';
-  if (tier === 'medium') return 'Modere';
+  if (tier === 'high') return '\u00c9lev\u00e9';
+  if (tier === 'medium') return 'Mod\u00e9r\u00e9';
   return 'Faible';
 }
 
@@ -140,7 +145,8 @@ function memberHasPermission(member, permission, context = {}) {
   return (permissions & permission) === permission;
 }
 
-function buildViewer(member, linkedDiscordId, context = {}) {
+function buildViewer(member, user, context = {}) {
+  const linkedDiscordId = user?.discord_id || null;
   if (!linkedDiscordId) {
     return {
       linked_discord: false,
@@ -150,6 +156,18 @@ function buildViewer(member, linkedDiscordId, context = {}) {
       can_timeout: false,
       can_kick: false,
       can_ban: false,
+    };
+  }
+
+  if (isPrimaryFounder(user) && !member) {
+    return {
+      linked_discord: true,
+      linked_discord_id: linkedDiscordId,
+      in_server: false,
+      can_warn: true,
+      can_timeout: true,
+      can_kick: true,
+      can_ban: true,
     };
   }
 
@@ -812,7 +830,7 @@ async function runGuildScan(req) {
     partial: memberResult.partial,
     partial_reason: memberResult.partial ? 'Scan limite pour garder une reponse stable sur tres gros serveurs.' : '',
     summary,
-    viewer: buildViewer(viewerMember, req.user.discord_id || null, viewerPermissionContext),
+    viewer: buildViewer(viewerMember, req.user, viewerPermissionContext),
     members,
     detailMap,
   };

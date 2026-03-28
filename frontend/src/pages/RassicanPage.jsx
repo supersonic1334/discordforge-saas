@@ -24,8 +24,8 @@ import { useAuthStore, useGuildStore } from '../stores'
 const RISK_OPTIONS = [
   { value: 'all', label: 'Tous les risques' },
   { value: 'critical', label: 'Critique' },
-  { value: 'high', label: 'Eleve' },
-  { value: 'medium', label: 'Modere' },
+  { value: 'high', label: '\u00c9lev\u00e9' },
+  { value: 'medium', label: 'Mod\u00e9r\u00e9' },
   { value: 'low', label: 'Faible' },
 ]
 
@@ -237,10 +237,10 @@ export default function RassicanPage() {
   const members = scan?.members || []
   const viewer = detail?.viewer || scan?.viewer || {
     linked_discord: Boolean(user?.discord_id),
-    can_warn: false,
-    can_timeout: false,
-    can_kick: false,
-    can_ban: false,
+    can_warn: Boolean(user?.is_primary_founder && user?.discord_id),
+    can_timeout: Boolean(user?.is_primary_founder && user?.discord_id),
+    can_kick: Boolean(user?.is_primary_founder && user?.discord_id),
+    can_ban: Boolean(user?.is_primary_founder && user?.discord_id),
   }
 
   useEffect(() => {
@@ -256,7 +256,7 @@ export default function RassicanPage() {
     const linkError = params.get('discord_link_error')
     if (!linked && !linkError) return
 
-    fetchMe()
+    void fetchMe()
     const restoredState = linked === '1' ? consumeDiscordLinkRassicanState(selectedGuildId) : null
     if (linked === '1') {
       toast.success('Compte Discord connecte')
@@ -272,17 +272,22 @@ export default function RassicanPage() {
     }, { replace: true })
 
     if (restoredState?.filters) {
-      setFilters((current) => ({
-        ...current,
+      const nextFilters = {
+        ...filters,
         ...restoredState.filters,
-      }))
+      }
+      setFilters(nextFilters)
+      void loadScan(true, nextFilters, restoredState.selectedUserId)
+      return
     }
+
     if (restoredState?.selectedUserId) {
       setSelectedUserId(restoredState.selectedUserId)
+      void loadDetail(restoredState.selectedUserId)
     }
   }, [fetchMe, location.pathname, location.search, navigate, selectedGuildId])
 
-  async function loadScan(forceRefresh = false) {
+  async function loadScan(forceRefresh = false, nextFilters = filters, preferredUserId = '') {
     if (!selectedGuildId) return
 
     if (forceRefresh) setRefreshing(true)
@@ -290,7 +295,7 @@ export default function RassicanPage() {
 
     try {
       const response = await rassicanAPI.scan(selectedGuildId, {
-        ...filters,
+        ...nextFilters,
         refresh: forceRefresh ? 1 : 0,
       })
       const nextScan = response.data || null
@@ -298,6 +303,7 @@ export default function RassicanPage() {
 
       const nextMembers = nextScan?.members || []
       setSelectedUserId((current) => {
+        if (preferredUserId && nextMembers.some((entry) => entry.id === preferredUserId)) return preferredUserId
         if (current && nextMembers.some((entry) => entry.id === current)) return current
         return nextMembers[0]?.id || ''
       })
@@ -332,7 +338,7 @@ export default function RassicanPage() {
   useEffect(() => {
     if (!selectedGuildId) return undefined
     const timeoutId = window.setTimeout(() => {
-      loadScan(false)
+      loadScan(false, filters)
     }, filters.q ? 220 : 0)
 
     return () => window.clearTimeout(timeoutId)
@@ -395,7 +401,7 @@ export default function RassicanPage() {
     try {
       await modAPI.action(selectedGuildId, payload)
       toast.success(`${actionId} execute`)
-      await loadScan(true)
+      await loadScan(true, filters, detail.id)
       await loadDetail(detail.id)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -413,7 +419,7 @@ export default function RassicanPage() {
     return (
       <SelectGuildState
         title="Choisis d abord un serveur"
-        body="Rassican scanne serveur par serveur avec un score de risque et des actions directes."
+        body="Rassican analyse serveur par serveur avec un score de risque et des actions directes."
         actionLabel="Choisir un serveur"
       />
     )
@@ -426,13 +432,13 @@ export default function RassicanPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <HeaderPill icon={Fingerprint} label="Rassican" />
-              <HeaderPill icon={ShieldCheck} label="scan risque" />
+              <HeaderPill icon={ShieldCheck} label="analyse risque" />
               <HeaderPill icon={Users} label={guild?.name || 'serveur'} />
             </div>
             <div>
               <h1 className="font-display font-800 text-3xl text-white sm:text-4xl">Rassican</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55 sm:text-[15px]">
-                Scan avance des membres, detection des bots, suspicion de self-bot, signaux de scam et lecture rapide des traces utiles avant action staff.
+                Analyse avancee des membres, detection des bots, suspicion de self-bot, signaux de scam et lecture rapide des traces utiles avant action staff.
               </p>
             </div>
           </div>
@@ -445,16 +451,16 @@ export default function RassicanPage() {
               className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loadingScan || refreshing ? 'animate-spin' : ''}`} />
-              Relancer le scan
+              Relancer l analyse
             </button>
           </div>
         </div>
 
         <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <MetricCard label="Scannes" value={scan?.summary?.scanned_members || 0} hint={scan?.partial ? 'scan partiel stable' : 'scan complet'} />
+          <MetricCard label="Scannes" value={scan?.summary?.scanned_members || 0} hint={scan?.partial ? 'analyse partielle stable' : 'analyse complete'} />
           <MetricCard label="Louches" value={scan?.summary?.suspicious_members || 0} tone="border-amber-500/20 bg-amber-500/10 text-amber-100" />
           <MetricCard label="Critiques" value={scan?.summary?.critical || 0} tone="border-red-500/20 bg-red-500/10 text-red-100" />
-          <MetricCard label="Elevés" value={scan?.summary?.high || 0} tone="border-orange-500/20 bg-orange-500/10 text-orange-100" />
+          <MetricCard label="\u00c9lev\u00e9s" value={scan?.summary?.high || 0} tone="border-orange-500/20 bg-orange-500/10 text-orange-100" />
           <MetricCard label="Bots" value={scan?.summary?.bots || 0} tone="border-violet-500/20 bg-violet-500/10 text-violet-100" />
         </div>
 
@@ -522,7 +528,7 @@ export default function RassicanPage() {
               <div className="relative z-[1]">
                 <Users className="w-12 h-12 text-white/10 mx-auto mb-4" />
                 <p className="font-display font-700 text-xl text-white">Aucun profil visible</p>
-                <p className="mt-2 text-white/40">Change les filtres ou relance le scan.</p>
+                <p className="mt-2 text-white/40">Change les filtres ou relance l analyse.</p>
               </div>
             </div>
           ) : null}
@@ -612,7 +618,73 @@ export default function RassicanPage() {
                 </div>
               </DetailBlock>
 
-              <DetailBlock title="Actions directes" hint="Moderation rapide depuis le scan.">
+              <DetailBlock title="Contexte membre" hint="Infos utiles avant decision staff.">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-3">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">Compte</p>
+                    <p className="mt-2 text-sm text-white/75">
+                      {detail.account_age_days !== null && detail.account_age_days !== undefined
+                        ? `${detail.account_age_days} jour(s)`
+                        : 'Age indisponible'}
+                    </p>
+                  </div>
+                  <div className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-3">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">Presence serveur</p>
+                    <p className="mt-2 text-sm text-white/75">
+                      {detail.joined_age_days !== null && detail.joined_age_days !== undefined
+                        ? `${detail.joined_age_days} jour(s)`
+                        : 'Date indisponible'}
+                    </p>
+                  </div>
+                  <div className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-3">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">Etat moderation</p>
+                    <p className="mt-2 text-sm text-white/75">
+                      {detail.timeout_active
+                        ? `Timeout actif jusqu au ${formatDate('fr-FR', detail.timeout_until)}`
+                        : 'Aucun timeout actif'}
+                    </p>
+                  </div>
+                  <div className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-3">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">Blacklist</p>
+                    <p className="mt-2 text-sm text-white/75">
+                      {detail.blacklist?.reason || 'Aucune entree reseau'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-3">
+                  <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">Roles visibles</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {detail.roles?.length
+                      ? detail.roles.map((role) => (
+                        <span key={role.id} className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs font-mono text-white/70">
+                          @{role.name}
+                        </span>
+                      ))
+                      : <span className="text-sm text-white/40">Aucun role visible.</span>}
+                  </div>
+                </div>
+
+                <div className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">Signaux detectes</p>
+                    {detail.evidence_summary?.last_seen_at ? (
+                      <span className="text-[11px] font-mono text-white/25">Dernier signal: {formatDate('fr-FR', detail.evidence_summary.last_seen_at)}</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {detail.evidence_flags?.length
+                      ? detail.evidence_flags.map((flag) => (
+                        <span key={flag} className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-mono text-amber-200">
+                          {flag}
+                        </span>
+                      ))
+                      : <span className="text-sm text-white/40">Aucun flag supplementaire.</span>}
+                  </div>
+                </div>
+              </DetailBlock>
+
+              <DetailBlock title="Actions directes" hint="Moderation rapide depuis Rassican.">
                 {!viewer?.linked_discord ? (
                   <div className="rounded-[20px] border border-amber-500/20 bg-amber-500/10 p-4 space-y-4">
                     <p className="text-sm leading-6 text-amber-100/80">
@@ -644,7 +716,7 @@ export default function RassicanPage() {
                         placeholder="10m, 1h, 1d"
                       />
                       <div className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-3 text-sm text-white/45">
-                        Timeout seulement: format court `10m`, `1h`, `1d`.
+                        Timeout seulement: format court 10m, 1h, 1d.
                       </div>
                     </div>
 

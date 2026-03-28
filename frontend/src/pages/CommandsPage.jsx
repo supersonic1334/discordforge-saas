@@ -24,6 +24,7 @@ import { aiAPI, commandsAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
+import VoiceComposerPanel from '../components/VoiceComposerPanel'
 import VoiceMeter from '../components/VoiceMeter'
 
 const UI = {
@@ -64,6 +65,7 @@ const UI = {
     voiceStopDictation: 'Arreter la dictee',
     voiceSendTranscript: 'Transcrire et generer',
     voiceLiveTranscript: 'Transcription en direct',
+    voiceTranscriptPlaceholder: 'Parle librement. La transcription apparait ici en temps reel.',
     voiceUnsupported: 'Micro non pris en charge sur ce navigateur.',
     voiceDenied: 'Autorise le micro pour utiliser la dictée.',
     voiceError: 'La dictée vocale a rencontré un problème.',
@@ -121,6 +123,7 @@ const UI = {
     voiceStopDictation: 'Stop dictation',
     voiceSendTranscript: 'Transcribe and generate',
     voiceLiveTranscript: 'Live transcript',
+    voiceTranscriptPlaceholder: 'Speak naturally. The live transcript appears here in real time.',
     voiceUnsupported: 'Microphone is not supported on this browser.',
     voiceDenied: 'Allow microphone access to use voice dictation.',
     voiceError: 'Voice dictation ran into an issue.',
@@ -178,6 +181,7 @@ const UI = {
     voiceStopDictation: 'Detener dictado',
     voiceSendTranscript: 'Transcribir y generar',
     voiceLiveTranscript: 'Transcripcion en vivo',
+    voiceTranscriptPlaceholder: 'Habla con normalidad. La transcripcion aparece aqui en tiempo real.',
     voiceUnsupported: 'El micro no es compatible con este navegador.',
     voiceDenied: 'Autoriza el micro para usar la dictado por voz.',
     voiceError: 'El dictado por voz encontro un problema.',
@@ -570,7 +574,7 @@ function getCommandsCopy(locale) {
       promptIdeas: 'Quick ideas',
       autoMode: 'Auto-detected mode',
       liveTrigger: 'Saved trigger',
-      inputHelp: 'Type the exact trigger or the future command name. Examples: `/help`, `!joke`, `*ticket`, `?rules`, `^^panel`.',
+      inputHelp: 'Type the exact trigger or the future command name. Examples: /help, !joke, *ticket, ?rules, ^^panel.',
       prefixOnly: 'Custom prefix only',
       slashMode: 'Discord slash command',
       nameOnly: 'Command name only',
@@ -609,7 +613,7 @@ function getCommandsCopy(locale) {
       promptIdeas: 'Ideas rapidas',
       autoMode: 'Modo detectado',
       liveTrigger: 'Trigger guardado',
-      inputHelp: 'Escribe el trigger exacto o el futuro nombre del comando. Ejemplos: `/help`, `!broma`, `*ticket`, `?reglas`, `^^panel`.',
+      inputHelp: 'Escribe el trigger exacto o el futuro nombre del comando. Ejemplos: /help, !broma, *ticket, ?reglas, ^^panel.',
       prefixOnly: 'Solo prefijo personalizado',
       slashMode: 'Comando slash de Discord',
       nameOnly: 'Solo nombre del comando',
@@ -647,7 +651,7 @@ function getCommandsCopy(locale) {
     promptIdeas: 'Idees rapides',
     autoMode: 'Mode detecte',
     liveTrigger: 'Declencheur final',
-    inputHelp: 'Ecris le declencheur exact ou le futur nom de commande. Exemples: `/help`, `!blague`, `*ticket`, `?regles`, `^^panel`.',
+    inputHelp: 'Ecris le declencheur exact ou le futur nom de commande. Exemples: /help, !blague, *ticket, ?regles, ^^panel.',
     prefixOnly: 'Prefixe personnalise seul',
     slashMode: 'Commande slash Discord',
     nameOnly: 'Nom de commande seul',
@@ -1340,7 +1344,18 @@ export default function CommandsPage() {
                 </div>
               </div>
               {(speech.isListening || speech.isRequestingPermission || speech.isProcessing) && (
-                <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-3">
+                <>
+                  <VoiceComposerPanel
+                    accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
+                    bars={speech.audioBars}
+                    active={speech.isListening}
+                    processing={speech.isRequestingPermission || speech.isProcessing}
+                    statusLabel={speech.isRequestingPermission ? ui.voicePreparing : speech.isProcessing ? ui.voiceSendTranscript : ui.voiceListening}
+                    liveLabel={ui.voiceLiveTranscript}
+                    transcript={speech.liveTranscript || speech.interimTranscript}
+                    placeholder={ui.voiceTranscriptPlaceholder}
+                  />
+                <div className="hidden voice-panel-to-remove">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <VoiceMeter
@@ -1381,6 +1396,7 @@ export default function CommandsPage() {
                     </div>
                   </div>
                 </div>
+                </>
               )}
             </div>
 

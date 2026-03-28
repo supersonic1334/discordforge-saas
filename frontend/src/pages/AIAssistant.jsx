@@ -7,6 +7,7 @@ import { aiAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
+import VoiceComposerPanel from '../components/VoiceComposerPanel'
 import VoiceMeter from '../components/VoiceMeter'
 
 const VOICE_UI = {
@@ -16,6 +17,7 @@ const VOICE_UI = {
     live: 'Transcription en direct',
     listening: 'Écoute en cours',
     preparing: 'Autorisation du micro…',
+    placeholder: 'Parle librement. La transcription apparait ici en temps reel.',
   },
   en: {
     insert: 'Stop and insert',
@@ -23,6 +25,7 @@ const VOICE_UI = {
     live: 'Live transcript',
     listening: 'Listening',
     preparing: 'Allowing microphone…',
+    placeholder: 'Speak naturally. The live transcript appears here in real time.',
   },
   es: {
     insert: 'Detener e insertar',
@@ -30,6 +33,7 @@ const VOICE_UI = {
     live: 'Transcripcion en vivo',
     listening: 'Escuchando',
     preparing: 'Autorizando microfono…',
+    placeholder: 'Habla con normalidad. La transcripcion aparece aqui en tiempo real.',
   },
 }
 
@@ -332,7 +336,17 @@ export default function AIAssistant() {
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.03] p-3">
+                <VoiceComposerPanel
+                  accent={speech.isRequestingPermission ? 'amber' : 'violet'}
+                  bars={speech.audioBars}
+                  active={speech.isListening}
+                  processing={speech.isRequestingPermission || speech.isProcessing}
+                  statusLabel={speech.isRequestingPermission ? voiceUi.preparing : speech.isProcessing ? voiceUi.send : voiceUi.listening}
+                  liveLabel={voiceUi.live}
+                  transcript={speech.liveTranscript || speech.interimTranscript}
+                  placeholder={voiceUi.placeholder}
+                />
+                <div className="hidden rounded-[24px] border border-white/[0.08] bg-white/[0.03] p-3">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <VoiceMeter
