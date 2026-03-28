@@ -19,7 +19,7 @@ function CSSSnowFallback() {
 
   return (
     <div
-      className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
+      className="fixed inset-0 pointer-events-none z-[1] overflow-hidden"
       aria-hidden="true"
     >
       {flakes.map((f) => (
@@ -254,8 +254,8 @@ function ThreeSnowCanvas() {
   return (
     <div
       ref={mountRef}
-      className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
-      style={{ opacity: IS_MOBILE ? 0.4 : 0.55 }}
+      className="fixed inset-0 pointer-events-none z-[1] overflow-hidden"
+      style={{ opacity: IS_MOBILE ? 0.48 : 0.7 }}
       aria-hidden="true"
     />
   )

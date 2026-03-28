@@ -379,7 +379,7 @@ export default function ScanPage() {
   const [infoOpen, setInfoOpen] = useState(false)
 
   const members = scan?.members || []
-  const viewer = detail?.viewer || scan?.viewer || {
+  const viewer = scan?.viewer || detail?.viewer || {
     linked_discord: Boolean(user?.discord_id),
     can_warn: Boolean(user?.is_primary_founder && user?.discord_id),
     can_timeout: Boolean(user?.is_primary_founder && user?.discord_id),
@@ -394,6 +394,17 @@ export default function ScanPage() {
     setScan(null)
     setInfoOpen(false)
   }, [selectedGuildId])
+
+  useEffect(() => {
+    if (!scan?.viewer) return
+    setDetail((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        viewer: scan.viewer,
+      }
+    })
+  }, [scan?.viewer])
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -447,6 +458,15 @@ export default function ScanPage() {
       })
       const nextScan = response.data || null
       setScan(nextScan)
+      if (nextScan?.viewer) {
+        setDetail((current) => {
+          if (!current) return current
+          return {
+            ...current,
+            viewer: nextScan.viewer,
+          }
+        })
+      }
 
       const nextMembers = nextScan?.members || []
       setSelectedUserId((current) => {
@@ -454,10 +474,12 @@ export default function ScanPage() {
         if (current && nextMembers.some((entry) => entry.id === current)) return current
         return nextMembers[0]?.id || ''
       })
+      return nextScan
     } catch (error) {
       if (!options.silent) {
         toast.error(getErrorMessage(error))
       }
+      return null
     } finally {
       if (!options.silent) {
         setLoadingScan(false)
@@ -475,17 +497,42 @@ export default function ScanPage() {
     if (!silent) setLoadingDetail(true)
     try {
       const response = await scanAPI.member(selectedGuildId, userId)
-      setDetail({
+      const nextDetail = {
         ...(response.data?.member || null),
         viewer: response.data?.viewer || scan?.viewer || null,
-      })
+      }
+      setDetail(nextDetail)
+      return nextDetail
     } catch (error) {
       if (!silent) {
         toast.error(getErrorMessage(error))
       }
+      return null
     } finally {
       if (!silent) setLoadingDetail(false)
     }
+  }
+
+  async function syncViewerAfterDiscordLink() {
+    const maxAttempts = 8
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await fetchMe()
+      const nextScan = await loadScan(true, filters, selectedUserId, { silent: attempt > 0 })
+
+      if (selectedUserId) {
+        await loadDetail(selectedUserId, { silent: true })
+      }
+
+      const nextViewer = nextScan?.viewer
+      if (nextViewer?.linked_discord) {
+        return true
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 350))
+    }
+
+    return false
   }
 
   useEffect(() => {
@@ -551,10 +598,9 @@ export default function ScanPage() {
         throw new Error(result?.error || 'discord_link_failed')
       }
 
-      await fetchMe()
-      await loadScan(true, filters, selectedUserId)
-      if (selectedUserId) {
-        await loadDetail(selectedUserId, { silent: true })
+      const synced = await syncViewerAfterDiscordLink()
+      if (!synced) {
+        throw new Error('Le compte Discord est lie, mais la mise a jour n a pas encore fini. Reessaie dans quelques secondes.')
       }
       toast.success('Compte Discord connecte')
     } catch (error) {
