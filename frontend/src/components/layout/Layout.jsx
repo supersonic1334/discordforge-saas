@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
@@ -82,6 +82,7 @@ export default function Layout() {
     { icon: Users, label: t('layout.nav.team', 'Équipe'), path: '/dashboard/team', needsGuild: true },
     { icon: Shield, label: t('layout.nav.protection', 'Protection'), path: '/dashboard/protection', needsGuild: true },
     { icon: Search, label: t('layout.nav.search', 'Search'), path: '/dashboard/search', needsGuild: true },
+    { icon: Fingerprint, label: t('layout.nav.rassican', 'Rassican'), path: '/dashboard/rassican', needsGuild: true },
     { icon: ScrollText, label: t('layout.nav.logs', 'Logs'), path: '/dashboard/logs', needsGuild: true },
     { icon: Send, label: t('layout.nav.messages', 'Messages'), path: '/dashboard/messages', needsGuild: true },
     { icon: BellRing, label: t('layout.nav.notifications', 'Notifications'), path: '/dashboard/notifications', needsGuild: true },
@@ -447,7 +448,7 @@ export default function Layout() {
             transition={isResizing ? { duration: 0 } : SIDEBAR_SPRING}
             className={`hidden lg:flex flex-col relative z-20 border-r border-white/[0.06] bg-surface-1/80 backdrop-blur-xl shrink-0 sidebar-shell ${isResizing ? 'sidebar-shell-resizing' : ''}`}
           >
-            <SidebarContent />
+            {SidebarContent()}
             <div
               onMouseDown={handleResizeStart}
               className="absolute top-0 bottom-0 -right-2 w-4 cursor-ew-resize group z-20"
@@ -487,7 +488,7 @@ export default function Layout() {
                   transition={{ type: 'spring', damping: 30, stiffness: 260, mass: 0.9 }}
                   className="fixed left-0 top-0 bottom-0 w-[min(72vw,280px)] z-40 lg:hidden bg-surface-1/95 backdrop-blur-xl border-r border-white/[0.06] shadow-[6px_0_24px_rgba(0,0,0,0.4)]"
                 >
-                  <SidebarContent />
+                  {SidebarContent()}
                 </motion.aside>
               </>
             )}
