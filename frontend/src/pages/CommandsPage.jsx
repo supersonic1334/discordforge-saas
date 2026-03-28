@@ -68,6 +68,9 @@ const UI = {
     voiceUnsupported: 'Micro non pris en charge sur ce navigateur.',
     voiceDenied: 'Autorise le micro pour utiliser la dictée.',
     voiceError: 'La dictée vocale a rencontré un problème.',
+    saveTrigger: 'Enregistrer le declencheur',
+    saveTriggerHint: 'Tu peux changer seulement le declencheur et garder le reste.',
+    triggerSaved: 'Declencheur mis a jour',
     send: 'Generer la commande',
     generating: 'Generation...',
     created: 'Commande creee',
@@ -126,6 +129,9 @@ const UI = {
     voiceUnsupported: 'Microphone is not supported on this browser.',
     voiceDenied: 'Allow microphone access to use voice dictation.',
     voiceError: 'Voice dictation ran into an issue.',
+    saveTrigger: 'Save trigger only',
+    saveTriggerHint: 'You can change only the trigger and keep the rest intact.',
+    triggerSaved: 'Trigger updated',
     send: 'Generate command',
     generating: 'Generating...',
     created: 'Command created',
@@ -184,6 +190,9 @@ const UI = {
     voiceUnsupported: 'El micro no es compatible con este navegador.',
     voiceDenied: 'Autoriza el micro para usar la dictado por voz.',
     voiceError: 'El dictado por voz encontro un problema.',
+    saveTrigger: 'Guardar solo trigger',
+    saveTriggerHint: 'Puedes cambiar solo el trigger y conservar el resto.',
+    triggerSaved: 'Trigger actualizado',
     send: 'Generar comando',
     generating: 'Generando...',
     created: 'Comando creado',
@@ -226,6 +235,9 @@ Object.assign(UI.fr, {
   voiceSendTranscript: 'Transcrire et générer',
   voiceDenied: 'Autorise le micro pour utiliser la dictée.',
   voiceError: 'La dictée vocale a rencontré un problème.',
+  saveTrigger: 'Enregistrer le declencheur',
+  saveTriggerHint: 'Tu peux changer seulement le declencheur et garder le reste.',
+  triggerSaved: 'Declencheur mis a jour',
   send: 'Générer la commande',
   generating: 'Génération...',
   created: 'Commande créée',
@@ -429,7 +441,7 @@ function formatCooldownLabel(value) {
 }
 
 function buildFallbackPayload({ draft, commandInput, currentCommand }) {
-  const requestedMeta = buildRequestedCommandMeta(commandInput, currentCommand)
+  const requestedMeta = resolveDirectEditMeta(commandInput, currentCommand)
   const pinRequestedCommand = shouldPinRequestedCommand(commandInput, currentCommand)
   const commandType = pinRequestedCommand
     ? requestedMeta.command_type
@@ -471,13 +483,61 @@ function shouldPinRequestedCommand(commandInput, currentCommand) {
   return requested !== normalizeCommandInput(getCommandInputValue(currentCommand))
 }
 
+function hasCommandInputChanged(commandInput, currentCommand) {
+  if (!currentCommand) return false
+  return normalizeCommandInput(commandInput) !== normalizeCommandInput(getCommandInputValue(currentCommand))
+}
+
+function resolveDirectEditMeta(commandInput, currentCommand) {
+  const requestedMeta = buildRequestedCommandMeta(commandInput, currentCommand)
+  const rawInput = normalizeCommandInput(commandInput)
+
+  if (!currentCommand || !rawInput || requestedMeta.input_kind !== 'name-only') {
+    return requestedMeta
+  }
+
+  if (currentCommand.command_type === 'slash') {
+    const commandName = sanitizeCommandName(rawInput, 'slash')
+    return {
+      ...requestedMeta,
+      command_type: 'slash',
+      command_prefix: '/',
+      command_name: commandName,
+      trigger: commandName ? `/${commandName}` : '',
+      isExactTrigger: true,
+      input_kind: 'slash',
+    }
+  }
+
+  const commandPrefix = normalizeCommandPrefix(currentCommand.command_prefix || '!')
+  const commandName = sanitizeCommandName(rawInput, 'prefix')
+
+  return {
+    ...requestedMeta,
+    command_type: 'prefix',
+    command_prefix: commandPrefix,
+    command_name: commandName,
+    trigger: commandName ? buildCommandTrigger('prefix', commandPrefix, commandName) : '',
+    isExactTrigger: true,
+    input_kind: 'trigger',
+  }
+}
+
+function canDirectlySaveTrigger(commandInput, currentCommand) {
+  if (!hasCommandInputChanged(commandInput, currentCommand)) return false
+  const nextMeta = resolveDirectEditMeta(commandInput, currentCommand)
+  if (!nextMeta.trigger) return false
+  if (nextMeta.command_type === 'slash') return Boolean(nextMeta.command_name)
+  return Boolean(nextMeta.command_name)
+}
+
 function buildAssistantFallbackPrompt({ commandInput, prompt, currentCommand, locale }) {
   const language = String(locale || 'fr').toLowerCase().startsWith('fr')
     ? 'francais'
     : String(locale || 'fr').toLowerCase().startsWith('es')
       ? 'espagnol'
       : 'anglais'
-  const requestedMeta = buildRequestedCommandMeta(commandInput, currentCommand)
+  const requestedMeta = resolveDirectEditMeta(commandInput, currentCommand)
   const pinRequestedCommand = shouldPinRequestedCommand(commandInput, currentCommand)
   const requestedInstruction = pinRequestedCommand
     ? (requestedMeta.command_type === 'slash'
@@ -743,21 +803,22 @@ export default function CommandsPage() {
   const toggleRunningRef = useRef(new Set())
   const assistantCardRef = useRef(null)
   const promptInputRef = useRef(null)
+  const voiceToastId = 'commands-voice'
   const speech = useSpeechToText({
     value: prompt,
     onChange: setPrompt,
     locale,
     onError: (code) => {
       if (code === 'unsupported') {
-        toast.error(ui.voiceUnsupported)
+        toast.error(ui.voiceUnsupported, { id: voiceToastId })
         return
       }
       if (code === 'not-allowed' || code === 'service-not-allowed') {
-        toast.error(ui.voiceDenied)
+        toast.error(ui.voiceDenied, { id: voiceToastId })
         return
       }
       if (code === 'aborted') return
-      toast.error(ui.voiceError)
+      toast.error(ui.voiceError, { id: voiceToastId })
     },
   })
 
@@ -765,11 +826,19 @@ export default function CommandsPage() {
     () => messages.map((message) => ({ role: message.role, content: message.content })),
     [messages]
   )
-  const requestedMeta = useMemo(
-    () => buildRequestedCommandMeta(commandInput, editingCommand),
+  const directEditMeta = useMemo(
+    () => resolveDirectEditMeta(commandInput, editingCommand),
     [commandInput, editingCommand]
   )
-  const mode = requestedMeta.command_type
+  const triggerChanged = useMemo(
+    () => hasCommandInputChanged(commandInput, editingCommand),
+    [commandInput, editingCommand]
+  )
+  const canSaveTriggerOnly = useMemo(
+    () => canDirectlySaveTrigger(commandInput, editingCommand),
+    [commandInput, editingCommand]
+  )
+  const mode = directEditMeta.command_type
   const commandStats = useMemo(() => ({
     total: commands.length,
     active: commands.filter((entry) => entry.enabled).length,
@@ -821,6 +890,31 @@ export default function CommandsPage() {
     setMessages([])
   }
 
+  async function saveCommandTriggerOnly() {
+    if (!selectedGuildId || !editingCommand || assistantLoading || !canSaveTriggerOnly) return
+
+    setAssistantLoading(true)
+
+    try {
+      const response = await commandsAPI.update(selectedGuildId, editingCommand.id, {
+        trigger: directEditMeta.trigger,
+        command_type: directEditMeta.command_type,
+        command_prefix: directEditMeta.command_prefix,
+        command_name: directEditMeta.command_name,
+      })
+
+      const command = response.data.command
+      setCommands((current) => upsertCommand(current, command))
+      setEditingCommand(command)
+      setCommandInput(getCommandInputValue(command))
+      toast.success(ui.triggerSaved)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setAssistantLoading(false)
+    }
+  }
+
   async function runAssistantFallback(userMessage) {
     const aiResponse = await aiAPI.chat({
       message: buildAssistantFallbackPrompt({
@@ -864,7 +958,12 @@ export default function CommandsPage() {
       ? String(overridePrompt || '').trim()
       : (speech.isListening ? await speech.stop() : prompt)
     const cleanPrompt = String(resolvedPrompt || '').trim()
-    if (!cleanPrompt) return
+    if (!cleanPrompt) {
+      if (editingCommand && canSaveTriggerOnly) {
+        await saveCommandTriggerOnly()
+      }
+      return
+    }
 
     const userMessage = { role: 'user', content: cleanPrompt }
     const nextMessages = [...messages, userMessage]
@@ -879,9 +978,9 @@ export default function CommandsPage() {
         const pinRequestedCommand = shouldPinRequestedCommand(commandInput, editingCommand)
         response = await commandsAPI.assistant(selectedGuildId, {
           mode,
-          prefix: mode === 'prefix' ? requestedMeta.command_prefix : undefined,
-          trigger: mode === 'prefix' && pinRequestedCommand && requestedMeta.isExactTrigger ? requestedMeta.trigger : undefined,
-          command_name: pinRequestedCommand ? (requestedMeta.command_name || undefined) : undefined,
+          prefix: mode === 'prefix' ? directEditMeta.command_prefix : undefined,
+          trigger: mode === 'prefix' && pinRequestedCommand && directEditMeta.isExactTrigger ? directEditMeta.trigger : undefined,
+          command_name: pinRequestedCommand ? (directEditMeta.command_name || undefined) : undefined,
           prompt: userMessage.content,
           command_id: editingCommand?.id,
           conversation_history: conversationHistory,
@@ -1226,17 +1325,31 @@ export default function CommandsPage() {
                   placeholder={pageCopy.inputHelp}
                 />
                 <p className="mt-2 text-xs leading-5 text-white/36">{pageCopy.inputHelp}</p>
+                {editingCommand && triggerChanged && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={saveCommandTriggerOnly}
+                      disabled={!canSaveTriggerOnly || assistantLoading}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-2 text-sm font-mono text-neon-cyan transition-all hover:border-neon-cyan/40 hover:bg-neon-cyan/16 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      {ui.saveTrigger}
+                    </button>
+                    <p className="text-xs leading-5 text-white/42">{ui.saveTriggerHint}</p>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{pageCopy.autoMode}</p>
-                    <p className="mt-2 text-sm font-semibold text-white">{describeRequestedMode(requestedMeta, pageCopy)}</p>
+                    <p className="mt-2 text-sm font-semibold text-white">{describeRequestedMode(directEditMeta, pageCopy)}</p>
                   </div>
                   <div>
                     <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{pageCopy.liveTrigger}</p>
-                    <p className="mt-2 break-all text-sm font-mono text-white">{requestedMeta.trigger || requestedMeta.command_prefix}</p>
+                    <p className="mt-2 break-all text-sm font-mono text-white">{directEditMeta.trigger || directEditMeta.command_prefix}</p>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -1324,7 +1437,7 @@ export default function CommandsPage() {
                       <button
                         type="button"
                         onClick={() => speech.start()}
-                        disabled={speech.isRequestingPermission}
+                        disabled={speech.isRequestingPermission || !speech.isSupported}
                         className="flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] text-white/85 transition-all disabled:opacity-70 hover:border-neon-cyan/35 hover:bg-neon-cyan/10 hover:text-neon-cyan"
                         title={ui.voiceStart}
                       >
@@ -1333,8 +1446,9 @@ export default function CommandsPage() {
                       <button
                         type="button"
                         onClick={sendAssistantPrompt}
-                        disabled={assistantLoading || !prompt.trim()}
+                        disabled={assistantLoading || (!prompt.trim() && !canSaveTriggerOnly)}
                         className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan text-white shadow-neon-violet transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                        title={!prompt.trim() && canSaveTriggerOnly ? ui.saveTrigger : ui.send}
                       >
                         {assistantLoading ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
                       </button>

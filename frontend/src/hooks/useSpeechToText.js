@@ -3,6 +3,7 @@ import { aiAPI } from '../services/api'
 
 const IDLE_BARS = [0.16, 0.24, 0.2, 0.3, 0.22, 0.28, 0.18, 0.24]
 const RESTARTABLE_ERRORS = new Set(['no-speech', 'audio-capture'])
+const ERROR_COOLDOWN_MS = 1800
 
 function getRecognitionConstructor() {
   if (typeof window === 'undefined') return null
@@ -38,14 +39,8 @@ function detectSpeechEngine() {
 
   const recognition = getRecognitionConstructor()
   const hasRecorder = Boolean(window.MediaRecorder && navigator?.mediaDevices?.getUserMedia)
-  const userAgent = navigator?.userAgent || ''
-  const isTouchMac = navigator?.platform === 'MacIntel' && navigator?.maxTouchPoints > 1
-  const isAppleMobile = /iPad|iPhone|iPod/i.test(userAgent) || isTouchMac
-  const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent)
-
-  if (recognition && !isAppleMobile && !isSafari) return 'native'
-  if (hasRecorder) return 'server'
   if (recognition) return 'native'
+  if (hasRecorder) return 'server'
   return 'unsupported'
 }
 
@@ -91,6 +86,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   const finalTranscriptRef = useRef('')
   const interimTranscriptRef = useRef('')
   const activeEngineRef = useRef('unsupported')
+  const lastErrorRef = useRef({ code: '', at: 0 })
 
   const [isListening, setIsListening] = useState(false)
   const [isRequestingPermission, setIsRequestingPermission] = useState(false)
@@ -101,6 +97,20 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
   const [engine, setEngine] = useState(() => detectSpeechEngine())
 
   const isSupported = useMemo(() => engine !== 'unsupported', [engine])
+
+  const emitError = useCallback((code) => {
+    const normalizedCode = String(code || 'speech-error')
+    const now = Date.now()
+    if (
+      lastErrorRef.current.code === normalizedCode
+      && now - lastErrorRef.current.at < ERROR_COOLDOWN_MS
+    ) {
+      return
+    }
+
+    lastErrorRef.current = { code: normalizedCode, at: now }
+    onError?.(normalizedCode)
+  }, [onError])
 
   const clearRestartTimeout = useCallback(() => {
     if (restartTimeoutRef.current) {
@@ -259,13 +269,13 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
 
       if (code === 'not-allowed' || code === 'service-not-allowed') {
         shouldResumeRef.current = false
-        onError?.(code)
+        emitError(code)
         finalizeSession(baseValueRef.current)
         return
       }
 
       if (!RESTARTABLE_ERRORS.has(code)) {
-        onError?.(code)
+        emitError(code)
       }
     }
 
@@ -287,7 +297,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
             setIsListening(true)
             setIsProcessing(false)
           } catch (error) {
-            onError?.(error?.message || 'speech-restart-error')
+            emitError(error?.message || 'speech-restart-error')
             finalizeSession(mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current))
           }
         }, 160)
@@ -298,7 +308,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     }
 
     return recognition
-  }, [clearRestartTimeout, finalizeSession, locale, onChange, onError])
+  }, [clearRestartTimeout, emitError, finalizeSession, locale, onChange])
 
   const transcribeRecordedAudio = useCallback(async (blob) => {
     const audioBase64 = await blobToBase64(blob)
@@ -318,7 +328,7 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
     activeEngineRef.current = detectedEngine
 
     if (detectedEngine === 'unsupported') {
-      onError?.('unsupported')
+      emitError('unsupported')
       return
     }
 
@@ -363,16 +373,16 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
               return
             }
 
-            const transcript = await transcribeRecordedAudio(blob)
-            const nextValue = mergeTranscript(baseValueRef.current, transcript)
-            finalTranscriptRef.current = transcript
-            setFinalTranscript(transcript)
-            finalizeSession(nextValue)
-          } catch (error) {
-            onError?.(error?.response?.data?.error || error?.message || 'transcription-error')
-            finalizeSession(baseValueRef.current)
-          }
+          const transcript = await transcribeRecordedAudio(blob)
+          const nextValue = mergeTranscript(baseValueRef.current, transcript)
+          finalTranscriptRef.current = transcript
+          setFinalTranscript(transcript)
+          finalizeSession(nextValue)
+        } catch (error) {
+          emitError(error?.response?.data?.error || error?.message || 'transcription-error')
+          finalizeSession(baseValueRef.current)
         }
+      }
 
         mediaRecorderRef.current = recorder
         recorder.start(250)
@@ -399,9 +409,9 @@ export function useSpeechToText({ value, onChange, locale, onError }) {
       setIsRequestingPermission(false)
       setIsListening(false)
       setIsProcessing(false)
-      onError?.(code)
+      emitError(code)
     }
-  }, [createRecognition, finalizeSession, isListening, isProcessing, isRequestingPermission, onError, resetTranscripts, startAudioMeter, stopAudioMeter, transcribeRecordedAudio, value])
+  }, [createRecognition, emitError, finalizeSession, isListening, isProcessing, isRequestingPermission, resetTranscripts, startAudioMeter, stopAudioMeter, transcribeRecordedAudio, value])
 
   const stop = useCallback(() => {
     const currentValue = mergeTranscript(baseValueRef.current, finalTranscriptRef.current, interimTranscriptRef.current)

@@ -44,32 +44,43 @@ export default function VoiceComposerPanel({
       className={`relative overflow-hidden rounded-[28px] border p-4 sm:p-5 ${styles.panel}`}
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.04),transparent_45%)]" />
-      <div className="relative grid gap-4 xl:grid-cols-[auto,minmax(0,1fr)] xl:items-center">
-        <div className="flex justify-center xl:justify-start">
-          <div className={`rounded-[24px] border border-white/10 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${styles.shell}`}>
-            <VoiceMeter
-              bars={bars}
-              active={active}
-              processing={processing}
-              accent={accent}
-            />
-          </div>
+      <div className="relative space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full border px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] ${styles.badge}`}>
+            {statusLabel}
+          </span>
+          <span className="rounded-full border border-white/10 bg-black/18 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/50">
+            {liveLabel}
+          </span>
         </div>
 
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full border px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] ${styles.badge}`}>
-              {statusLabel}
-            </span>
-            <span className="rounded-full border border-white/10 bg-black/18 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/50">
-              {liveLabel}
-            </span>
-          </div>
+        <div className={`rounded-[22px] border px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] ${styles.transcript}`}>
+          <p className="whitespace-pre-wrap break-words text-sm leading-7 text-white/90">
+            {displayText}
+          </p>
+        </div>
 
-          <div className={`mt-3 rounded-[22px] border px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] ${styles.transcript}`}>
-            <p className="whitespace-pre-wrap break-words text-sm leading-7 text-white/90">
-              {displayText}
-            </p>
+        <div className={`rounded-[24px] border border-white/10 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${styles.shell}`}>
+          <div className="flex flex-col items-center gap-4 text-center lg:flex-row lg:items-center lg:justify-between lg:text-left">
+            <div className="min-w-0 space-y-2">
+              <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/42">
+                {active ? statusLabel : liveLabel}
+              </p>
+              <p className="max-w-xl text-sm leading-6 text-white/56">
+                {processing
+                  ? 'Analyse de la dictee en cours.'
+                  : 'Parle librement, puis coupe la dictee ou genere directement la commande.'}
+              </p>
+            </div>
+
+            <div className="flex justify-center">
+              <VoiceMeter
+                bars={bars}
+                active={active}
+                processing={processing}
+                accent={accent}
+              />
+            </div>
           </div>
         </div>
       </div>
