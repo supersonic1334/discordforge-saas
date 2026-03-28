@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -54,6 +54,11 @@ export default function Layout() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
   const [sidebarWidthReady, setSidebarWidthReady] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  const mainScrollRef = useRef(null)
+  const lastScrollTopRef = useRef(0)
+  const userScrollTimeoutRef = useRef(null)
+  const isUserScrollingRef = useRef(false)
+  const restoreFrameRef = useRef(null)
   const { user, logout } = useAuthStore()
   const { guilds, selectedGuildId, clearSelectedGuild, hydrateSelectedGuild } = useGuildStore()
   const { status, ping, bot, fetchStatus, setStatus } = useBotStore()
@@ -187,6 +192,81 @@ export default function Layout() {
       window.removeEventListener('mouseup', stopResize)
     }
   }, [isResizing])
+
+  useEffect(() => {
+    const mainElement = mainScrollRef.current
+    if (!mainElement) return undefined
+
+    const handleScroll = () => {
+      lastScrollTopRef.current = mainElement.scrollTop
+      isUserScrollingRef.current = true
+
+      if (userScrollTimeoutRef.current) {
+        window.clearTimeout(userScrollTimeoutRef.current)
+      }
+
+      userScrollTimeoutRef.current = window.setTimeout(() => {
+        isUserScrollingRef.current = false
+      }, 140)
+    }
+
+    mainElement.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      mainElement.removeEventListener('scroll', handleScroll)
+      if (userScrollTimeoutRef.current) {
+        window.clearTimeout(userScrollTimeoutRef.current)
+        userScrollTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const mainElement = mainScrollRef.current
+    if (!mainElement || typeof MutationObserver === 'undefined') return undefined
+
+    const isManagedScrollRoute =
+      location.pathname !== '/dashboard/ai'
+      && location.pathname !== '/dashboard/commands'
+
+    if (!isManagedScrollRoute) {
+      return undefined
+    }
+
+    const stabilizeScroll = () => {
+      if (restoreFrameRef.current) {
+        window.cancelAnimationFrame(restoreFrameRef.current)
+      }
+
+      restoreFrameRef.current = window.requestAnimationFrame(() => {
+        restoreFrameRef.current = null
+
+        if (isUserScrollingRef.current) return
+        if (document.activeElement && mainElement.contains(document.activeElement)) return
+        if (lastScrollTopRef.current <= 0) return
+
+        const drift = mainElement.scrollTop - lastScrollTopRef.current
+        if (Math.abs(drift) > 2) {
+          mainElement.scrollTop = lastScrollTopRef.current
+        }
+      })
+    }
+
+    const observer = new MutationObserver(stabilizeScroll)
+    observer.observe(mainElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+
+    return () => {
+      observer.disconnect()
+      if (restoreFrameRef.current) {
+        window.cancelAnimationFrame(restoreFrameRef.current)
+        restoreFrameRef.current = null
+      }
+    }
+  }, [location.pathname])
 
   useEffect(() => {
     if (mustStayOnServers) {
@@ -332,11 +412,11 @@ export default function Layout() {
         </div>
       )}
 
-      <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto scrollbar-none mt-2">
+      <nav className="flex-1 px-3 pt-3 pb-5 space-y-1.5 overflow-y-auto scrollbar-none mt-2">
         {navItems.map(renderSidebarLink)}
       </nav>
 
-      <div className="p-3 border-t border-white/[0.06] space-y-1">
+      <div className="mt-3 p-3 border-t border-white/[0.06] space-y-1">
         <Link
           to="/dashboard/reviews"
           onClick={() => setMobileOpen(false)}
@@ -502,7 +582,7 @@ export default function Layout() {
           </div>
         )}
 
-        <main className="app-main-scroll flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
+        <main ref={mainScrollRef} className="app-main-scroll flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
           <Outlet />
         </main>
       </div>

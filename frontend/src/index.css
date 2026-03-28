@@ -471,6 +471,7 @@
     scroll-behavior: auto;
     scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;
+    scroll-snap-type: none;
   }
 }
 
@@ -663,10 +664,8 @@ select,
 
 /* ── Smooth scrolling (respect preferences) ────────────────────────────────── */
 
-@media (prefers-reduced-motion: no-preference) {
-  html {
-    scroll-behavior: smooth;
-  }
+html {
+  scroll-behavior: auto;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
