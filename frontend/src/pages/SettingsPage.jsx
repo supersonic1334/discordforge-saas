@@ -226,9 +226,13 @@ export default function SettingsPage() {
   }
 
   const saveAvatar = async (nextAvatar = avatarDraft) => {
+    const normalizedAvatar = typeof nextAvatar === 'string'
+      ? nextAvatar
+      : avatarDraft
+
     setSaving('avatar')
     try {
-      const res = await authAPI.updateAvatar(nextAvatar || '')
+      const res = await authAPI.updateAvatar(normalizedAvatar || '')
       if (res.data?.user) {
         setUser(res.data.user)
         setAvatarDraft(res.data.user.avatar_url || '')
@@ -396,7 +400,7 @@ export default function SettingsPage() {
                     {isPreparingAvatar ? t('settings.avatarProcessing') : t('settings.avatarChoose')}
                   </span>
                 </button>
-                <button onClick={saveAvatar} disabled={saving==='avatar' || isPreparingAvatar || avatarDraft === (user?.avatar_url || '')} type="button" className="px-4 py-2.5 rounded-2xl bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm font-mono hover:bg-neon-cyan/20 transition-all disabled:opacity-40">
+                <button onClick={() => saveAvatar()} disabled={saving==='avatar' || isPreparingAvatar || avatarDraft === (user?.avatar_url || '')} type="button" className="px-4 py-2.5 rounded-2xl bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm font-mono hover:bg-neon-cyan/20 transition-all disabled:opacity-40">
                   {saving==='avatar' ? t('settings.saving') : t('settings.avatarSave')}
                 </button>
                 <button onClick={() => { setAvatarDraft(''); setAvatarFileName('') }} disabled={!avatarDraft} type="button" className="px-4 py-2.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-mono hover:bg-red-500/20 transition-all disabled:opacity-40">

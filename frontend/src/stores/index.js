@@ -57,9 +57,6 @@ function resolveSelectedGuildId(guilds = [], preferredGuildId = null, fallbackGu
 function sanitizePersistedUser(user) {
   if (!user) return user
   const nextUser = { ...user }
-  if (typeof nextUser.avatar_url === 'string' && nextUser.avatar_url.startsWith('data:image/')) {
-    nextUser.avatar_url = null
-  }
   if (
     nextUser.discord_id
     && typeof nextUser.avatar_url === 'string'
