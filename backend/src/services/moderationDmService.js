@@ -200,11 +200,14 @@ function buildActionPayload({
   points,
   moderatorName,
   moderatorAvatarUrl,
+  hideModeratorIdentity,
   settings,
 }) {
   const style = ACTION_STYLES[actionType] || ACTION_STYLES.warn;
   const brandAssets = getBrandAssets();
-  const moderatorLabel = sanitizeText(moderatorName, 80) || 'Staff du serveur';
+  const moderatorLabel = hideModeratorIdentity
+    ? 'Staff du serveur'
+    : (sanitizeText(moderatorName, 80) || 'Staff du serveur');
   const appealButton = buildAppealButton(settings);
   const appealName = sanitizeText(settings.appeal_server_name || '', 120) || 'Serveur d appel';
   const detailLines = [
@@ -275,7 +278,9 @@ function buildActionPayload({
     },
     footer: {
       text: 'Genere avec DiscordForger - Notification automatique',
-      icon_url: moderatorAvatarUrl || guildIdentity.iconUrl || brandAssets.brandIconUrl,
+      icon_url: hideModeratorIdentity
+        ? (guildIdentity.iconUrl || brandAssets.brandIconUrl)
+        : (moderatorAvatarUrl || guildIdentity.iconUrl || brandAssets.brandIconUrl),
     },
     timestamp: new Date().toISOString(),
     fields,
@@ -394,6 +399,7 @@ async function sendModerationDm({
   points,
   moderatorName,
   moderatorAvatarUrl,
+  hideModeratorIdentity,
 }) {
   const guildIdentity = getGuildIdentity({ guildRow, guildId, guild });
   if (!guildIdentity.row?.id) {
@@ -414,6 +420,7 @@ async function sendModerationDm({
     points,
     moderatorName,
     moderatorAvatarUrl,
+    hideModeratorIdentity,
     settings,
   });
 

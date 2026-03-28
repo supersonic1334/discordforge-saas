@@ -375,7 +375,7 @@ export default function ScanPage() {
   const [detail, setDetail] = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [linkingDiscord, setLinkingDiscord] = useState(false)
-  const [actionValues, setActionValues] = useState({ reason: '', duration: '10m' })
+  const [actionValues, setActionValues] = useState({ reason: '', duration: '10m', hideIdentity: false })
   const [submittingAction, setSubmittingAction] = useState('')
   const [infoOpen, setInfoOpen] = useState(false)
 
@@ -626,6 +626,7 @@ export default function ScanPage() {
       target_user_id: detail.id,
       target_username: detail.display_name || detail.username || detail.id,
       reason: actionValues.reason.trim() || `Action Scan: ${actionId}`,
+      hide_moderator_identity: Boolean(actionValues.hideIdentity),
     }
 
     if (actionId === 'timeout') {
@@ -912,6 +913,18 @@ export default function ScanPage() {
                         Timeout seulement: format court 10m, 1h, 1d.
                       </div>
                     </div>
+
+                    <label className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-black/15 px-4 py-3 text-sm text-white/70">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0 accent-cyan-400"
+                        checked={Boolean(actionValues.hideIdentity)}
+                        onChange={(event) => setActionValues((current) => ({ ...current, hideIdentity: event.target.checked }))}
+                      />
+                      <span className="leading-6">
+                        Masquer mon identite dans le MP envoye au membre. Les logs du site garderont ton vrai nom.
+                      </span>
+                    </label>
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       {ACTIONS.map((action) => {

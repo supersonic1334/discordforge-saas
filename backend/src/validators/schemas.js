@@ -94,6 +94,7 @@ const addWarningSchema = z.object({
   reason: z.string().min(1).max(500),
   points: z.number().int().min(1).max(10).optional().default(1),
   moderator_discord_identity: z.string().trim().min(2).max(100).optional(),
+  hide_moderator_identity: z.boolean().optional().default(false),
 });
 
 const modActionSchema = z.object({
@@ -104,6 +105,7 @@ const modActionSchema = z.object({
   duration_ms: z.number().int().min(60000).max(2419200000).optional(), // 1 min – 28 days
   points: z.number().int().min(1).max(10).optional().default(1),
   moderator_discord_identity: z.string().trim().min(2).max(100).optional(),
+  hide_moderator_identity: z.boolean().optional().default(false),
 });
 
 const guildDmConfigSchema = z.object({

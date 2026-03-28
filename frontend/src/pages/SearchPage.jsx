@@ -145,6 +145,7 @@ function HistoryRow({ entry, locale }) {
 function ActionModal({ action, target, values, onChange, canUseDiscordActions, linkedDiscordId, onConnectDiscord, connectingDiscord, onClose, onSubmit, submitting }) {
   const actionMeta = QUICK_ACTIONS.find((entry) => entry.id === action) || QUICK_ACTIONS[0]
   const Icon = actionMeta.icon
+  const canHideIdentity = ['warn', 'timeout', 'kick', 'ban', 'blacklist'].includes(action)
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -164,6 +165,19 @@ function ActionModal({ action, target, values, onChange, canUseDiscordActions, l
               {action === 'warn' ? <input className="input-field" value={values.points} onChange={(event) => onChange((current) => ({ ...current, points: event.target.value }))} placeholder="Points" inputMode="numeric" /> : null}
             </div>
           )}
+          {canHideIdentity ? (
+            <label className="flex items-start gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/75">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0 accent-cyan-400"
+                checked={Boolean(values.hideIdentity)}
+                onChange={(event) => onChange((current) => ({ ...current, hideIdentity: event.target.checked }))}
+              />
+              <span className="leading-6">
+                Masquer mon identite dans le MP recu par le membre. Les logs staff garderont ton vrai nom.
+              </span>
+            </label>
+          ) : null}
           {canUseDiscordActions ? (
             <div className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/10 p-4">
               <p className="font-display font-700 text-sm text-emerald-200">Compte Discord verifie</p>
@@ -253,7 +267,7 @@ export default function SearchPage() {
   const [linkingDiscord, setLinkingDiscord] = useState(false)
   const [dmOpen, setDmOpen] = useState(false)
   const [sendingDm, setSendingDm] = useState(false)
-  const [actionValues, setActionValues] = useState({ reason: '', duration: '', points: '1' })
+  const [actionValues, setActionValues] = useState({ reason: '', duration: '', points: '1', hideIdentity: false })
   const [dmValues, setDmValues] = useState({ title: '', message: '' })
 
   const selectedResult = useMemo(() => results.find((entry) => entry.id === selectedUserId) || null, [results, selectedUserId])
@@ -370,6 +384,7 @@ export default function SearchPage() {
       target_user_id: selectedUserId,
       target_username: profileData?.profile?.display_name || selectedResult?.display_name || selectedUserId,
       reason: actionValues.reason.trim() || 'Action rapide depuis Search',
+      hide_moderator_identity: Boolean(actionValues.hideIdentity),
     }
     if (actionModal === 'timeout') {
       const durationMs = parseDurationInput(actionValues.duration.trim())
@@ -590,7 +605,7 @@ export default function SearchPage() {
                         if (entry.id === 'blacklist' && profile.network_blacklisted) return null
                         if (entry.id === 'unban' && !profile.banned) return null
                         if (entry.id === 'untimeout' && !timeoutActive) return null
-                        return <button key={entry.id} type="button" disabled={disabledForPermissions} onClick={() => { setActionValues({ reason: '', duration: '', points: '1' }); setActionModal(entry.id) }} className={`spotlight-card w-full rounded-[22px] border px-4 py-4 text-left transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35 ${entry.tone}`}><div className="flex items-start gap-3"><div><div className="flex items-center gap-2"><Icon className="w-4 h-4" /><span className="font-mono text-sm">{entry.label}</span></div><p className="mt-3 text-xs text-white/55">{viewer?.linked_discord ? 'Action rapide sans quitter la fiche.' : 'Clique pour connecter Discord puis executer l action.'}</p></div></div></button>
+                        return <button key={entry.id} type="button" disabled={disabledForPermissions} onClick={() => { setActionValues({ reason: '', duration: '', points: '1', hideIdentity: false }); setActionModal(entry.id) }} className={`spotlight-card w-full rounded-[22px] border px-4 py-4 text-left transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35 ${entry.tone}`}><div className="flex items-start gap-3"><div><div className="flex items-center gap-2"><Icon className="w-4 h-4" /><span className="font-mono text-sm">{entry.label}</span></div><p className="mt-3 text-xs text-white/55">{viewer?.linked_discord ? 'Action rapide sans quitter la fiche.' : 'Clique pour connecter Discord puis executer l action.'}</p></div></div></button>
                       })}
                     </div>
                   </div>

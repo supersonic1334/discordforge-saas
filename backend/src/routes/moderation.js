@@ -645,7 +645,7 @@ async function resolveTargetUser(token, targetUserId, targetUsername) {
 }
 
 async function issueWarning(req, token, payload) {
-  const { target_user_id, target_username, reason, points, moderator_discord_identity } = payload;
+  const { target_user_id, target_username, reason, points, moderator_discord_identity, hide_moderator_identity } = payload;
   const moderatorAccess = await resolveModeratorAccess(req, token, 'warn', moderator_discord_identity);
   const moderatorMetadata = await buildModeratorMetadata(req, token, moderator_discord_identity, moderatorAccess);
   const target = await resolveTargetUser(token, target_user_id, target_username);
@@ -692,6 +692,7 @@ async function issueWarning(req, token, payload) {
     points,
     moderatorName: moderatorUsername,
     moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+    hideModeratorIdentity: Boolean(hide_moderator_identity),
   });
 
   const total = getWarningCount(req.guild.guild_id, target_user_id);
@@ -1066,7 +1067,7 @@ router.get('/actions', validateQuery(paginationSchema), (req, res) => {
 
 router.post('/actions', validate(modActionSchema), async (req, res, next) => {
   try {
-    const { target_user_id, target_username, action, reason, duration_ms, points, moderator_discord_identity } = req.body;
+    const { target_user_id, target_username, action, reason, duration_ms, points, moderator_discord_identity, hide_moderator_identity } = req.body;
     const token = decrypt(req.botToken.encrypted_token);
     const guildId = req.guild.guild_id;
     const moderatorAccess = await resolveModeratorAccess(req, token, action, moderator_discord_identity);
@@ -1101,6 +1102,7 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
           reason,
           moderatorName: moderatorUsername,
           moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+          hideModeratorIdentity: Boolean(hide_moderator_identity),
         });
         await discordService.kickMember(token, guildId, target_user_id, reason ?? 'Manual kick');
         break;
@@ -1113,6 +1115,7 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
           reason,
           moderatorName: moderatorUsername,
           moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+          hideModeratorIdentity: Boolean(hide_moderator_identity),
         });
         await discordService.banMember(token, guildId, target_user_id, reason ?? 'Manual ban', 0);
         break;
@@ -1128,6 +1131,7 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
           reason,
           moderatorName: moderatorUsername,
           moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+          hideModeratorIdentity: Boolean(hide_moderator_identity),
         });
         await botBlacklistService.banUserAcrossBotNetwork(
           req.guildOwnerUserId || req.user.id,
@@ -1171,6 +1175,7 @@ router.post('/actions', validate(modActionSchema), async (req, res, next) => {
         durationMs: duration_ms,
         moderatorName: moderatorUsername,
         moderatorAvatarUrl: moderatorMetadata.moderator_avatar_url || null,
+        hideModeratorIdentity: Boolean(hide_moderator_identity),
       });
     }
 
