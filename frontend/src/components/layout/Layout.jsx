@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -55,6 +55,8 @@ export default function Layout() {
   const [sidebarWidthReady, setSidebarWidthReady] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const mainScrollRef = useRef(null)
+  const lastStableScrollTopRef = useRef(0)
+  const restoreFrameRef = useRef(null)
   const { user, logout } = useAuthStore()
   const { guilds, selectedGuildId, clearSelectedGuild, hydrateSelectedGuild } = useGuildStore()
   const { status, ping, bot, fetchStatus, setStatus } = useBotStore()
@@ -188,6 +190,60 @@ export default function Layout() {
       window.removeEventListener('mouseup', stopResize)
     }
   }, [isResizing])
+
+  useEffect(() => {
+    const mainElement = mainScrollRef.current
+    if (!mainElement) return undefined
+
+    const handleScroll = () => {
+      lastStableScrollTopRef.current = mainElement.scrollTop
+    }
+
+    mainElement.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      mainElement.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
+
+  useEffect(() => {
+    lastStableScrollTopRef.current = 0
+  }, [location.pathname])
+
+  useLayoutEffect(() => {
+    const mainElement = mainScrollRef.current
+    if (!mainElement || typeof window === 'undefined') return undefined
+
+    if (restoreFrameRef.current) {
+      window.cancelAnimationFrame(restoreFrameRef.current)
+    }
+
+    restoreFrameRef.current = window.requestAnimationFrame(() => {
+      restoreFrameRef.current = null
+
+      const previousTop = lastStableScrollTopRef.current
+      const currentTop = mainElement.scrollTop
+
+      if (previousTop <= 0) {
+        lastStableScrollTopRef.current = currentTop
+        return
+      }
+
+      const activeInsideMain = document.activeElement && mainElement.contains(document.activeElement)
+      if (!activeInsideMain && currentTop + 24 < previousTop) {
+        mainElement.scrollTop = previousTop
+        return
+      }
+
+      lastStableScrollTopRef.current = currentTop
+    })
+
+    return () => {
+      if (restoreFrameRef.current) {
+        window.cancelAnimationFrame(restoreFrameRef.current)
+        restoreFrameRef.current = null
+      }
+    }
+  })
 
   useEffect(() => {
     if (mustStayOnServers) {
