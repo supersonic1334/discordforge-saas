@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useRef } from 'react'
+import { memo, useState, useEffect, useRef, useMemo } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -16,6 +16,18 @@ const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_MIN_WIDTH = 220
 const SIDEBAR_MAX_WIDTH = 380
 const SIDEBAR_SPRING = { type: 'spring', stiffness: 220, damping: 26, mass: 0.92 }
+const SWIPE_MIN_DISTANCE = 72
+
+function isTouchNavigationEnabled() {
+  if (typeof window === 'undefined') return false
+  const hasTouch = 'ontouchstart' in window || (navigator?.maxTouchPoints || 0) > 0
+  return hasTouch && window.innerWidth < 1280
+}
+
+function shouldIgnoreSwipeTarget(target) {
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest('input, textarea, select, button, a, [role="dialog"], [data-no-swipe-back], [contenteditable="true"], .sidebar-scroll-area'))
+}
 
 function getRoleLabel(t, role) {
   if (role === 'api_provider') return t('admin.roles.api_provider', 'fournisseur API')
@@ -293,6 +305,13 @@ export default function Layout() {
   const [sidebarWidthReady, setSidebarWidthReady] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const mainScrollRef = useRef(null)
+  const swipeStateRef = useRef({
+    tracking: false,
+    ignore: false,
+    horizontal: false,
+    startX: 0,
+    startY: 0,
+  })
   const { user, logout } = useAuthStore()
   const { guilds, selectedGuildId, clearSelectedGuild, hydrateSelectedGuild } = useGuildStore()
   const fetchStatus = useBotStore((state) => state.fetchStatus)
@@ -319,7 +338,7 @@ export default function Layout() {
     { icon: Users, label: t('layout.nav.team', 'Équipe'), path: '/dashboard/team', needsGuild: true },
     { icon: Shield, label: t('layout.nav.protection', 'Protection'), path: '/dashboard/protection', needsGuild: true },
     { icon: Search, label: t('layout.nav.search', 'Search'), path: '/dashboard/search', needsGuild: true },
-    { icon: Fingerprint, label: t('layout.nav.rassican', 'Rassican'), path: '/dashboard/rassican', needsGuild: true },
+    { icon: Fingerprint, label: t('layout.nav.scan', 'Scan'), path: '/dashboard/scan', needsGuild: true },
     { icon: ScrollText, label: t('layout.nav.logs', 'Logs'), path: '/dashboard/logs', needsGuild: true },
     { icon: Send, label: t('layout.nav.messages', 'Messages'), path: '/dashboard/messages', needsGuild: true },
     { icon: BellRing, label: t('layout.nav.notifications', 'Notifications'), path: '/dashboard/notifications', needsGuild: true },
@@ -328,6 +347,20 @@ export default function Layout() {
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]
+  const swipeNavItems = useMemo(() => {
+    const supplementalItems = [
+      { path: '/dashboard/reviews', visible: true },
+      { path: '/dashboard/support', visible: true },
+      { path: '/dashboard/admin', visible: canAccessAdminPanel },
+      { path: '/dashboard/provider', visible: canAccessProviderPanel },
+      { path: '/dashboard/settings', visible: true },
+    ]
+
+    return [
+      ...navItems.map((item) => ({ path: item.path, visible: !(item.needsGuild && !selectedGuildId) })),
+      ...supplementalItems,
+    ].filter((item) => item.visible)
+  }, [navItems, selectedGuildId, canAccessAdminPanel, canAccessProviderPanel])
 
   useEffect(() => {
     fetchStatus()
@@ -479,8 +512,84 @@ export default function Layout() {
     setIsResizing(true)
   }
 
+  const navigateBySwipe = (direction) => {
+    if (!swipeNavItems.length) return
+    const currentIndex = swipeNavItems.findIndex((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`))
+    if (currentIndex === -1) return
+
+    const nextIndex = currentIndex + direction
+    if (nextIndex < 0 || nextIndex >= swipeNavItems.length) return
+
+    const target = swipeNavItems[nextIndex]
+    if (!target?.path || target.path === location.pathname) return
+    navigate(target.path)
+  }
+
+  const handleTouchStart = (event) => {
+    if (!isTouchNavigationEnabled() || mobileOpen) return
+    const touch = event.touches?.[0]
+    if (!touch) return
+
+    swipeStateRef.current = {
+      tracking: true,
+      ignore: shouldIgnoreSwipeTarget(event.target),
+      horizontal: false,
+      startX: touch.clientX,
+      startY: touch.clientY,
+    }
+  }
+
+  const handleTouchMove = (event) => {
+    if (!isTouchNavigationEnabled()) return
+    const state = swipeStateRef.current
+    if (!state.tracking || state.ignore) return
+
+    const touch = event.touches?.[0]
+    if (!touch) return
+    const deltaX = touch.clientX - state.startX
+    const deltaY = touch.clientY - state.startY
+
+    if (!state.horizontal && Math.abs(deltaX) > 12 && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
+      state.horizontal = true
+    }
+
+    if (state.horizontal) {
+      event.preventDefault()
+    }
+  }
+
+  const handleTouchEnd = (event) => {
+    if (!isTouchNavigationEnabled()) return
+    const state = swipeStateRef.current
+    swipeStateRef.current = {
+      tracking: false,
+      ignore: false,
+      horizontal: false,
+      startX: 0,
+      startY: 0,
+    }
+
+    if (!state.tracking || state.ignore) return
+
+    const touch = event.changedTouches?.[0]
+    if (!touch) return
+    const deltaX = touch.clientX - state.startX
+    const deltaY = touch.clientY - state.startY
+
+    if (Math.abs(deltaX) < SWIPE_MIN_DISTANCE || Math.abs(deltaX) <= Math.abs(deltaY) * 1.3) return
+
+    if (deltaX < 0) {
+      navigateBySwipe(-1)
+    }
+  }
+
   return (
-    <div className="flex min-h-screen min-h-[100dvh] md:h-screen max-w-full bg-surface-0 overflow-hidden">
+    <div className="dashboard-shell relative flex min-h-screen min-h-[100dvh] md:h-screen max-w-full overflow-hidden">
+      <div className="dashboard-shell-backdrop" aria-hidden="true">
+        <div className="dashboard-shell-glow dashboard-shell-glow-left" />
+        <div className="dashboard-shell-glow dashboard-shell-glow-right" />
+        <div className="dashboard-shell-grid" />
+      </div>
       <SnowCanvas />
 
       {hasSelectedGuild && (
@@ -568,7 +677,12 @@ export default function Layout() {
         </>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden relative z-10">
+      <div
+        className="dashboard-content-shell flex-1 flex flex-col min-w-0 max-w-full overflow-hidden relative z-10"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <MobileHeader hasSelectedGuild={hasSelectedGuild} setMobileOpen={setMobileOpen} t={t} />
 
         <main ref={mainScrollRef} className="app-main-scroll flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">

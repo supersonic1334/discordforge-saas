@@ -443,6 +443,7 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
   const linkedDiscordId = req.user.discord_id || null;
   const trimmedIdentity = String(identityInput || '').trim();
   const requiredPermission = QUICK_ACTION_PERMISSION[actionName] || DISCORD_PERMISSIONS.MODERATE_MEMBERS;
+  const linkedIsGuildOwner = linkedDiscordId && String(linkedDiscordId) === String(req.guild.owner_id || '');
   const guildRoleMap = new Map(
     (await discordService.getGuildRoles(token, req.guild.guild_id).catch(() => []))
       .map((role) => [String(role.id), role])
@@ -454,6 +455,15 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
   };
 
   if (linkedDiscordId && !trimmedIdentity) {
+    if (linkedIsGuildOwner) {
+      return {
+        linked: true,
+        permissionVerified: true,
+        discordId: linkedDiscordId,
+        member: await getGuildMemberSafe(token, req.guild.guild_id, linkedDiscordId),
+      };
+    }
+
     const linkedMember = await getGuildMemberSafe(token, req.guild.guild_id, linkedDiscordId);
     if (!linkedMember) {
       const error = buildHttpError(403, 'Le compte Discord lie doit etre present sur ce serveur pour utiliser les actions rapides');
@@ -488,7 +498,8 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
       error.code = 'DISCORD_LINK_MISMATCH';
       throw error;
     }
-    if (!memberHasPermission(member, requiredPermission, permissionContext)) {
+
+    if (!linkedIsGuildOwner && !memberHasPermission(member, requiredPermission, permissionContext)) {
       const error = buildHttpError(403, 'Le compte Discord lie n a pas les permissions necessaires pour cette action');
       error.code = 'DISCORD_PERMISSION_DENIED';
       throw error;
@@ -522,8 +533,9 @@ function buildViewerCapabilities(req, member, guildRoleMap) {
     guildId: req.guild.guild_id,
     ownerId: req.guild.owner_id,
   };
+  const linkedIsGuildOwner = req.user.discord_id && String(req.user.discord_id) === String(req.guild.owner_id || '');
 
-  if (isPrimaryFounder(req.user) && !member) {
+  if ((isPrimaryFounder(req.user) && !member) || linkedIsGuildOwner) {
     return {
       linked_discord: Boolean(req.user.discord_id),
       permission_verified: true,

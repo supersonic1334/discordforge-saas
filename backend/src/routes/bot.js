@@ -18,7 +18,7 @@ const moderationRoutes = require('./moderation');
 const blockedRoutes = require('./blocked');
 const messageRoutes = require('./messages');
 const teamRoutes = require('./team');
-const rassicanRoutes = require('./rassican');
+const scanRoutes = require('./scan');
 
 // ── GET /status ───────────────────────────────────────────────────────────────
 router.get('/status', requireAuth, (req, res) => {
@@ -115,7 +115,8 @@ router.use('/guilds/:guildId/moderation', moderationRoutes);
 router.use('/guilds/:guildId/blocked', blockedRoutes);
 router.use('/guilds/:guildId/messages', messageRoutes);
 router.use('/guilds/:guildId/team', teamRoutes);
-router.use('/guilds/:guildId/rassican', rassicanRoutes);
+router.use('/guilds/:guildId/scan', scanRoutes);
+router.use('/guilds/:guildId/rassican', scanRoutes);
 
 router.post('/guilds/sync', requireAuth, requireBotToken, async (req, res, next) => {
   try {

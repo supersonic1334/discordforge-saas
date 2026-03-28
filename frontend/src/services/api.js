@@ -208,10 +208,12 @@ export const teamAPI = {
   deleteSnapshot: (guildId, snapshotId) => api.delete(`/bot/guilds/${guildId}/team/snapshots/${snapshotId}`),
 }
 
-export const rassicanAPI = {
-  scan:   (guildId, params) => api.get(`/bot/guilds/${guildId}/rassican`, { params }),
-  member: (guildId, userId) => api.get(`/bot/guilds/${guildId}/rassican/members/${userId}`),
+export const scanAPI = {
+  scan:   (guildId, params) => api.get(`/bot/guilds/${guildId}/scan`, { params }),
+  member: (guildId, userId) => api.get(`/bot/guilds/${guildId}/scan/members/${userId}`),
 }
+
+export const rassicanAPI = scanAPI
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 export const commandsAPI = {
@@ -237,6 +239,7 @@ export const logsAPI = {
 export const aiAPI = {
   chat:   (data) => api.post('/ai/chat', data),
   status: ()     => api.get('/ai/status'),
+  transcribe: (data) => api.post('/ai/transcribe', data),
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────

@@ -62,6 +62,10 @@ class BotManager {
       this._broadcast(userId, 'bot:guildUpdate', { userId });
     });
 
+    process.on('scanUpdate', (payload) => {
+      this._broadcast(userId, 'scan:updated', payload);
+    });
+
     this._processes.set(userId, process);
 
     // Start (async — doesn't block)

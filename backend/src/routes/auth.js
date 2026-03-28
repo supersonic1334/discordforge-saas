@@ -120,6 +120,10 @@ function sanitizeFrontendReturnPath(value) {
   return raw;
 }
 
+function normalizeDiscordLinkMode(value) {
+  return String(value || '').trim().toLowerCase() === 'redirect' ? 'redirect' : 'popup';
+}
+
 function buildFrontendRedirect(pathname, params = {}) {
   const url = new URL(sanitizeFrontendReturnPath(pathname), config.FRONTEND_URL);
   Object.entries(params).forEach(([key, value]) => {
@@ -130,12 +134,13 @@ function buildFrontendRedirect(pathname, params = {}) {
   return url.toString();
 }
 
-function signDiscordLinkState(userId, returnTo) {
+function signDiscordLinkState(userId, returnTo, mode = 'popup') {
   return jwt.sign(
     {
       type: 'discord-link',
       userId,
       returnTo: sanitizeFrontendReturnPath(returnTo),
+      mode: normalizeDiscordLinkMode(mode),
     },
     config.JWT_SECRET,
     { expiresIn: '10m' }
@@ -154,11 +159,89 @@ function decodeDiscordLinkState(rawState, { throwOnInvalid = false } = {}) {
     return {
       userId: payload.userId,
       returnTo: sanitizeFrontendReturnPath(payload.returnTo),
+      mode: normalizeDiscordLinkMode(payload.mode),
     };
   } catch (error) {
     if (throwOnInvalid) throw error;
     return null;
   }
+}
+
+function renderDiscordLinkPopup(res, linkState, { success, error = '' } = {}) {
+  const returnTo = sanitizeFrontendReturnPath(linkState?.returnTo);
+  const fallbackUrl = buildFrontendRedirect(returnTo, success
+    ? { discord_linked: '1' }
+    : { discord_link_error: error || 'discord_link_failed' });
+  const targetOrigin = new URL(config.FRONTEND_URL).origin;
+  const payload = {
+    source: 'discord-link',
+    status: success ? 'success' : 'error',
+    error: success ? '' : String(error || 'discord_link_failed'),
+    returnTo,
+  };
+
+  return res
+    .status(success ? 200 : 400)
+    .set('Content-Type', 'text/html; charset=utf-8')
+    .send(`<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Discord link</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #05070d;
+        color: #f3f7fb;
+        font: 14px/1.5 "DM Sans", system-ui, sans-serif;
+      }
+      .card {
+        width: min(92vw, 420px);
+        padding: 24px;
+        border-radius: 24px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+        box-shadow: 0 24px 60px rgba(0,0,0,0.42);
+        text-align: center;
+      }
+      p { margin: 0; color: rgba(243,247,251,0.76); }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <p>${success ? 'Compte Discord relie. Fermeture...' : 'Liaison Discord en erreur. Fermeture...'}</p>
+    </div>
+    <script>
+      (function () {
+        var payload = ${JSON.stringify(payload)};
+        var targetOrigin = ${JSON.stringify(targetOrigin)};
+        var fallbackUrl = ${JSON.stringify(fallbackUrl)};
+
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(payload, targetOrigin);
+            window.close();
+            window.setTimeout(function () {
+              if (!window.closed) {
+                window.location.replace(fallbackUrl);
+              }
+            }, 120);
+            return;
+          }
+        } catch (error) {
+          // ignore and fallback
+        }
+
+        window.location.replace(fallbackUrl);
+      })();
+    </script>
+  </body>
+</html>`);
 }
 
 router.get('/providers', (req, res) => {
@@ -174,10 +257,12 @@ router.post('/discord/link', requireAuth, validate(discordLinkSchema), (req, res
   }
 
   const returnTo = sanitizeFrontendReturnPath(req.body.return_to);
-  const state = signDiscordLinkState(req.user.id, returnTo);
+  const mode = normalizeDiscordLinkMode(req.body.mode);
+  const state = signDiscordLinkState(req.user.id, returnTo, mode);
   res.json({
     url: `${config.API_PREFIX}/auth/discord?state=${encodeURIComponent(state)}`,
     return_to: returnTo,
+    mode,
   });
 });
 
@@ -269,6 +354,12 @@ if (discordOauthEnabled) {
       if (error || !authResult) {
         const linkState = decodeDiscordLinkState(req.query.state);
         if (linkState) {
+          if (linkState.mode === 'popup') {
+            return renderDiscordLinkPopup(res, linkState, {
+              success: false,
+              error: error?.message || 'discord_failed',
+            });
+          }
           return res.redirect(buildFrontendRedirect(linkState.returnTo, {
             discord_link_error: error?.message || 'discord_failed',
           }));
@@ -279,12 +370,21 @@ if (discordOauthEnabled) {
       if (authResult.linkState) {
         try {
           await authService.linkDiscordAccount(authResult.linkState.userId, authResult.oauthProfile);
+          if (authResult.linkState.mode === 'popup') {
+            return renderDiscordLinkPopup(res, authResult.linkState, { success: true });
+          }
           return res.redirect(buildFrontendRedirect(authResult.linkState.returnTo, { discord_linked: '1' }));
         } catch (linkError) {
           logger.warn('Discord account link failed', {
             userId: authResult.linkState.userId,
             error: linkError.message,
           });
+          if (authResult.linkState.mode === 'popup') {
+            return renderDiscordLinkPopup(res, authResult.linkState, {
+              success: false,
+              error: linkError.message || 'discord_link_failed',
+            });
+          }
           return res.redirect(buildFrontendRedirect(authResult.linkState.returnTo, {
             discord_link_error: linkError.message || 'discord_link_failed',
           }));

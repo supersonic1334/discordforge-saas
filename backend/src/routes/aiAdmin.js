@@ -16,7 +16,7 @@ const authService = require('../services/authService');
 const aiProviderKeyService = require('../services/aiProviderKeyService');
 const wsServer = require('../websocket');
 const logger = require('../utils/logger').child('AIAdminRoutes');
-const { getAICatalog, getDefaultModel, resolveConfiguredModel } = require('../config/aiCatalog');
+const { getAICatalog, getDefaultModel, getProviderCatalog, resolveConfiguredModel } = require('../config/aiCatalog');
 
 function isPrimaryFounder(user) {
   return String(user?.email || '').trim().toLowerCase() === String(config.FOUNDER_EMAIL || '').trim().toLowerCase();
@@ -52,6 +52,70 @@ function requirePrimaryFounder(req, res, next) {
   next();
 }
 
+function normalizeTranscriptionLocale(locale) {
+  const normalized = String(locale || 'fr-FR').trim().toLowerCase();
+  if (normalized.startsWith('fr')) return 'fr-FR';
+  if (normalized.startsWith('es')) return 'es-ES';
+  if (normalized.startsWith('en')) return 'en-US';
+  return 'fr-FR';
+}
+
+function normalizeBase64Audio(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const match = raw.match(/^data:([^;,]+);base64,(.+)$/i);
+  return match ? match[2] : raw;
+}
+
+async function requestGeminiTranscription(aiConfig, { audioBase64, mimeType, locale }) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${aiConfig.model}:generateContent?key=${aiConfig.apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{
+            text: [
+              'You transcribe short voice dictation for a moderation dashboard.',
+              `Return plain text only in ${normalizeTranscriptionLocale(locale)}.`,
+              'Do not add commentary, labels, markdown, or explanations.',
+              'If speech is empty or unusable, return an empty string.',
+            ].join(' '),
+          }],
+        },
+        contents: [{
+          role: 'user',
+          parts: [
+            { text: 'Transcribe this audio exactly.' },
+            {
+              inlineData: {
+                mimeType: mimeType || 'audio/webm',
+                data: audioBase64,
+              },
+            },
+          ],
+        }],
+        generationConfig: {
+          temperature: 0.05,
+          topP: 0.8,
+          maxOutputTokens: 512,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const payload = await response.text().catch(() => '');
+    const error = new Error(payload || 'Transcription provider error');
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json();
+  return String(data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+}
+
 aiRouter.post('/chat', requireAuth, validate(aiMessageSchema), async (req, res, next) => {
   try {
     const { message, guild_id, conversation_history } = req.body;
@@ -67,6 +131,51 @@ aiRouter.get('/status', requireAuth, (req, res) => {
   res.json({
     configured: !!currentConfig,
   });
+});
+
+aiRouter.post('/transcribe', requireAuth, async (req, res, next) => {
+  try {
+    const audioBase64 = normalizeBase64Audio(req.body?.audio_base64);
+    const mimeType = String(req.body?.mime_type || 'audio/webm').trim();
+    const locale = normalizeTranscriptionLocale(req.body?.locale);
+
+    if (!audioBase64) {
+      return res.status(400).json({ error: 'Audio manquant' });
+    }
+
+    if (audioBase64.length > 6_500_000) {
+      return res.status(413).json({ error: 'Audio trop volumineux' });
+    }
+
+    const aiConfig = aiService.getAIConfig();
+    if (!aiConfig) {
+      return res.status(503).json({ error: 'Transcription indisponible - IA non configuree' });
+    }
+
+    const providerCatalog = getProviderCatalog(aiConfig.provider);
+    if (aiConfig.provider !== 'gemini' && providerCatalog?.apiStyle !== 'gemini') {
+      return res.status(501).json({ error: 'Transcription serveur indisponible pour ce fournisseur' });
+    }
+
+    const text = await requestGeminiTranscription(aiConfig, {
+      audioBase64,
+      mimeType,
+      locale,
+    });
+
+    return res.json({
+      text,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+    });
+  } catch (error) {
+    logger.warn('Voice transcription failed', {
+      userId: req.user?.id || null,
+      message: error?.message || 'unknown_error',
+      status: error?.status || null,
+    });
+    next(error);
+  }
 });
 
 adminRouter.use(requireAuth, requireAdminPanelAccess);

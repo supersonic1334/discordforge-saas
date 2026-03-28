@@ -323,6 +323,16 @@ class BotProcess extends EventEmitter {
     logBotEvent(this.userId, internalGuildId, level, 'discord_event', message, metadata);
   }
 
+  _notifyScanUpdate(discordGuildId, payload = {}) {
+    if (!discordGuildId) return;
+    this.emit('scanUpdate', {
+      userId: this.userId,
+      guildId: String(discordGuildId),
+      ...payload,
+      at: new Date().toISOString(),
+    });
+  }
+
   // ── Event Handlers ──────────────────────────────────────────────────────────
 
   async _onMessage(message) {
@@ -455,6 +465,10 @@ class BotProcess extends EventEmitter {
     }
 
     await Promise.allSettled(promises);
+    this._notifyScanUpdate(member.guild.id, {
+      memberId: member.user?.id || null,
+      reason: 'member_join',
+    });
   }
 
   async _onMemberRemove(member) {
@@ -463,6 +477,10 @@ class BotProcess extends EventEmitter {
     if (configs.LOGGING?.enabled) {
       await handleLogging('member_leave', { user: member.user }, configs.LOGGING, this.token).catch(() => {});
     }
+    this._notifyScanUpdate(guildId, {
+      memberId: member.user?.id || null,
+      reason: 'member_leave',
+    });
   }
 
   async _onMessageDelete(message) {
@@ -491,6 +509,10 @@ class BotProcess extends EventEmitter {
         content: message.content,
       }, configs.LOGGING, this.token).catch(() => {});
     }
+    this._notifyScanUpdate(message.guild.id, {
+      memberId: message.author?.id || null,
+      reason: 'message_delete',
+    });
   }
 
   async _onMessageBulkDelete(messages) {
@@ -528,6 +550,9 @@ class BotProcess extends EventEmitter {
       authors: [...groupedAuthors.values()].sort((a, b) => b.count - a.count).slice(0, 5),
       contents: [...groupedContents.values()].sort((a, b) => b.count - a.count).slice(0, 8),
     });
+    this._notifyScanUpdate(first.guild.id, {
+      reason: 'message_bulk_delete',
+    });
   }
 
   async _onMessageUpdate(oldMsg, newMsg) {
@@ -542,6 +567,10 @@ class BotProcess extends EventEmitter {
         newContent: newMsg.content,
       }, configs.LOGGING, this.token).catch(() => {});
     }
+    this._notifyScanUpdate(newMsg.guild.id, {
+      memberId: newMsg.author?.id || null,
+      reason: 'message_edit',
+    });
   }
 
   async _onBanAdd(ban) {
@@ -573,6 +602,10 @@ class BotProcess extends EventEmitter {
     if (added.length || removed.length) {
       await handleLogging('role_update', { member: newMember, added, removed }, configs.LOGGING, this.token).catch(() => {});
     }
+    this._notifyScanUpdate(newMember.guild.id, {
+      memberId: newMember.user?.id || null,
+      reason: 'member_update',
+    });
   }
 
   async _onAutoModerationActionExecution(execution) {

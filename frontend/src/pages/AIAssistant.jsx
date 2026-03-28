@@ -8,7 +8,6 @@ import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
 import VoiceComposerPanel from '../components/VoiceComposerPanel'
-import VoiceMeter from '../components/VoiceMeter'
 
 const VOICE_UI = {
   fr: {
@@ -346,47 +345,6 @@ export default function AIAssistant() {
                   transcript={speech.liveTranscript || speech.interimTranscript}
                   placeholder={voiceUi.placeholder}
                 />
-                <div className="hidden rounded-[24px] border border-white/[0.08] bg-white/[0.03] p-3">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <VoiceMeter
-                        bars={speech.audioBars}
-                        active={speech.isListening}
-                        processing={speech.isRequestingPermission || speech.isProcessing}
-                        accent={speech.isRequestingPermission ? 'amber' : 'violet'}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-xs font-mono ${speech.isRequestingPermission || speech.isProcessing ? 'text-amber-300/80' : 'text-neon-violet/80'}`}>
-                          {speech.isRequestingPermission ? voiceUi.preparing : speech.isProcessing ? voiceUi.send : voiceUi.listening}
-                        </p>
-                        <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{voiceUi.live}</p>
-                        <p className="mt-2 min-h-[54px] max-w-full rounded-2xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-white/78">
-                          {speech.liveTranscript || speech.interimTranscript || '…'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={stopDictation}
-                        disabled={speech.isRequestingPermission}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-xs font-mono text-white/80 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
-                      >
-                        <Square className="h-3.5 w-3.5 fill-current" />
-                        {voiceUi.insert}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={sendDictation}
-                        disabled={speech.isRequestingPermission || loading}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-neon-violet/25 bg-neon-violet/12 px-4 py-2.5 text-xs font-mono text-violet-100 transition-all hover:bg-neon-violet/18 disabled:opacity-50"
-                      >
-                        <ArrowUp className="h-3.5 w-3.5" />
-                        {voiceUi.send}
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -466,3 +424,4 @@ export default function AIAssistant() {
     </div>
   )
 }
+

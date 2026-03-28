@@ -24,6 +24,7 @@ import toast from 'react-hot-toast'
 import { authAPI, messagesAPI, modAPI } from '../services/api'
 import { useAuthStore, useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
+import { openDiscordLinkPopup } from '../utils/discordLinkPopup'
 import {
   ACTION_COLORS,
   ACTION_LABELS,
@@ -295,6 +296,25 @@ export default function SearchPage() {
     }
   }, [fetchMe, location.pathname, location.search, navigate, selectedGuildId])
 
+  useEffect(() => {
+    if (!selectedGuildId) return
+
+    const params = new URLSearchParams(location.search)
+    const queryFromUrl = String(params.get('q') || '').trim()
+    const userIdFromUrl = String(params.get('userId') || '').trim()
+    if (!queryFromUrl && !userIdFromUrl) return
+
+    if (queryFromUrl) {
+      setQuery(queryFromUrl)
+      void runSearch(queryFromUrl, { preferredUserId: userIdFromUrl || selectedUserId })
+      return
+    }
+
+    if (userIdFromUrl) {
+      void loadProfile(userIdFromUrl, { silent: true })
+    }
+  }, [location.search, selectedGuildId])
+
   async function loadProfile(userId, { silent = false } = {}) {
     if (!selectedGuildId || !userId) return
     if (silent) setRefreshing(true)
@@ -373,19 +393,28 @@ export default function SearchPage() {
     if (linkingDiscord) return
     setLinkingDiscord(true)
     try {
-      saveDiscordLinkSearchState({
-        guildId: selectedGuildId,
-        query,
-        selectedUserId,
-      })
       const returnTo = `${location.pathname}${location.search || ''}`
-      const response = await authAPI.createDiscordLink({ return_to: returnTo })
+      const response = await authAPI.createDiscordLink({ return_to: returnTo, mode: 'popup' })
       const nextUrl = response?.data?.url
       if (!nextUrl) throw new Error('Lien Discord indisponible')
-      window.location.href = nextUrl
-      return
+      const result = await openDiscordLinkPopup(nextUrl)
+      if (result?.status !== 'success') {
+        throw new Error(result?.error || 'discord_link_failed')
+      }
+
+      await fetchMe()
+
+      if (query.trim()) {
+        await runSearch(query, { preferredUserId: selectedUserId })
+      } else if (selectedUserId) {
+        await loadProfile(selectedUserId, { silent: true })
+      }
+
+      toast.success('Compte Discord connecte avec succes')
     } catch (error) {
-      toast.error(getErrorMessage(error))
+      if (String(error?.message || '') !== 'Popup fermee') {
+        toast.error(getErrorMessage(error))
+      }
     } finally {
       setLinkingDiscord(false)
     }

@@ -25,7 +25,6 @@ import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
 import VoiceComposerPanel from '../components/VoiceComposerPanel'
-import VoiceMeter from '../components/VoiceMeter'
 
 const UI = {
   fr: {
@@ -1344,59 +1343,16 @@ export default function CommandsPage() {
                 </div>
               </div>
               {(speech.isListening || speech.isRequestingPermission || speech.isProcessing) && (
-                <>
-                  <VoiceComposerPanel
-                    accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
-                    bars={speech.audioBars}
-                    active={speech.isListening}
-                    processing={speech.isRequestingPermission || speech.isProcessing}
-                    statusLabel={speech.isRequestingPermission ? ui.voicePreparing : speech.isProcessing ? ui.voiceSendTranscript : ui.voiceListening}
-                    liveLabel={ui.voiceLiveTranscript}
-                    transcript={speech.liveTranscript || speech.interimTranscript}
-                    placeholder={ui.voiceTranscriptPlaceholder}
-                  />
-                <div className="hidden voice-panel-to-remove">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <VoiceMeter
-                        bars={speech.audioBars}
-                        active={speech.isListening}
-                        processing={speech.isRequestingPermission || speech.isProcessing}
-                        accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-xs font-mono ${speech.isRequestingPermission || speech.isProcessing ? 'text-amber-300/80' : 'text-neon-cyan/75'}`}>
-                          {speech.isRequestingPermission ? ui.voicePreparing : speech.isProcessing ? ui.voiceSendTranscript : ui.voiceListening}
-                        </p>
-                        <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">{ui.voiceLiveTranscript}</p>
-                        <p className="mt-2 min-h-[54px] rounded-2xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-white/78">
-                          {speech.liveTranscript || speech.interimTranscript || '…'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={stopCommandDictation}
-                        disabled={speech.isRequestingPermission || speech.isProcessing}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-xs font-mono text-white/80 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
-                      >
-                        <Square className="h-3.5 w-3.5 fill-current" />
-                        {ui.voiceStopDictation}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={sendCommandDictation}
-                        disabled={speech.isRequestingPermission || speech.isProcessing || assistantLoading}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/12 px-4 py-2.5 text-xs font-mono text-cyan-100 transition-all hover:bg-neon-cyan/18 disabled:opacity-50"
-                      >
-                        <ArrowUp className="h-3.5 w-3.5" />
-                        {ui.voiceSendTranscript}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                </>
+                <VoiceComposerPanel
+                  accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
+                  bars={speech.audioBars}
+                  active={speech.isListening}
+                  processing={speech.isRequestingPermission || speech.isProcessing}
+                  statusLabel={speech.isRequestingPermission ? ui.voicePreparing : speech.isProcessing ? ui.voiceSendTranscript : ui.voiceListening}
+                  liveLabel={ui.voiceLiveTranscript}
+                  transcript={speech.liveTranscript || speech.interimTranscript}
+                  placeholder={ui.voiceTranscriptPlaceholder}
+                />
               )}
             </div>
 
@@ -1411,3 +1367,4 @@ export default function CommandsPage() {
     </div>
   )
 }
+

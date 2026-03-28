@@ -276,6 +276,57 @@
     scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;
   }
+  .dashboard-shell {
+    background:
+      radial-gradient(circle at 14% 16%, rgba(38, 160, 190, 0.18), transparent 28%),
+      radial-gradient(circle at 88% 12%, rgba(126, 73, 188, 0.18), transparent 26%),
+      linear-gradient(180deg, rgba(25, 42, 57, 0.22), rgba(7, 11, 18, 0.3) 18%, rgba(0, 0, 0, 0.9) 52%, rgba(0, 0, 0, 1));
+  }
+  .dashboard-shell-backdrop {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .dashboard-shell-glow {
+    position: absolute;
+    width: 42vw;
+    height: 42vw;
+    border-radius: 999px;
+    filter: blur(72px);
+    opacity: 0.22;
+    transform: translateZ(0);
+  }
+  .dashboard-shell-glow-left {
+    left: -12vw;
+    top: -10vh;
+    background: radial-gradient(circle, rgba(61, 191, 231, 0.34), rgba(61, 191, 231, 0.08) 46%, transparent 72%);
+  }
+  .dashboard-shell-glow-right {
+    right: -14vw;
+    top: -8vh;
+    background: radial-gradient(circle, rgba(151, 92, 255, 0.3), rgba(151, 92, 255, 0.08) 44%, transparent 72%);
+  }
+  .dashboard-shell-grid {
+    position: absolute;
+    inset: 0;
+    opacity: 0.18;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 34px 34px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.32), rgba(0,0,0,0.04) 24%, transparent 100%);
+  }
+  .dashboard-content-shell {
+    touch-action: pan-y pinch-zoom;
+    overscroll-behavior-x: none;
+  }
+  .app-main-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    overscroll-behavior-x: none;
+  }
   .sidebar-shell:hover {
     box-shadow:
       24px 0 68px rgba(0,0,0,0.32),
@@ -391,6 +442,47 @@
     width: 1px;
     background: linear-gradient(180deg, rgba(0,229,255,0.22), rgba(176,78,255,0.18), transparent);
     pointer-events: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .dashboard-shell-glow {
+    width: 58vw;
+    height: 58vw;
+    filter: blur(62px);
+    opacity: 0.18;
+  }
+
+  .feature-hero,
+  .spotlight-card,
+  .glass-card,
+  .depth-panel {
+    border-radius: 24px;
+  }
+
+  .feature-metric {
+    padding: 0.95rem 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-shell-grid {
+    opacity: 0.12;
+    background-size: 26px 26px;
+  }
+
+  .feature-chip {
+    padding: 0.45rem 0.75rem;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+  }
+
+  .feature-hero,
+  .spotlight-card,
+  .glass-card,
+  .depth-panel,
+  .feature-metric {
+    border-radius: 22px;
   }
 }
 

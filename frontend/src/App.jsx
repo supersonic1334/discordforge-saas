@@ -15,7 +15,7 @@ import AIAssistant from './pages/AIAssistant'
 import ServersPage from './pages/ServersPage'
 import ProtectionPage from './pages/ProtectionPage'
 import SearchPage from './pages/SearchPage'
-import RassicanPage from './pages/RassicanPage'
+import ScanPage from './pages/ScanPage'
 import LogsPage from './pages/LogsPage'
 import MessagesPage from './pages/MessagesPage'
 import NotificationsPage from './pages/NotificationsPage'
@@ -214,7 +214,8 @@ function AppRoot() {
           <Route path="servers/:guildId" element={<Navigate to="/dashboard/servers" replace />} />
           <Route path="protection" element={<PageTransition><ProtectionPage /></PageTransition>} />
           <Route path="search" element={<PageTransition><SearchPage /></PageTransition>} />
-          <Route path="rassican" element={<PageTransition><RassicanPage /></PageTransition>} />
+          <Route path="scan" element={<PageTransition><ScanPage /></PageTransition>} />
+          <Route path="rassican" element={<Navigate to="/dashboard/scan" replace />} />
           <Route path="logs" element={<PageTransition><LogsPage /></PageTransition>} />
           <Route path="moderation" element={<Navigate to="/dashboard/search" replace />} />
           <Route path="messages" element={<PageTransition><MessagesPage /></PageTransition>} />
