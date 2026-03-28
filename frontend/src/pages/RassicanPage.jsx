@@ -43,6 +43,36 @@ const ACTIONS = [
   { id: 'ban', label: 'Ban', icon: Ban, tone: 'border-red-500/20 bg-red-500/10 text-red-300' },
 ]
 
+const RASSICAN_DISCORD_LINK_STATE_KEY = 'discordforger.rassican.discord-link-state'
+
+function saveDiscordLinkRassicanState(state) {
+  try {
+    window.sessionStorage.setItem(RASSICAN_DISCORD_LINK_STATE_KEY, JSON.stringify({
+      guildId: state.guildId || null,
+      filters: state.filters || null,
+      selectedUserId: state.selectedUserId || '',
+      timestamp: Date.now(),
+    }))
+  } catch {}
+}
+
+function consumeDiscordLinkRassicanState(expectedGuildId) {
+  try {
+    const raw = window.sessionStorage.getItem(RASSICAN_DISCORD_LINK_STATE_KEY)
+    if (!raw) return null
+    window.sessionStorage.removeItem(RASSICAN_DISCORD_LINK_STATE_KEY)
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    if (expectedGuildId && parsed.guildId && String(parsed.guildId) !== String(expectedGuildId)) return null
+    return {
+      filters: parsed.filters && typeof parsed.filters === 'object' ? parsed.filters : null,
+      selectedUserId: String(parsed.selectedUserId || ''),
+    }
+  } catch {
+    return null
+  }
+}
+
 function HeaderPill({ icon: Icon, label }) {
   return (
     <span className="feature-chip">
@@ -227,6 +257,7 @@ export default function RassicanPage() {
     if (!linked && !linkError) return
 
     fetchMe()
+    const restoredState = linked === '1' ? consumeDiscordLinkRassicanState(selectedGuildId) : null
     if (linked === '1') {
       toast.success('Compte Discord connecte')
     } else if (linkError) {
@@ -239,7 +270,17 @@ export default function RassicanPage() {
       pathname: location.pathname,
       search: params.toString() ? `?${params.toString()}` : '',
     }, { replace: true })
-  }, [fetchMe, location.pathname, location.search, navigate])
+
+    if (restoredState?.filters) {
+      setFilters((current) => ({
+        ...current,
+        ...restoredState.filters,
+      }))
+    }
+    if (restoredState?.selectedUserId) {
+      setSelectedUserId(restoredState.selectedUserId)
+    }
+  }, [fetchMe, location.pathname, location.search, navigate, selectedGuildId])
 
   async function loadScan(forceRefresh = false) {
     if (!selectedGuildId) return
@@ -309,6 +350,11 @@ export default function RassicanPage() {
     if (linkingDiscord) return
     setLinkingDiscord(true)
     try {
+      saveDiscordLinkRassicanState({
+        guildId: selectedGuildId,
+        filters,
+        selectedUserId,
+      })
       const returnTo = `${location.pathname}${location.search || ''}`
       const response = await authAPI.createDiscordLink({ return_to: returnTo })
       const nextUrl = response?.data?.url

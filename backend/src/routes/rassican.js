@@ -96,22 +96,51 @@ function formatRiskLabel(tier) {
   return 'Faible';
 }
 
-function parsePermissions(member) {
+function parsePermissions(value) {
   try {
-    return BigInt(String(member?.permissions || '0'));
+    return BigInt(String(value || '0'));
   } catch {
     return 0n;
   }
 }
 
-function memberHasPermission(member, permission) {
+function computeMemberPermissions(member, context = {}) {
+  if (!member) return 0n;
+
+  const roleMap = context.roleMap instanceof Map ? context.roleMap : new Map();
+  const guildId = String(context.guildId || '');
+  const ownerId = String(context.ownerId || '');
+  const memberUserId = String(member?.user?.id || member?.user_id || '');
+
+  if (ownerId && memberUserId && ownerId === memberUserId) {
+    return DISCORD_PERMISSIONS.ADMINISTRATOR;
+  }
+
+  const explicitPermissions = parsePermissions(member?.permissions);
+  if (explicitPermissions > 0n) return explicitPermissions;
+
+  let permissions = 0n;
+  const includeRole = (roleId) => {
+    const role = roleMap.get(String(roleId));
+    if (role) permissions |= parsePermissions(role.permissions);
+  };
+
+  if (guildId) includeRole(guildId);
+  for (const roleId of Array.isArray(member?.roles) ? member.roles : []) {
+    includeRole(roleId);
+  }
+
+  return permissions;
+}
+
+function memberHasPermission(member, permission, context = {}) {
   if (!permission) return true;
-  const permissions = parsePermissions(member);
+  const permissions = computeMemberPermissions(member, context);
   if ((permissions & DISCORD_PERMISSIONS.ADMINISTRATOR) === DISCORD_PERMISSIONS.ADMINISTRATOR) return true;
   return (permissions & permission) === permission;
 }
 
-function buildViewer(member, linkedDiscordId) {
+function buildViewer(member, linkedDiscordId, context = {}) {
   if (!linkedDiscordId) {
     return {
       linked_discord: false,
@@ -140,10 +169,10 @@ function buildViewer(member, linkedDiscordId) {
     linked_discord: true,
     linked_discord_id: linkedDiscordId,
     in_server: true,
-    can_warn: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS),
-    can_timeout: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS),
-    can_kick: memberHasPermission(member, DISCORD_PERMISSIONS.KICK_MEMBERS),
-    can_ban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS),
+    can_warn: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS, context),
+    can_timeout: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS, context),
+    can_kick: memberHasPermission(member, DISCORD_PERMISSIONS.KICK_MEMBERS, context),
+    can_ban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, context),
   };
 }
 
@@ -272,6 +301,7 @@ function buildRoleMap(roles) {
       name: role.name || String(role.id),
       color: Number(role.color || 0),
       position: Number(role.position || 0),
+      permissions: String(role.permissions || '0'),
     }])
   );
 }
@@ -725,6 +755,11 @@ async function runGuildScan(req) {
   ]);
 
   const roleMap = buildRoleMap(roles);
+  const viewerPermissionContext = {
+    roleMap,
+    guildId: req.guild.guild_id,
+    ownerId: req.guild.owner_id,
+  };
   const warningMap = buildWarningMap(req.guild.id);
   const actionMap = buildActionMap(req.guild.id);
   const blacklistMap = buildBlacklistMap(req.guildOwnerUserId || req.user.id);
@@ -777,7 +812,7 @@ async function runGuildScan(req) {
     partial: memberResult.partial,
     partial_reason: memberResult.partial ? 'Scan limite pour garder une reponse stable sur tres gros serveurs.' : '',
     summary,
-    viewer: buildViewer(viewerMember, req.user.discord_id || null),
+    viewer: buildViewer(viewerMember, req.user.discord_id || null, viewerPermissionContext),
     members,
     detailMap,
   };

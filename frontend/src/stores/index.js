@@ -56,10 +56,19 @@ function resolveSelectedGuildId(guilds = [], preferredGuildId = null, fallbackGu
 
 function sanitizePersistedUser(user) {
   if (!user) return user
-  if (typeof user.avatar_url === 'string' && user.avatar_url.startsWith('data:image/')) {
-    return { ...user, avatar_url: null }
+  const nextUser = { ...user }
+  if (typeof nextUser.avatar_url === 'string' && nextUser.avatar_url.startsWith('data:image/')) {
+    nextUser.avatar_url = null
   }
-  return user
+  if (
+    nextUser.discord_id
+    && typeof nextUser.avatar_url === 'string'
+    && nextUser.avatar_url.includes('cdn.discordapp.com/avatars/')
+    && nextUser.avatar_url.includes(`/${String(nextUser.discord_id)}/`)
+  ) {
+    nextUser.avatar_url = null
+  }
+  return nextUser
 }
 
 export const useAuthStore = create(
@@ -83,7 +92,7 @@ export const useAuthStore = create(
         }
       },
 
-      setUser: (user) => set({ user }),
+      setUser: (user) => set({ user: sanitizePersistedUser(user) }),
 
       login: async (data) => {
         set({ isLoading: true })
@@ -91,7 +100,7 @@ export const useAuthStore = create(
           const res = await authAPI.login(data)
           const { token, user } = res.data
           localStorage.setItem('token', token)
-          set({ token, user, isLoading: false })
+          set({ token, user: sanitizePersistedUser(user), isLoading: false })
           await get().fetchMe()
           return { success: true }
         } catch (err) {
@@ -106,7 +115,7 @@ export const useAuthStore = create(
           const res = await authAPI.register(data)
           const { token, user } = res.data
           localStorage.setItem('token', token)
-          set({ token, user, hasBotToken: false, isLoading: false })
+          set({ token, user: sanitizePersistedUser(user), hasBotToken: false, isLoading: false })
           return { success: true }
         } catch (err) {
           set({ isLoading: false })
@@ -122,7 +131,7 @@ export const useAuthStore = create(
             const res = await authAPI.me()
             const { user, hasBotToken, hasOwnBotToken, accessibleGuildCount, sharedGuildCount, botStatus } = res.data
             set({
-              user,
+              user: sanitizePersistedUser(user),
               hasBotToken: !!hasBotToken,
               hasOwnBotToken: !!hasOwnBotToken,
               accessibleGuildCount: Number(accessibleGuildCount || 0),

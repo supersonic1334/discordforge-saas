@@ -45,6 +45,36 @@ const QUICK_ACTIONS = [
   { id: 'unban', label: 'Deban', icon: UserCheck, tone: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' },
 ]
 
+const SEARCH_DISCORD_LINK_STATE_KEY = 'discordforger.search.discord-link-state'
+
+function saveDiscordLinkSearchState(state) {
+  try {
+    window.sessionStorage.setItem(SEARCH_DISCORD_LINK_STATE_KEY, JSON.stringify({
+      guildId: state.guildId || null,
+      query: state.query || '',
+      selectedUserId: state.selectedUserId || '',
+      timestamp: Date.now(),
+    }))
+  } catch {}
+}
+
+function consumeDiscordLinkSearchState(expectedGuildId) {
+  try {
+    const raw = window.sessionStorage.getItem(SEARCH_DISCORD_LINK_STATE_KEY)
+    if (!raw) return null
+    window.sessionStorage.removeItem(SEARCH_DISCORD_LINK_STATE_KEY)
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    if (expectedGuildId && parsed.guildId && String(parsed.guildId) !== String(expectedGuildId)) return null
+    return {
+      query: String(parsed.query || ''),
+      selectedUserId: String(parsed.selectedUserId || ''),
+    }
+  } catch {
+    return null
+  }
+}
+
 function Avatar({ src, label, size = 'w-16 h-16' }) {
   if (src) return <img src={src} alt={label} className={`${size} rounded-[22px] object-cover border border-white/10 shadow-[0_18px_36px_rgba(0,0,0,0.22)]`} />
 
@@ -241,6 +271,7 @@ export default function SearchPage() {
     if (!linked && !linkError) return
 
     fetchMe()
+    const restoredState = linked === '1' ? consumeDiscordLinkSearchState(selectedGuildId) : null
     if (linked === '1') {
       toast.success('Compte Discord connecte avec succes')
     } else if (linkError) {
@@ -253,7 +284,16 @@ export default function SearchPage() {
       pathname: location.pathname,
       search: params.toString() ? `?${params.toString()}` : '',
     }, { replace: true })
-  }, [fetchMe, location.pathname, location.search, navigate])
+
+    if (restoredState) {
+      setQuery(restoredState.query)
+      if (restoredState.query) {
+        void runSearch(restoredState.query, { preferredUserId: restoredState.selectedUserId })
+      } else if (restoredState.selectedUserId) {
+        void loadProfile(restoredState.selectedUserId, { silent: true })
+      }
+    }
+  }, [fetchMe, location.pathname, location.search, navigate, selectedGuildId])
 
   async function loadProfile(userId, { silent = false } = {}) {
     if (!selectedGuildId || !userId) return
@@ -271,21 +311,30 @@ export default function SearchPage() {
     }
   }
 
-  async function handleSearch() {
-    if (!selectedGuildId || !query.trim()) return
+  async function runSearch(searchQuery, options = {}) {
+    const normalizedQuery = String(searchQuery || '').trim()
+    const preferredUserId = String(options.preferredUserId || '')
+    if (!selectedGuildId || !normalizedQuery) return
     setLoadingResults(true)
     setProfileData(null)
     setSelectedUserId('')
     try {
-      const response = await modAPI.searchUsers(selectedGuildId, { q: query.trim(), limit: 10 })
+      const response = await modAPI.searchUsers(selectedGuildId, { q: normalizedQuery, limit: 10 })
       const nextResults = response.data?.results || []
       setResults(nextResults)
-      if (nextResults[0]?.id) await loadProfile(nextResults[0].id, { silent: true })
+      const nextSelectedUserId = preferredUserId && nextResults.some((entry) => entry.id === preferredUserId)
+        ? preferredUserId
+        : (nextResults[0]?.id || '')
+      if (nextSelectedUserId) await loadProfile(nextSelectedUserId, { silent: true })
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
       setLoadingResults(false)
     }
+  }
+
+  async function handleSearch() {
+    await runSearch(query)
   }
 
   async function handleSubmitAction() {
@@ -324,6 +373,11 @@ export default function SearchPage() {
     if (linkingDiscord) return
     setLinkingDiscord(true)
     try {
+      saveDiscordLinkSearchState({
+        guildId: selectedGuildId,
+        query,
+        selectedUserId,
+      })
       const returnTo = `${location.pathname}${location.search || ''}`
       const response = await authAPI.createDiscordLink({ return_to: returnTo })
       const nextUrl = response?.data?.url

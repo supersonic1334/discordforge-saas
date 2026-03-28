@@ -181,7 +181,7 @@ async function upsertOAuthUser({ provider, providerId, email, username, avatarUr
   return { token, user: safeUser(user) };
 }
 
-function linkDiscordAccount(userId, { providerId, username, avatarUrl, accessToken }) {
+function linkDiscordAccount(userId, { providerId, accessToken }) {
   const user = db.findOne('users', { id: userId });
   if (!user || !user.is_active) {
     throw Object.assign(new Error('Account not found or deactivated'), { status: 404 });
@@ -199,7 +199,6 @@ function linkDiscordAccount(userId, { providerId, username, avatarUrl, accessTok
   db.update('users', {
     discord_id: providerId,
     discord_token: accessToken || user.discord_token || null,
-    avatar_url: user.avatar_url || avatarUrl || null,
     updated_at: new Date().toISOString(),
   }, { id: userId });
 

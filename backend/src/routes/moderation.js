@@ -164,17 +164,46 @@ async function resolveModeratorMemberByIdentity(token, guildId, identityInput, e
   return { identity, member: exactMatches[0] };
 }
 
-function parsePermissions(member) {
+function parsePermissions(value) {
   try {
-    return BigInt(String(member?.permissions || '0'));
+    return BigInt(String(value || '0'));
   } catch {
     return 0n;
   }
 }
 
-function memberHasPermission(member, permission) {
+function computeMemberPermissions(member, context = {}) {
+  if (!member) return 0n;
+
+  const guildRoleMap = context.guildRoleMap instanceof Map ? context.guildRoleMap : new Map();
+  const guildId = String(context.guildId || '');
+  const ownerId = String(context.ownerId || '');
+  const memberUserId = String(member?.user?.id || member?.user_id || '');
+
+  if (ownerId && memberUserId && ownerId === memberUserId) {
+    return DISCORD_PERMISSIONS.ADMINISTRATOR;
+  }
+
+  const explicitPermissions = parsePermissions(member?.permissions);
+  if (explicitPermissions > 0n) return explicitPermissions;
+
+  let permissions = 0n;
+  const includeRole = (roleId) => {
+    const role = guildRoleMap.get(String(roleId));
+    if (role) permissions |= parsePermissions(role.permissions);
+  };
+
+  if (guildId) includeRole(guildId);
+  for (const roleId of Array.isArray(member?.roles) ? member.roles : []) {
+    includeRole(roleId);
+  }
+
+  return permissions;
+}
+
+function memberHasPermission(member, permission, context = {}) {
   if (!permission) return true;
-  const permissions = parsePermissions(member);
+  const permissions = computeMemberPermissions(member, context);
   if ((permissions & DISCORD_PERMISSIONS.ADMINISTRATOR) === DISCORD_PERMISSIONS.ADMINISTRATOR) return true;
   return (permissions & permission) === permission;
 }
@@ -320,10 +349,11 @@ function buildRoleSummary(member, guildRoleMap, guildId) {
     .sort((a, b) => b.position - a.position);
 }
 
-function buildMemberProfile(member, guildRoleMap, guildId) {
+function buildMemberProfile(member, guildRoleMap, guildId, ownerId) {
   if (!member?.user) return null;
   const user = member.user;
-  const permissions = parsePermissions(member);
+  const permissionContext = { guildRoleMap, guildId, ownerId };
+  const permissions = computeMemberPermissions(member, permissionContext);
   const displayName = member.nick || user.global_name || user.username || user.id;
   const activeTimeoutUntil = getActiveTimeoutUntil(member.communication_disabled_until);
 
@@ -342,12 +372,12 @@ function buildMemberProfile(member, guildRoleMap, guildId) {
     timeout_active: Boolean(activeTimeoutUntil),
     roles: buildRoleSummary(member, guildRoleMap, guildId),
     permissions: {
-      administrator: memberHasPermission(member, DISCORD_PERMISSIONS.ADMINISTRATOR),
-      moderate_members: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS),
-      kick_members: memberHasPermission(member, DISCORD_PERMISSIONS.KICK_MEMBERS),
-      ban_members: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS),
-      view_audit_log: memberHasPermission(member, DISCORD_PERMISSIONS.VIEW_AUDIT_LOG),
-      manage_messages: memberHasPermission(member, DISCORD_PERMISSIONS.MANAGE_MESSAGES),
+      administrator: memberHasPermission(member, DISCORD_PERMISSIONS.ADMINISTRATOR, permissionContext),
+      moderate_members: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS, permissionContext),
+      kick_members: memberHasPermission(member, DISCORD_PERMISSIONS.KICK_MEMBERS, permissionContext),
+      ban_members: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, permissionContext),
+      view_audit_log: memberHasPermission(member, DISCORD_PERMISSIONS.VIEW_AUDIT_LOG, permissionContext),
+      manage_messages: memberHasPermission(member, DISCORD_PERMISSIONS.MANAGE_MESSAGES, permissionContext),
       raw: permissions.toString(),
     },
   };
@@ -413,6 +443,15 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
   const linkedDiscordId = req.user.discord_id || null;
   const trimmedIdentity = String(identityInput || '').trim();
   const requiredPermission = QUICK_ACTION_PERMISSION[actionName] || DISCORD_PERMISSIONS.MODERATE_MEMBERS;
+  const guildRoleMap = new Map(
+    (await discordService.getGuildRoles(token, req.guild.guild_id).catch(() => []))
+      .map((role) => [String(role.id), role])
+  );
+  const permissionContext = {
+    guildRoleMap,
+    guildId: req.guild.guild_id,
+    ownerId: req.guild.owner_id,
+  };
 
   if (linkedDiscordId && !trimmedIdentity) {
     const linkedMember = await getGuildMemberSafe(token, req.guild.guild_id, linkedDiscordId);
@@ -421,7 +460,7 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
       error.code = 'DISCORD_LINK_NOT_IN_GUILD';
       throw error;
     }
-    if (!memberHasPermission(linkedMember, requiredPermission)) {
+    if (!memberHasPermission(linkedMember, requiredPermission, permissionContext)) {
       const error = buildHttpError(403, 'Le compte Discord lie n a pas les permissions necessaires pour cette action');
       error.code = 'DISCORD_PERMISSION_DENIED';
       throw error;
@@ -449,7 +488,7 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
       error.code = 'DISCORD_LINK_MISMATCH';
       throw error;
     }
-    if (!memberHasPermission(member, requiredPermission)) {
+    if (!memberHasPermission(member, requiredPermission, permissionContext)) {
       const error = buildHttpError(403, 'Le compte Discord lie n a pas les permissions necessaires pour cette action');
       error.code = 'DISCORD_PERMISSION_DENIED';
       throw error;
@@ -463,7 +502,7 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
     };
   }
 
-  if (!memberHasPermission(member, requiredPermission)) {
+  if (!memberHasPermission(member, requiredPermission, permissionContext)) {
     const error = buildHttpError(403, 'L identite Discord fournie n a pas les permissions necessaires pour cette action');
     error.code = 'DISCORD_PERMISSION_DENIED';
     throw error;
@@ -477,7 +516,13 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
   };
 }
 
-function buildViewerCapabilities(req, member) {
+function buildViewerCapabilities(req, member, guildRoleMap) {
+  const permissionContext = {
+    guildRoleMap,
+    guildId: req.guild.guild_id,
+    ownerId: req.guild.owner_id,
+  };
+
   if (isPrimaryFounder(req.user) && !member) {
     return {
       linked_discord: Boolean(req.user.discord_id),
@@ -494,12 +539,12 @@ function buildViewerCapabilities(req, member) {
   return {
     linked_discord: Boolean(req.user.discord_id),
     permission_verified: Boolean(member),
-    can_warn: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS),
-    can_timeout: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS),
-    can_kick: memberHasPermission(member, DISCORD_PERMISSIONS.KICK_MEMBERS),
-    can_ban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS),
-    can_unban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS),
-    can_view_audit_log: memberHasPermission(member, DISCORD_PERMISSIONS.VIEW_AUDIT_LOG),
+    can_warn: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS, permissionContext),
+    can_timeout: memberHasPermission(member, DISCORD_PERMISSIONS.MODERATE_MEMBERS, permissionContext),
+    can_kick: memberHasPermission(member, DISCORD_PERMISSIONS.KICK_MEMBERS, permissionContext),
+    can_ban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, permissionContext),
+    can_unban: memberHasPermission(member, DISCORD_PERMISSIONS.BAN_MEMBERS, permissionContext),
+    can_view_audit_log: memberHasPermission(member, DISCORD_PERMISSIONS.VIEW_AUDIT_LOG, permissionContext),
   };
 }
 
@@ -760,7 +805,7 @@ async function buildUserModerationProfile(req, token, userId) {
 
   const roleMap = new Map((Array.isArray(guildRoles) ? guildRoles : []).map((role) => [role.id, role]));
   const baseProfile = member
-    ? buildMemberProfile(member, roleMap, guildId)
+    ? buildMemberProfile(member, roleMap, guildId, req.guild.owner_id)
     : buildBasicUserProfile(ban?.user || remoteUser, userId);
 
   const warnings = warningRows;
@@ -788,7 +833,7 @@ async function buildUserModerationProfile(req, token, userId) {
       banned: Boolean(ban),
       ban_reason: ban?.reason || '',
     },
-    viewer: buildViewerCapabilities(req, viewerMember),
+    viewer: buildViewerCapabilities(req, viewerMember, roleMap),
     site: {
       warnings,
       actions: siteActions,
