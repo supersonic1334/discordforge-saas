@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Bot, Key, ExternalLink, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react'
 import { authAPI } from '../services/api'
 import { useAuthStore } from '../stores'
-import SnowCanvas from '../components/SnowCanvas'
+import AuthSnowBackdrop from '../components/AuthSnowBackdrop'
 import { getQuickBotToken, setQuickBotToken } from '../utils/quickBotToken'
 import { useI18n } from '../i18n'
 
@@ -86,8 +86,7 @@ export default function SetupPage() {
 
   return (
     <div className="min-h-screen bg-surface-0 flex items-center justify-center relative overflow-hidden p-4">
-      <SnowCanvas />
-      <div className="absolute inset-0 bg-gradient-to-b from-neon-cyan/[0.02] to-neon-violet/[0.02] pointer-events-none" />
+      <AuthSnowBackdrop className="z-0" />
 
       <div className="relative z-10 w-full max-w-2xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
-import SnowCanvas from '../SnowCanvas'
+import AuthSnowBackdrop from '../AuthSnowBackdrop'
 import { useI18n } from '../../i18n'
 
 const SIDEBAR_COLLAPSED_WIDTH = 64
@@ -585,12 +585,7 @@ export default function Layout() {
 
   return (
     <div className="dashboard-shell relative flex min-h-screen min-h-[100dvh] md:h-screen max-w-full overflow-hidden">
-      <div className="dashboard-shell-backdrop" aria-hidden="true">
-        <div className="dashboard-shell-glow dashboard-shell-glow-left" />
-        <div className="dashboard-shell-glow dashboard-shell-glow-right" />
-        <div className="dashboard-shell-grid" />
-      </div>
-      <SnowCanvas />
+      <AuthSnowBackdrop className="z-[1]" />
 
       {hasSelectedGuild && (
         <>
