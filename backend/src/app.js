@@ -162,6 +162,22 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true, limit: '8mb' }));
+app.use((error, req, res, next) => {
+  const blockedActionRoute = /^\/api\/v1\/bot\/guilds\/[^/]+\/blocked\/(?:bans|blacklist)\/[^/]+\/(?:unban|remove)$/.test(req.path || '');
+
+  if (blockedActionRoute && error?.type === 'entity.parse.failed') {
+    logger.warn('Ignoring invalid JSON body on blocked action route', {
+      method: req.method,
+      path: req.path,
+      contentType: req.headers['content-type'] || null,
+      contentLength: req.headers['content-length'] || null,
+    });
+    req.body = {};
+    return next();
+  }
+
+  return next(error);
+});
 
 // ── HTTP logging ──────────────────────────────────────────────────────────────
 if (config.NODE_ENV !== 'test') {
