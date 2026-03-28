@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { memo, useState, useEffect, useRef } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -48,6 +48,244 @@ function StatusDot({ status }) {
   return <div className={`w-2 h-2 rounded-full ${colors[status] || colors.stopped}`} />
 }
 
+const SidebarContent = memo(function SidebarContent({
+  collapsed,
+  selectedGuild,
+  navItems,
+  isActive,
+  selectedGuildId,
+  canAccessAdminPanel,
+  canAccessProviderPanel,
+  user,
+  t,
+  navigate,
+  clearSelectedGuild,
+  setMobileOpen,
+  handleNavClick,
+  handleLogout,
+}) {
+  const status = useBotStore((state) => state.status)
+  const ping = useBotStore((state) => state.ping)
+  const bot = useBotStore((state) => state.bot)
+  const brandAvatarSrc = bot?.avatarUrl || '/discordforger-icon.png'
+  const brandAvatarAlt = bot?.username || 'DiscordForger'
+
+  const renderSidebarLink = ({ icon: Icon, label, path, needsGuild }) => {
+    const active = isActive(path)
+    const disabled = needsGuild && !selectedGuildId
+
+    return (
+      <motion.div
+        key={path}
+        whileHover={disabled ? undefined : { x: collapsed ? 0 : 5, y: -2, scale: 1.012 }}
+        whileTap={disabled ? undefined : { scale: 0.988 }}
+        transition={{ type: 'spring', stiffness: 340, damping: 24 }}
+      >
+        <Link
+          to={path}
+          onClick={(event) => handleNavClick(event, disabled)}
+          aria-disabled={disabled}
+          className={`sidebar-nav-link ${active ? 'sidebar-nav-link-active' : ''} ${disabled ? 'sidebar-nav-link-disabled' : ''} ${collapsed ? 'justify-center' : ''}`}
+          title={collapsed ? label : undefined}
+        >
+          <span className="sidebar-nav-link-glow" />
+          <span className={`sidebar-nav-icon ${active ? 'sidebar-nav-icon-active' : ''}`}>
+            <Icon className="w-4 h-4 shrink-0" />
+          </span>
+          {!collapsed && (
+            <>
+              <span className="sidebar-nav-label">{label}</span>
+              <motion.span
+                initial={false}
+                animate={active ? { opacity: 1, scale: 1, x: 0 } : { opacity: 0, scale: 0.7, x: -6 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="sidebar-nav-dot"
+              />
+            </>
+          )}
+        </Link>
+      </motion.div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className={`shrink-0 flex items-center gap-3 p-4 border-b border-white/[0.06] ${collapsed ? 'justify-center' : ''}`}>
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center shrink-0 overflow-hidden p-0.5 shadow-[0_8px_24px_rgba(92,138,255,0.16)]">
+          <img src={brandAvatarSrc} className="w-full h-full object-cover" alt={brandAvatarAlt} />
+        </div>
+        {!collapsed && (
+          <div>
+            <p className="font-display font-700 text-white text-sm">{t('layout.appName')}</p>
+            <p className="text-xs text-white/30 font-mono">{bot?.username || t('layout.appTagline')}</p>
+          </div>
+        )}
+      </div>
+
+      {!collapsed && (
+        <div className="shrink-0 mx-3 mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <StatusDot status={status} />
+              <span className="text-xs font-mono text-white/60 capitalize">{t(`layout.status.${status}`, status)}</span>
+            </div>
+            {ping > 0 && <span className="text-xs font-mono text-neon-cyan/60">{ping}ms</span>}
+          </div>
+          {selectedGuild && (
+            <div className="flex items-center gap-2 mt-2 min-w-0">
+              <div className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                <Server className="w-3.5 h-3.5 text-neon-cyan/70 shrink-0" />
+                <p className="text-[11px] text-white/40 font-mono truncate">{selectedGuild.name}</p>
+              </div>
+              <button
+                type="button"
+                title={t('dashboard.changeServer', 'Changer de serveur')}
+                aria-label={t('dashboard.changeServer', 'Changer de serveur')}
+                onClick={() => {
+                  navigate('/dashboard/servers')
+                  setMobileOpen(false)
+                }}
+                className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/55 hover:text-white hover:bg-white/[0.07] flex items-center justify-center transition-all shrink-0"
+              >
+                <Server className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                title={t('dashboard.disconnectServer', 'Deconnecter ce serveur')}
+                aria-label={t('dashboard.disconnectServer', 'Deconnecter ce serveur')}
+                onClick={() => {
+                  clearSelectedGuild()
+                  navigate('/dashboard/servers')
+                  setMobileOpen(false)
+                }}
+                className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 flex items-center justify-center transition-all shrink-0"
+              >
+                <Unplug className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <nav className="sidebar-scroll-area flex-1 min-h-0 px-3 pt-3 pb-5 space-y-1.5 scrollbar-none mt-2">
+        {navItems.map(renderSidebarLink)}
+      </nav>
+
+      <div className="shrink-0 mt-3 p-3 border-t border-white/[0.06] space-y-1">
+        <Link
+          to="/dashboard/reviews"
+          onClick={() => setMobileOpen(false)}
+          className={`group relative overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+            isActive('/dashboard/reviews')
+              ? 'bg-gradient-to-r from-amber-500/16 via-yellow-400/10 to-amber-500/16 border border-amber-400/25 text-amber-200 shadow-[0_0_30px_rgba(250,204,21,0.18)]'
+              : 'text-white/55 border border-transparent hover:text-amber-200 hover:border-amber-400/18 hover:bg-gradient-to-r hover:from-amber-500/10 hover:via-yellow-400/6 hover:to-amber-500/10 hover:shadow-[0_0_24px_rgba(250,204,21,0.12)]'
+          } ${collapsed ? 'justify-center' : ''}`}
+        >
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-[radial-gradient(circle_at_left,rgba(250,204,21,0.14),transparent_58%)]" />
+          <Star className="relative z-10 w-4 h-4 shrink-0 text-amber-300 fill-amber-300/40 group-hover:fill-amber-300/60 transition-all duration-200 group-hover:scale-105" />
+          {!collapsed && (
+            <>
+              <span className="relative z-10 font-medium">{t('layout.nav.reviews', 'Avis')}</span>
+              {isActive('/dashboard/reviews') && <div className="relative z-10 ml-auto w-1.5 h-1.5 rounded-full bg-amber-300" />}
+            </>
+          )}
+        </Link>
+
+        <Link
+          to="/dashboard/support"
+          onClick={() => setMobileOpen(false)}
+          className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+            isActive('/dashboard/support')
+              ? 'bg-gradient-to-r from-cyan-500/15 via-cyan-500/10 to-violet-500/15 border border-cyan-500/25 text-cyan-200 shadow-[0_0_28px_rgba(0,229,255,0.12)]'
+              : 'text-white/45 border border-transparent hover:text-cyan-200 hover:border-cyan-500/15 hover:bg-gradient-to-r hover:from-cyan-500/8 hover:via-cyan-500/4 hover:to-violet-500/8'
+          } ${collapsed ? 'justify-center' : ''}`}
+        >
+          <LifeBuoy className="w-4 h-4 shrink-0 text-cyan-300 group-hover:scale-105 transition-transform" />
+          {!collapsed && t('layout.nav.support', 'Support')}
+        </Link>
+
+        {canAccessAdminPanel && (
+          <Link
+            to="/dashboard/admin"
+            onClick={() => setMobileOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+              isActive('/dashboard/admin')
+                ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
+                : 'text-white/40 hover:text-amber-400 hover:bg-amber-500/5'
+            } ${collapsed ? 'justify-center' : ''}`}
+          >
+            <Crown className="w-4 h-4 shrink-0" />
+            {!collapsed && t('layout.nav.adminPanel')}
+          </Link>
+        )}
+
+        {canAccessProviderPanel && (
+          <Link
+            to="/dashboard/provider"
+            onClick={() => setMobileOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+              isActive('/dashboard/provider')
+                ? 'bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan'
+                : 'text-white/40 hover:text-neon-cyan hover:bg-neon-cyan/5'
+            } ${collapsed ? 'justify-center' : ''}`}
+          >
+            <KeyRound className="w-4 h-4 shrink-0" />
+            {!collapsed && t('layout.nav.providerPanel', 'Fournisseur API')}
+          </Link>
+        )}
+
+        <Link
+          to="/dashboard/settings"
+          onClick={() => setMobileOpen(false)}
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/40 hover:text-white hover:bg-white/[0.05] transition-all duration-200 ${collapsed ? 'justify-center' : ''}`}
+        >
+          <Settings className="w-4 h-4 shrink-0" />
+          {!collapsed && t('layout.nav.settings')}
+        </Link>
+
+        <div className={`flex items-center gap-3 px-3 py-2 mt-1 ${collapsed ? 'justify-center' : ''}`}>
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-cyan to-neon-violet flex items-center justify-center text-xs font-display font-700 shrink-0">
+            {user?.avatar_url
+              ? <img src={user.avatar_url} className="w-full h-full rounded-full object-cover" alt="" />
+              : user?.username?.[0]?.toUpperCase()}
+          </div>
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-display font-600 text-white truncate">{user?.username}</p>
+                <p className="text-xs text-white/30 font-mono capitalize">{getRoleLabel(t, user?.role)}</p>
+              </div>
+              <button onClick={handleLogout} className="text-white/30 hover:text-red-400 transition-colors p-1">
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+})
+
+const MobileHeader = memo(function MobileHeader({ hasSelectedGuild, setMobileOpen, t }) {
+  const bot = useBotStore((state) => state.bot)
+  const brandAvatarSrc = bot?.avatarUrl || '/discordforger-icon.png'
+  const brandAvatarAlt = bot?.username || 'DiscordForger'
+
+  if (!hasSelectedGuild) return null
+
+  return (
+    <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/[0.06] bg-surface-1/80 backdrop-blur-xl">
+      <button onClick={() => setMobileOpen(true)} className="text-white/50 hover:text-white">
+        <Menu className="w-5 h-5" />
+      </button>
+      <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center overflow-hidden shrink-0 p-0.5 shadow-[0_8px_24px_rgba(92,138,255,0.16)]">
+        <img src={brandAvatarSrc} className="w-full h-full object-cover" alt={brandAvatarAlt} />
+      </div>
+      <span className="font-display font-700 text-white">{t('layout.appName')}</span>
+    </div>
+  )
+})
+
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -57,7 +295,8 @@ export default function Layout() {
   const mainScrollRef = useRef(null)
   const { user, logout } = useAuthStore()
   const { guilds, selectedGuildId, clearSelectedGuild, hydrateSelectedGuild } = useGuildStore()
-  const { status, ping, bot, fetchStatus, setStatus } = useBotStore()
+  const fetchStatus = useBotStore((state) => state.fetchStatus)
+  const setStatus = useBotStore((state) => state.setStatus)
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -74,8 +313,6 @@ export default function Layout() {
   const mustStayOnServers = !hasSelectedGuild && !canOpenWithoutGuild
 
   const selectedGuild = guilds.find((g) => g.id === selectedGuildId)
-  const brandAvatarSrc = bot?.avatarUrl || '/discordforger-icon.png'
-  const brandAvatarAlt = bot?.username || 'DiscordForger'
   const navItems = [
     { icon: LayoutDashboard, label: t('layout.nav.dashboard'), path: '/dashboard' },
     { icon: Server, label: t('layout.nav.servers'), path: '/dashboard/servers' },
@@ -242,201 +479,6 @@ export default function Layout() {
     setIsResizing(true)
   }
 
-  const renderSidebarLink = ({ icon: Icon, label, path, needsGuild }) => {
-    const active = isActive(path)
-    const disabled = needsGuild && !selectedGuildId
-
-    return (
-      <motion.div
-        key={path}
-        whileHover={disabled ? undefined : { x: collapsed ? 0 : 5, y: -2, scale: 1.012 }}
-        whileTap={disabled ? undefined : { scale: 0.988 }}
-        transition={{ type: 'spring', stiffness: 340, damping: 24 }}
-      >
-        <Link
-          to={path}
-          onClick={(event) => handleNavClick(event, disabled)}
-          aria-disabled={disabled}
-          className={`sidebar-nav-link ${active ? 'sidebar-nav-link-active' : ''} ${disabled ? 'sidebar-nav-link-disabled' : ''} ${collapsed ? 'justify-center' : ''}`}
-          title={collapsed ? label : undefined}
-        >
-          <span className="sidebar-nav-link-glow" />
-          <span className={`sidebar-nav-icon ${active ? 'sidebar-nav-icon-active' : ''}`}>
-            <Icon className="w-4 h-4 shrink-0" />
-          </span>
-          {!collapsed && (
-            <>
-              <span className="sidebar-nav-label">{label}</span>
-              <motion.span
-                initial={false}
-                animate={active ? { opacity: 1, scale: 1, x: 0 } : { opacity: 0, scale: 0.7, x: -6 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="sidebar-nav-dot"
-              />
-            </>
-          )}
-        </Link>
-      </motion.div>
-    )
-  }
-
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full min-h-0">
-      <div className={`shrink-0 flex items-center gap-3 p-4 border-b border-white/[0.06] ${collapsed ? 'justify-center' : ''}`}>
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center shrink-0 overflow-hidden p-0.5 shadow-[0_8px_24px_rgba(92,138,255,0.16)]">
-          <img src={brandAvatarSrc} className="w-full h-full object-cover" alt={brandAvatarAlt} />
-        </div>
-        {!collapsed && (
-          <div>
-            <p className="font-display font-700 text-white text-sm">{t('layout.appName')}</p>
-            <p className="text-xs text-white/30 font-mono">{bot?.username || t('layout.appTagline')}</p>
-          </div>
-        )}
-      </div>
-
-      {!collapsed && (
-        <div className="shrink-0 mx-3 mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <StatusDot status={status} />
-              <span className="text-xs font-mono text-white/60 capitalize">{t(`layout.status.${status}`, status)}</span>
-            </div>
-            {ping > 0 && <span className="text-xs font-mono text-neon-cyan/60">{ping}ms</span>}
-          </div>
-          {selectedGuild && (
-            <div className="flex items-center gap-2 mt-2 min-w-0">
-              <div className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-                <Server className="w-3.5 h-3.5 text-neon-cyan/70 shrink-0" />
-                <p className="text-[11px] text-white/40 font-mono truncate">{selectedGuild.name}</p>
-              </div>
-              <button
-                type="button"
-                title={t('dashboard.changeServer', 'Changer de serveur')}
-                aria-label={t('dashboard.changeServer', 'Changer de serveur')}
-                onClick={() => {
-                  navigate('/dashboard/servers')
-                  setMobileOpen(false)
-                }}
-                className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/55 hover:text-white hover:bg-white/[0.07] flex items-center justify-center transition-all shrink-0"
-              >
-                <Server className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                title={t('dashboard.disconnectServer', 'Deconnecter ce serveur')}
-                aria-label={t('dashboard.disconnectServer', 'Deconnecter ce serveur')}
-                onClick={() => {
-                  clearSelectedGuild()
-                  navigate('/dashboard/servers')
-                  setMobileOpen(false)
-                }}
-                className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 flex items-center justify-center transition-all shrink-0"
-              >
-                <Unplug className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      <nav className="sidebar-scroll-area flex-1 min-h-0 px-3 pt-3 pb-5 space-y-1.5 scrollbar-none mt-2">
-        {navItems.map(renderSidebarLink)}
-      </nav>
-
-      <div className="shrink-0 mt-3 p-3 border-t border-white/[0.06] space-y-1">
-        <Link
-          to="/dashboard/reviews"
-          onClick={() => setMobileOpen(false)}
-          className={`group relative overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-            isActive('/dashboard/reviews')
-              ? 'bg-gradient-to-r from-amber-500/16 via-yellow-400/10 to-amber-500/16 border border-amber-400/25 text-amber-200 shadow-[0_0_30px_rgba(250,204,21,0.18)]'
-              : 'text-white/55 border border-transparent hover:text-amber-200 hover:border-amber-400/18 hover:bg-gradient-to-r hover:from-amber-500/10 hover:via-yellow-400/6 hover:to-amber-500/10 hover:shadow-[0_0_24px_rgba(250,204,21,0.12)]'
-          } ${collapsed ? 'justify-center' : ''}`}
-        >
-          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-[radial-gradient(circle_at_left,rgba(250,204,21,0.14),transparent_58%)]" />
-          <Star className="relative z-10 w-4 h-4 shrink-0 text-amber-300 fill-amber-300/40 group-hover:fill-amber-300/60 transition-all duration-200 group-hover:scale-105" />
-          {!collapsed && (
-            <>
-              <span className="relative z-10 font-medium">{t('layout.nav.reviews', 'Avis')}</span>
-              {isActive('/dashboard/reviews') && <div className="relative z-10 ml-auto w-1.5 h-1.5 rounded-full bg-amber-300" />}
-            </>
-          )}
-        </Link>
-
-        <Link
-          to="/dashboard/support"
-          onClick={() => setMobileOpen(false)}
-          className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-            isActive('/dashboard/support')
-              ? 'bg-gradient-to-r from-cyan-500/15 via-cyan-500/10 to-violet-500/15 border border-cyan-500/25 text-cyan-200 shadow-[0_0_28px_rgba(0,229,255,0.12)]'
-              : 'text-white/45 border border-transparent hover:text-cyan-200 hover:border-cyan-500/15 hover:bg-gradient-to-r hover:from-cyan-500/8 hover:via-cyan-500/4 hover:to-violet-500/8'
-          } ${collapsed ? 'justify-center' : ''}`}
-        >
-          <LifeBuoy className="w-4 h-4 shrink-0 text-cyan-300 group-hover:scale-105 transition-transform" />
-          {!collapsed && t('layout.nav.support', 'Support')}
-        </Link>
-
-        {canAccessAdminPanel && (
-          <Link
-            to="/dashboard/admin"
-            onClick={() => setMobileOpen(false)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-              isActive('/dashboard/admin')
-                ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
-                : 'text-white/40 hover:text-amber-400 hover:bg-amber-500/5'
-            } ${collapsed ? 'justify-center' : ''}`}
-          >
-            <Crown className="w-4 h-4 shrink-0" />
-            {!collapsed && t('layout.nav.adminPanel')}
-          </Link>
-        )}
-
-        {canAccessProviderPanel && (
-          <Link
-            to="/dashboard/provider"
-            onClick={() => setMobileOpen(false)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-              isActive('/dashboard/provider')
-                ? 'bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan'
-                : 'text-white/40 hover:text-neon-cyan hover:bg-neon-cyan/5'
-            } ${collapsed ? 'justify-center' : ''}`}
-          >
-            <KeyRound className="w-4 h-4 shrink-0" />
-            {!collapsed && t('layout.nav.providerPanel', 'Fournisseur API')}
-          </Link>
-        )}
-
-        <Link
-          to="/dashboard/settings"
-          onClick={() => setMobileOpen(false)}
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/40 hover:text-white hover:bg-white/[0.05] transition-all duration-200 ${collapsed ? 'justify-center' : ''}`}
-        >
-          <Settings className="w-4 h-4 shrink-0" />
-          {!collapsed && t('layout.nav.settings')}
-        </Link>
-
-        <div className={`flex items-center gap-3 px-3 py-2 mt-1 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-cyan to-neon-violet flex items-center justify-center text-xs font-display font-700 shrink-0">
-            {user?.avatar_url
-              ? <img src={user.avatar_url} className="w-full h-full rounded-full object-cover" alt="" />
-              : user?.username?.[0]?.toUpperCase()}
-          </div>
-          {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-display font-600 text-white truncate">{user?.username}</p>
-                <p className="text-xs text-white/30 font-mono capitalize">{getRoleLabel(t, user?.role)}</p>
-              </div>
-              <button onClick={handleLogout} className="text-white/30 hover:text-red-400 transition-colors p-1">
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-
   return (
     <div className="flex min-h-screen min-h-[100dvh] md:h-screen max-w-full bg-surface-0 overflow-hidden">
       <SnowCanvas />
@@ -448,7 +490,22 @@ export default function Layout() {
             transition={isResizing ? { duration: 0 } : SIDEBAR_SPRING}
             className={`hidden lg:flex flex-col relative z-20 border-r border-white/[0.06] bg-surface-1/80 backdrop-blur-xl shrink-0 sidebar-shell ${isResizing ? 'sidebar-shell-resizing' : ''}`}
           >
-            {SidebarContent()}
+            <SidebarContent
+              collapsed={collapsed}
+              selectedGuild={selectedGuild}
+              navItems={navItems}
+              isActive={isActive}
+              selectedGuildId={selectedGuildId}
+              canAccessAdminPanel={canAccessAdminPanel}
+              canAccessProviderPanel={canAccessProviderPanel}
+              user={user}
+              t={t}
+              navigate={navigate}
+              clearSelectedGuild={clearSelectedGuild}
+              setMobileOpen={setMobileOpen}
+              handleNavClick={handleNavClick}
+              handleLogout={handleLogout}
+            />
             <div
               onMouseDown={handleResizeStart}
               className="absolute top-0 bottom-0 -right-2 w-4 cursor-ew-resize group z-20"
@@ -488,7 +545,22 @@ export default function Layout() {
                   transition={{ type: 'spring', damping: 30, stiffness: 260, mass: 0.9 }}
                   className="fixed left-0 top-0 bottom-0 w-[min(72vw,280px)] z-40 lg:hidden bg-surface-1/95 backdrop-blur-xl border-r border-white/[0.06] shadow-[6px_0_24px_rgba(0,0,0,0.4)]"
                 >
-                  {SidebarContent()}
+                  <SidebarContent
+                    collapsed={collapsed}
+                    selectedGuild={selectedGuild}
+                    navItems={navItems}
+                    isActive={isActive}
+                    selectedGuildId={selectedGuildId}
+                    canAccessAdminPanel={canAccessAdminPanel}
+                    canAccessProviderPanel={canAccessProviderPanel}
+                    user={user}
+                    t={t}
+                    navigate={navigate}
+                    clearSelectedGuild={clearSelectedGuild}
+                    setMobileOpen={setMobileOpen}
+                    handleNavClick={handleNavClick}
+                    handleLogout={handleLogout}
+                  />
                 </motion.aside>
               </>
             )}
@@ -497,17 +569,7 @@ export default function Layout() {
       )}
 
       <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden relative z-10">
-        {hasSelectedGuild && (
-          <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/[0.06] bg-surface-1/80 backdrop-blur-xl">
-            <button onClick={() => setMobileOpen(true)} className="text-white/50 hover:text-white">
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-neon-cyan/10 to-neon-violet/10 border border-neon-cyan/20 flex items-center justify-center overflow-hidden shrink-0 p-0.5 shadow-[0_8px_24px_rgba(92,138,255,0.16)]">
-              <img src={brandAvatarSrc} className="w-full h-full object-cover" alt={brandAvatarAlt} />
-            </div>
-            <span className="font-display font-700 text-white">{t('layout.appName')}</span>
-          </div>
-        )}
+        <MobileHeader hasSelectedGuild={hasSelectedGuild} setMobileOpen={setMobileOpen} t={t} />
 
         <main ref={mainScrollRef} className="app-main-scroll flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
           <Outlet />
