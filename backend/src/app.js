@@ -69,7 +69,7 @@ function buildConnectSources() {
 const cspConnectSources = buildConnectSources();
 
 function isBlockedActionPath(pathname = '') {
-  return /^\/api\/v1\/bot\/guilds\/[^/]+\/blocked\/(?:bans|blacklist)\/[^/]+\/(?:unban|remove)$/.test(pathname);
+  return /^\/api\/v1\/bot\/guilds\/[^/]+\/blocked\/(?:bans|blacklist)\/[^/]+(?:\/(?:unban|remove))?$/.test(pathname);
 }
 
 app.set('trust proxy', true);
