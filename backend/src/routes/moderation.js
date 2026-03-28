@@ -413,14 +413,46 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
   const linkedDiscordId = req.user.discord_id || null;
   const trimmedIdentity = String(identityInput || '').trim();
   const requiredPermission = QUICK_ACTION_PERMISSION[actionName] || DISCORD_PERMISSIONS.MODERATE_MEMBERS;
+
+  if (linkedDiscordId && !trimmedIdentity) {
+    const linkedMember = await getGuildMemberSafe(token, req.guild.guild_id, linkedDiscordId);
+    if (!linkedMember) {
+      const error = buildHttpError(403, 'Le compte Discord lie doit etre present sur ce serveur pour utiliser les actions rapides');
+      error.code = 'DISCORD_LINK_NOT_IN_GUILD';
+      throw error;
+    }
+    if (!memberHasPermission(linkedMember, requiredPermission)) {
+      const error = buildHttpError(403, 'Le compte Discord lie n a pas les permissions necessaires pour cette action');
+      error.code = 'DISCORD_PERMISSION_DENIED';
+      throw error;
+    }
+
+    return {
+      linked: true,
+      permissionVerified: true,
+      discordId: linkedDiscordId,
+      member: linkedMember,
+    };
+  }
+
+  if (!linkedDiscordId && !trimmedIdentity) {
+    const error = buildHttpError(403, 'Connecte d abord ton compte Discord pour utiliser les actions rapides');
+    error.code = 'DISCORD_LINK_REQUIRED';
+    throw error;
+  }
+
   const { member } = await resolveModeratorMemberByIdentity(token, req.guild.guild_id, trimmedIdentity, linkedDiscordId);
 
   if (linkedDiscordId) {
     if (String(member?.user?.id || '') !== String(linkedDiscordId)) {
-      throw buildHttpError(403, 'L identite Discord ne correspond pas au compte Discord lie a ce profil');
+      const error = buildHttpError(403, 'L identite Discord ne correspond pas au compte Discord lie a ce profil');
+      error.code = 'DISCORD_LINK_MISMATCH';
+      throw error;
     }
     if (!memberHasPermission(member, requiredPermission)) {
-      throw buildHttpError(403, 'Le compte Discord lie n a pas les permissions necessaires pour cette action');
+      const error = buildHttpError(403, 'Le compte Discord lie n a pas les permissions necessaires pour cette action');
+      error.code = 'DISCORD_PERMISSION_DENIED';
+      throw error;
     }
 
     return {
@@ -432,7 +464,9 @@ async function resolveModeratorAccess(req, token, actionName, identityInput) {
   }
 
   if (!memberHasPermission(member, requiredPermission)) {
-    throw buildHttpError(403, 'L identite Discord fournie n a pas les permissions necessaires pour cette action');
+    const error = buildHttpError(403, 'L identite Discord fournie n a pas les permissions necessaires pour cette action');
+    error.code = 'DISCORD_PERMISSION_DENIED';
+    throw error;
   }
 
   return {
@@ -509,13 +543,14 @@ async function buildModeratorMetadata(req, token, identityInput, moderationAcces
     identityId = identityId || resolved.identity?.id || null;
   }
 
+  const fallbackIdentity = trimmedIdentity || profile?.id || req.user.discord_id || null;
   const displayName = profile?.global_name || profile?.username || trimmedIdentity || req.user.username;
 
   return {
     moderator_site_user_id: req.user.id,
     moderator_site_username: req.user.username,
     moderator_site_avatar_url: req.user.avatar_url || null,
-    moderator_discord_identity: trimmedIdentity || null,
+    moderator_discord_identity: fallbackIdentity,
     moderator_discord_id: profile?.id || identityId || null,
     moderator_discord_username: profile?.username || null,
     moderator_discord_global_name: profile?.global_name || null,

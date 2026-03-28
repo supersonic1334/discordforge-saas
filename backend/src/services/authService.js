@@ -181,6 +181,32 @@ async function upsertOAuthUser({ provider, providerId, email, username, avatarUr
   return { token, user: safeUser(user) };
 }
 
+function linkDiscordAccount(userId, { providerId, username, avatarUrl, accessToken }) {
+  const user = db.findOne('users', { id: userId });
+  if (!user || !user.is_active) {
+    throw Object.assign(new Error('Account not found or deactivated'), { status: 404 });
+  }
+
+  const existingOwner = db.raw(
+    'SELECT id FROM users WHERE discord_id = ? AND id != ? LIMIT 1',
+    [providerId, userId]
+  )[0] ?? null;
+
+  if (existingOwner) {
+    throw Object.assign(new Error('Ce compte Discord est deja lie a un autre compte'), { status: 409 });
+  }
+
+  db.update('users', {
+    discord_id: providerId,
+    discord_token: accessToken || user.discord_token || null,
+    avatar_url: user.avatar_url || avatarUrl || null,
+    updated_at: new Date().toISOString(),
+  }, { id: userId });
+
+  const updatedUser = db.findOne('users', { id: userId });
+  return safeUser(updatedUser);
+}
+
 // ── Change password ───────────────────────────────────────────────────────────
 async function changePassword(userId, { currentPassword, newPassword }) {
   const user = db.findOne('users', { id: userId });
@@ -243,6 +269,7 @@ module.exports = {
   register,
   login,
   upsertOAuthUser,
+  linkDiscordAccount,
   changePassword,
   changeUsername,
   updateAvatar,

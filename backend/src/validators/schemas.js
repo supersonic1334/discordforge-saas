@@ -62,6 +62,10 @@ const preferencesSchema = z.object({
   analytics_layout: analyticsLayoutSchema.optional(),
 });
 
+const discordLinkSchema = z.object({
+  return_to: z.string().trim().max(500).optional().default('/dashboard/search'),
+});
+
 // ── Bot Token ─────────────────────────────────────────────────────────────────
 const botTokenSchema = z.object({
   token: z.string()
@@ -313,6 +317,7 @@ module.exports = {
   changeUsernameSchema,
   avatarUpdateSchema,
   preferencesSchema,
+  discordLinkSchema,
   botTokenSchema,
   moduleToggleSchema,
   moduleConfigSchema,

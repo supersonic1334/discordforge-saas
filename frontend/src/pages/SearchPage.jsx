@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   Ban,
@@ -12,6 +13,7 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
+  Link2,
   UserCheck,
   UserRoundX,
   Users,
@@ -19,8 +21,8 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { messagesAPI, modAPI } from '../services/api'
-import { useGuildStore } from '../stores'
+import { authAPI, messagesAPI, modAPI } from '../services/api'
+import { useAuthStore, useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import {
   ACTION_COLORS,
@@ -107,7 +109,7 @@ function HistoryRow({ entry, locale }) {
   )
 }
 
-function ActionModal({ action, target, values, onChange, onClose, onSubmit, submitting }) {
+function ActionModal({ action, target, values, onChange, canUseDiscordActions, linkedDiscordId, onConnectDiscord, connectingDiscord, onClose, onSubmit, submitting }) {
   const actionMeta = QUICK_ACTIONS.find((entry) => entry.id === action) || QUICK_ACTIONS[0]
   const Icon = actionMeta.icon
 
@@ -129,11 +131,36 @@ function ActionModal({ action, target, values, onChange, onClose, onSubmit, subm
               {action === 'warn' ? <input className="input-field" value={values.points} onChange={(event) => onChange((current) => ({ ...current, points: event.target.value }))} placeholder="Points" inputMode="numeric" /> : null}
             </div>
           )}
-          <input className="input-field" value={values.moderatorIdentity} onChange={(event) => onChange((current) => ({ ...current, moderatorIdentity: event.target.value }))} placeholder="Identite Discord du moderateur (obligatoire)" />
+          {canUseDiscordActions ? (
+            <div className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/10 p-4">
+              <p className="font-display font-700 text-sm text-emerald-200">Compte Discord verifie</p>
+              <p className="mt-2 text-sm leading-6 text-emerald-100/80">
+                Les actions rapides utiliseront automatiquement ton compte Discord lie{linkedDiscordId ? ` (${linkedDiscordId})` : ''}.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-[22px] border border-amber-500/20 bg-amber-500/10 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl border border-amber-400/20 bg-amber-400/10 flex items-center justify-center shrink-0">
+                  <Link2 className="w-4 h-4 text-amber-300" />
+                </div>
+                <div>
+                  <p className="font-display font-700 text-sm text-amber-100">Connexion Discord requise</p>
+                  <p className="mt-1 text-sm leading-6 text-amber-100/75">
+                    Pour warn, timeout, kick ou ban, tu dois lier ton compte Discord au site. La verification des permissions se fera ensuite automatiquement.
+                  </p>
+                </div>
+              </div>
+              <button type="button" onClick={onConnectDiscord} disabled={connectingDiscord} className="inline-flex items-center gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm font-mono text-amber-100 transition-all hover:bg-amber-400/15 disabled:opacity-50">
+                <Link2 className="w-4 h-4" />
+                {connectingDiscord ? 'Connexion...' : 'Connecter mon compte Discord'}
+              </button>
+            </div>
+          )}
         </div>
         <div className="relative z-[1] flex gap-3">
           <button type="button" onClick={onClose} className="flex-1 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white/70 transition-all hover:border-white/20 hover:text-white">Annuler</button>
-          <button type="button" onClick={onSubmit} disabled={submitting} className="flex-1 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-50">{submitting ? 'Execution...' : 'Confirmer'}</button>
+          <button type="button" onClick={onSubmit} disabled={submitting || !canUseDiscordActions} className="flex-1 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-50">{submitting ? 'Execution...' : 'Confirmer'}</button>
         </div>
       </motion.div>
     </motion.div>
@@ -176,6 +203,9 @@ function hasActiveTimeout(profile) {
 
 export default function SearchPage() {
   const { locale } = useI18n()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { user, fetchMe } = useAuthStore()
   const { guilds, selectedGuildId } = useGuildStore()
   const guild = guilds.find((entry) => entry.id === selectedGuildId)
   const [query, setQuery] = useState('')
@@ -187,9 +217,10 @@ export default function SearchPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [actionModal, setActionModal] = useState('')
   const [submittingAction, setSubmittingAction] = useState(false)
+  const [linkingDiscord, setLinkingDiscord] = useState(false)
   const [dmOpen, setDmOpen] = useState(false)
   const [sendingDm, setSendingDm] = useState(false)
-  const [actionValues, setActionValues] = useState({ reason: '', duration: '', points: '1', moderatorIdentity: '' })
+  const [actionValues, setActionValues] = useState({ reason: '', duration: '', points: '1' })
   const [dmValues, setDmValues] = useState({ title: '', message: '' })
 
   const selectedResult = useMemo(() => results.find((entry) => entry.id === selectedUserId) || null, [results, selectedUserId])
@@ -202,6 +233,27 @@ export default function SearchPage() {
     setActionModal('')
     setDmOpen(false)
   }, [selectedGuildId])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const linked = params.get('discord_linked')
+    const linkError = params.get('discord_link_error')
+    if (!linked && !linkError) return
+
+    fetchMe()
+    if (linked === '1') {
+      toast.success('Compte Discord connecte avec succes')
+    } else if (linkError) {
+      toast.error(linkError)
+    }
+
+    params.delete('discord_linked')
+    params.delete('discord_link_error')
+    navigate({
+      pathname: location.pathname,
+      search: params.toString() ? `?${params.toString()}` : '',
+    }, { replace: true })
+  }, [fetchMe, location.pathname, location.search, navigate])
 
   async function loadProfile(userId, { silent = false } = {}) {
     if (!selectedGuildId || !userId) return
@@ -238,9 +290,8 @@ export default function SearchPage() {
 
   async function handleSubmitAction() {
     if (!selectedGuildId || !selectedUserId || !actionModal || submittingAction) return
-    const moderatorIdentity = actionValues.moderatorIdentity.trim()
-    if (!moderatorIdentity) {
-      toast.error('Identite Discord du moderateur obligatoire')
+    if (!canUseDiscordActions) {
+      toast.error('Connecte d abord ton compte Discord')
       return
     }
     const payload = {
@@ -248,7 +299,6 @@ export default function SearchPage() {
       target_user_id: selectedUserId,
       target_username: profileData?.profile?.display_name || selectedResult?.display_name || selectedUserId,
       reason: actionValues.reason.trim() || 'Action rapide depuis Search',
-      moderator_discord_identity: moderatorIdentity,
     }
     if (actionModal === 'timeout') {
       const durationMs = parseDurationInput(actionValues.duration.trim())
@@ -267,6 +317,23 @@ export default function SearchPage() {
       toast.error(getErrorMessage(error))
     } finally {
       setSubmittingAction(false)
+    }
+  }
+
+  async function handleConnectDiscord() {
+    if (linkingDiscord) return
+    setLinkingDiscord(true)
+    try {
+      const returnTo = `${location.pathname}${location.search || ''}`
+      const response = await authAPI.createDiscordLink({ return_to: returnTo })
+      const nextUrl = response?.data?.url
+      if (!nextUrl) throw new Error('Lien Discord indisponible')
+      window.location.href = nextUrl
+      return
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setLinkingDiscord(false)
     }
   }
 
@@ -307,6 +374,8 @@ export default function SearchPage() {
   const discordSummary = profileData?.discord?.summary || {}
   const roles = profile?.roles || []
   const timeoutActive = hasActiveTimeout(profile)
+  const linkedDiscordId = user?.discord_id || null
+  const canUseDiscordActions = Boolean(linkedDiscordId)
 
   if (!selectedGuildId) {
     return <SelectGuildState title="Choisis d'abord un serveur" body="La recherche utilisateur fonctionne serveur par serveur." actionLabel="Choisir un serveur" />
@@ -422,11 +491,18 @@ export default function SearchPage() {
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                       {QUICK_ACTIONS.map((entry) => {
                         const Icon = entry.icon
-                        const disabled = (entry.id === 'warn' && !viewer?.can_warn) || (entry.id === 'timeout' && !viewer?.can_timeout) || (entry.id === 'untimeout' && !viewer?.can_timeout) || (entry.id === 'kick' && !viewer?.can_kick) || (entry.id === 'ban' && !viewer?.can_ban) || (entry.id === 'unban' && !viewer?.can_unban)
+                        const disabledForPermissions = Boolean(viewer?.linked_discord) && (
+                          (entry.id === 'warn' && !viewer?.can_warn)
+                          || (entry.id === 'timeout' && !viewer?.can_timeout)
+                          || (entry.id === 'untimeout' && !viewer?.can_timeout)
+                          || (entry.id === 'kick' && !viewer?.can_kick)
+                          || (entry.id === 'ban' && !viewer?.can_ban)
+                          || (entry.id === 'unban' && !viewer?.can_unban)
+                        )
                         if (entry.id === 'ban' && profile.banned) return null
                         if (entry.id === 'unban' && !profile.banned) return null
                         if (entry.id === 'untimeout' && !timeoutActive) return null
-                        return <button key={entry.id} type="button" disabled={disabled} onClick={() => { setActionValues({ reason: '', duration: '', points: '1', moderatorIdentity: '' }); setActionModal(entry.id) }} className={`spotlight-card w-full rounded-[22px] border px-4 py-4 text-left transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35 ${entry.tone}`}><div className="flex items-start gap-3"><div><div className="flex items-center gap-2"><Icon className="w-4 h-4" /><span className="font-mono text-sm">{entry.label}</span></div><p className="mt-3 text-xs text-white/55">Action rapide sans quitter la fiche.</p></div></div></button>
+                        return <button key={entry.id} type="button" disabled={disabledForPermissions} onClick={() => { setActionValues({ reason: '', duration: '', points: '1' }); setActionModal(entry.id) }} className={`spotlight-card w-full rounded-[22px] border px-4 py-4 text-left transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-35 ${entry.tone}`}><div className="flex items-start gap-3"><div><div className="flex items-center gap-2"><Icon className="w-4 h-4" /><span className="font-mono text-sm">{entry.label}</span></div><p className="mt-3 text-xs text-white/55">{viewer?.linked_discord ? 'Action rapide sans quitter la fiche.' : 'Clique pour connecter Discord puis executer l action.'}</p></div></div></button>
                       })}
                     </div>
                   </div>
@@ -451,7 +527,7 @@ export default function SearchPage() {
         </div>
       </div>
 
-      <AnimatePresence>{actionModal ? <ActionModal action={actionModal} target={profile} values={actionValues} onChange={setActionValues} onClose={() => setActionModal('')} onSubmit={handleSubmitAction} submitting={submittingAction} /> : null}</AnimatePresence>
+      <AnimatePresence>{actionModal ? <ActionModal action={actionModal} target={profile} values={actionValues} onChange={setActionValues} canUseDiscordActions={canUseDiscordActions} linkedDiscordId={linkedDiscordId} onConnectDiscord={handleConnectDiscord} connectingDiscord={linkingDiscord} onClose={() => setActionModal('')} onSubmit={handleSubmitAction} submitting={submittingAction} /> : null}</AnimatePresence>
       <AnimatePresence>{dmOpen ? <DirectMessageModal target={profile} values={dmValues} onChange={setDmValues} onClose={() => setDmOpen(false)} onSubmit={handleSendDM} submitting={sendingDm} /> : null}</AnimatePresence>
     </div>
   )

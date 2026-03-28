@@ -132,6 +132,7 @@ export const authAPI = {
   register:       (data)     => api.post('/auth/register', data),
   login:          (data)     => api.post('/auth/login', data),
   providers:      ()         => api.get('/auth/providers'),
+  createDiscordLink: (data)  => api.post('/auth/discord/link', data),
   accessStatus:   ()         => api.get('/auth/access-status'),
   me:             ()         => api.get('/auth/me'),
   getPrivateEmail: ()        => api.get('/auth/me/private-email'),

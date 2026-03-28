@@ -4,6 +4,7 @@ const express = require('express');
 const passport = require('passport');
 const { Strategy: DiscordStrategy } = require('passport-discord');
 const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
+const jwt = require('jsonwebtoken');
 
 const config = require('../config');
 const authService = require('../services/authService');
@@ -20,6 +21,7 @@ const {
   changeUsernameSchema,
   avatarUpdateSchema,
   preferencesSchema,
+  discordLinkSchema,
   botTokenSchema,
 } = require('../validators/schemas');
 const db = require('../database');
@@ -47,10 +49,11 @@ if (discordOauthEnabled) {
       clientSecret: config.DISCORD_CLIENT_SECRET,
       callbackURL: config.DISCORD_CALLBACK_URL,
       scope: ['identify', 'email'],
+      passReqToCallback: true,
     },
-    async (accessToken, refreshToken, profile, done) => {
+    async (req, accessToken, refreshToken, profile, done) => {
       try {
-        const result = await authService.upsertOAuthUser({
+        const oauthProfile = {
           provider: 'discord',
           providerId: profile.id,
           email: profile.email,
@@ -59,8 +62,17 @@ if (discordOauthEnabled) {
             ? discordService.getAvatarUrl(profile.id, profile.avatar)
             : null,
           accessToken,
+        };
+        const linkState = decodeDiscordLinkState(req?.query?.state, { throwOnInvalid: true });
+
+        if (linkState) {
+          return done(null, { linkState, oauthProfile });
+        }
+
+        const result = await authService.upsertOAuthUser({
+          ...oauthProfile,
         });
-        done(null, result);
+        done(null, { ...result, oauthProfile });
       } catch (err) {
         done(err);
       }
@@ -102,10 +114,70 @@ function redirectWithToken(res, token, error = null) {
   return res.redirect(`${base}/auth/callback?token=${token}`);
 }
 
+function sanitizeFrontendReturnPath(value) {
+  const raw = String(value || '').trim();
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/dashboard/search';
+  return raw;
+}
+
+function buildFrontendRedirect(pathname, params = {}) {
+  const url = new URL(sanitizeFrontendReturnPath(pathname), config.FRONTEND_URL);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && typeof value !== 'undefined' && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  });
+  return url.toString();
+}
+
+function signDiscordLinkState(userId, returnTo) {
+  return jwt.sign(
+    {
+      type: 'discord-link',
+      userId,
+      returnTo: sanitizeFrontendReturnPath(returnTo),
+    },
+    config.JWT_SECRET,
+    { expiresIn: '10m' }
+  );
+}
+
+function decodeDiscordLinkState(rawState, { throwOnInvalid = false } = {}) {
+  if (!rawState) return null;
+
+  try {
+    const payload = jwt.verify(String(rawState), config.JWT_SECRET);
+    if (payload?.type !== 'discord-link' || !payload?.userId) {
+      throw new Error('Invalid Discord link state');
+    }
+
+    return {
+      userId: payload.userId,
+      returnTo: sanitizeFrontendReturnPath(payload.returnTo),
+    };
+  } catch (error) {
+    if (throwOnInvalid) throw error;
+    return null;
+  }
+}
+
 router.get('/providers', (req, res) => {
   res.json({
     discord: discordOauthEnabled,
     google: googleOauthEnabled,
+  });
+});
+
+router.post('/discord/link', requireAuth, validate(discordLinkSchema), (req, res) => {
+  if (!discordOauthEnabled) {
+    return res.status(503).json({ error: 'Discord OAuth not configured' });
+  }
+
+  const returnTo = sanitizeFrontendReturnPath(req.body.return_to);
+  const state = signDiscordLinkState(req.user.id, returnTo);
+  res.json({
+    url: `${config.API_PREFIX}/auth/discord?state=${encodeURIComponent(state)}`,
+    return_to: returnTo,
   });
 });
 
@@ -187,15 +259,42 @@ router.post('/ws-ticket', requireAuth, (req, res) => {
 
 // ── Discord OAuth ─────────────────────────────────────────────────────────────
 if (discordOauthEnabled) {
-  router.get('/discord', passport.authenticate('discord'));
+  router.get('/discord', (req, res, next) => {
+    const state = String(req.query.state || '').trim();
+    return passport.authenticate('discord', state ? { state } : undefined)(req, res, next);
+  });
 
-  router.get('/discord/callback',
-    passport.authenticate('discord', { session: false, failureRedirect: `${config.FRONTEND_URL}/auth?error=discord_failed` }),
-    (req, res) => {
-      recordUserAccess(req.user.user.id, req);
-      return redirectWithToken(res, req.user.token);
-    }
-  );
+  router.get('/discord/callback', (req, res, next) => {
+    passport.authenticate('discord', { session: false }, async (error, authResult) => {
+      if (error || !authResult) {
+        const linkState = decodeDiscordLinkState(req.query.state);
+        if (linkState) {
+          return res.redirect(buildFrontendRedirect(linkState.returnTo, {
+            discord_link_error: error?.message || 'discord_failed',
+          }));
+        }
+        return res.redirect(`${config.FRONTEND_URL}/auth?error=discord_failed`);
+      }
+
+      if (authResult.linkState) {
+        try {
+          await authService.linkDiscordAccount(authResult.linkState.userId, authResult.oauthProfile);
+          return res.redirect(buildFrontendRedirect(authResult.linkState.returnTo, { discord_linked: '1' }));
+        } catch (linkError) {
+          logger.warn('Discord account link failed', {
+            userId: authResult.linkState.userId,
+            error: linkError.message,
+          });
+          return res.redirect(buildFrontendRedirect(authResult.linkState.returnTo, {
+            discord_link_error: linkError.message || 'discord_link_failed',
+          }));
+        }
+      }
+
+      recordUserAccess(authResult.user.id, req);
+      return redirectWithToken(res, authResult.token);
+    })(req, res, next);
+  });
 } else {
   router.get('/discord', (req, res) => {
     res.status(503).json({ error: 'Discord OAuth not configured' });
