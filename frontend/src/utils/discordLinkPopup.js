@@ -21,7 +21,7 @@ function buildPopupFeatures(width = 560, height = 760) {
   ].join(',')
 }
 
-export function openDiscordLinkPopup(url, { timeoutMs = 120000 } = {}) {
+export function openDiscordLinkPopup(url, { timeoutMs = 120000, closeGraceMs = 1600 } = {}) {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined') {
       reject(new Error('Fenetre indisponible'))
@@ -39,6 +39,7 @@ export function openDiscordLinkPopup(url, { timeoutMs = 120000 } = {}) {
     let settled = false
     let closePoll = null
     let timeoutId = null
+    let closeGraceTimeout = null
 
     const cleanup = () => {
       if (settled) return
@@ -51,6 +52,10 @@ export function openDiscordLinkPopup(url, { timeoutMs = 120000 } = {}) {
       if (timeoutId) {
         window.clearTimeout(timeoutId)
         timeoutId = null
+      }
+      if (closeGraceTimeout) {
+        window.clearTimeout(closeGraceTimeout)
+        closeGraceTimeout = null
       }
     }
 
@@ -65,8 +70,11 @@ export function openDiscordLinkPopup(url, { timeoutMs = 120000 } = {}) {
 
     closePoll = window.setInterval(() => {
       if (!popup || popup.closed) {
-        cleanup()
-        reject(new Error('Popup fermee'))
+        if (closeGraceTimeout) return
+        closeGraceTimeout = window.setTimeout(() => {
+          cleanup()
+          reject(new Error('Popup fermee'))
+        }, closeGraceMs)
       }
     }, 350)
 

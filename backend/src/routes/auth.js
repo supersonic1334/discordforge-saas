@@ -225,12 +225,18 @@ function renderDiscordLinkPopup(res, linkState, { success, error = '' } = {}) {
         try {
           if (window.opener && !window.opener.closed) {
             window.opener.postMessage(payload, targetOrigin);
-            window.close();
+            window.setTimeout(function () {
+              try {
+                window.close();
+              } catch (error) {
+                // ignore
+              }
+            }, 180);
             window.setTimeout(function () {
               if (!window.closed) {
                 window.location.replace(fallbackUrl);
               }
-            }, 120);
+            }, 900);
             return;
           }
         } catch (error) {
