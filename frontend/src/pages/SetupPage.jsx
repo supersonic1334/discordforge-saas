@@ -98,13 +98,13 @@ export default function SetupPage() {
             <p className="text-white/40 text-sm">{t('setup.subtitle')}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             {steps.map(({ title, desc }, index) => (
-              <div key={`${index}-${title}`} className="glass-card p-4 flex gap-3">
+              <div key={`${index}-${title}`} className="glass-card p-3.5 sm:p-4 flex items-start gap-3 min-w-0">
                 <span className="font-mono text-xs text-neon-cyan/60 mt-0.5 shrink-0">{String(index + 1).padStart(2, '0')}</span>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <p className="text-sm font-display font-600 text-white">{title}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start gap-1.5 mb-0.5 min-w-0">
+                    <p className="text-sm font-display font-600 text-white break-words min-w-0 flex-1">{title}</p>
                     {stepResources[index]?.href && (
                       <a
                         href={stepResources[index].href}
@@ -118,7 +118,7 @@ export default function SetupPage() {
                       </a>
                     )}
                   </div>
-                  <p className="text-xs text-white/40">{desc}</p>
+                  <p className="text-xs text-white/40 break-words">{desc}</p>
                 </div>
               </div>
             ))}

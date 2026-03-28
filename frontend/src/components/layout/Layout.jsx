@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useRef, useMemo } from 'react'
+import { memo, useState, useEffect, useRef } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -347,21 +347,6 @@ export default function Layout() {
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]
-  const swipeNavItems = useMemo(() => {
-    const supplementalItems = [
-      { path: '/dashboard/reviews', visible: true },
-      { path: '/dashboard/support', visible: true },
-      { path: '/dashboard/admin', visible: canAccessAdminPanel },
-      { path: '/dashboard/provider', visible: canAccessProviderPanel },
-      { path: '/dashboard/settings', visible: true },
-    ]
-
-    return [
-      ...navItems.map((item) => ({ path: item.path, visible: !(item.needsGuild && !selectedGuildId) })),
-      ...supplementalItems,
-    ].filter((item) => item.visible)
-  }, [navItems, selectedGuildId, canAccessAdminPanel, canAccessProviderPanel])
-
   useEffect(() => {
     fetchStatus()
     const refreshInterval = setInterval(() => fetchStatus(), 15000)
@@ -512,19 +497,6 @@ export default function Layout() {
     setIsResizing(true)
   }
 
-  const navigateBySwipe = (direction) => {
-    if (!swipeNavItems.length) return
-    const currentIndex = swipeNavItems.findIndex((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`))
-    if (currentIndex === -1) return
-
-    const nextIndex = currentIndex + direction
-    if (nextIndex < 0 || nextIndex >= swipeNavItems.length) return
-
-    const target = swipeNavItems[nextIndex]
-    if (!target?.path || target.path === location.pathname) return
-    navigate(target.path)
-  }
-
   const handleTouchStart = (event) => {
     if (!isTouchNavigationEnabled() || mobileOpen) return
     const touch = event.touches?.[0]
@@ -578,8 +550,8 @@ export default function Layout() {
 
     if (Math.abs(deltaX) < SWIPE_MIN_DISTANCE || Math.abs(deltaX) <= Math.abs(deltaY) * 1.3) return
 
-    if (deltaX < 0) {
-      navigateBySwipe(-1)
+    if (deltaX < 0 && hasSelectedGuild) {
+      setMobileOpen(true)
     }
   }
 

@@ -1023,7 +1023,7 @@ function ModuleCard({ module, ui, locale, roles, channels, guilds, currentGuild,
   return (
     <div className={`glass-card self-start border ${module.enabled ? colors.card : 'border-white/[0.08]'}`}>
       <div className="p-5">
-        <div className="flex items-start gap-4">
+        <div className="grid grid-cols-[auto,minmax(0,1fr)] gap-4 sm:grid-cols-[auto,minmax(0,1fr),auto] sm:items-start">
           <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 ${colors.badge}`}>
             <Icon className="w-5 h-5" />
           </div>
@@ -1038,10 +1038,12 @@ function ModuleCard({ module, ui, locale, roles, channels, guilds, currentGuild,
             <p className="text-white/45 mt-2">{moduleCopy.description}</p>
           </div>
 
-          <label className="toggle-switch shrink-0 mt-1">
-            <input type="checkbox" checked={module.enabled} onChange={handleToggle} disabled={toggling} />
-            <span className="toggle-slider" />
-          </label>
+          <div className="col-span-2 sm:col-span-1 flex justify-end sm:justify-start">
+            <label className="toggle-switch shrink-0 sm:mt-1">
+              <input type="checkbox" checked={module.enabled} onChange={handleToggle} disabled={toggling} />
+              <span className="toggle-slider" />
+            </label>
+          </div>
         </div>
 
         <button
