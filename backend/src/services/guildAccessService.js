@@ -17,7 +17,7 @@ function normalizeAccessRole(value) {
 }
 
 function buildAccessCode() {
-  return randomBytes(9).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  return randomBytes(24).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 30);
 }
 
 function maskAccessCode(code) {
@@ -546,7 +546,7 @@ function redeemGuildJoinCode({ userId, code }) {
   if (existing) {
     db.db.prepare(`
       UPDATE guild_access_members
-      SET access_role = ?, invited_by_user_id = ?, is_suspended = 0, expires_at = NULL, accepted_at = ?, updated_at = ?
+      SET access_role = ?, invited_by_user_id = ?, is_suspended = 0, suspended_until = NULL, expires_at = NULL, accepted_at = ?, updated_at = ?
       WHERE id = ?
     `).run(normalizeAccessRole(codeRow.access_role), codeRow.created_by_user_id, now, now, existing.id);
   } else {

@@ -209,9 +209,10 @@ export const useGuildStore = create(
         }
       }),
 
-      fetchGuilds: async () => {
+      fetchGuilds: async (options = {}) => {
+        const force = !!options?.force
         if (guildsRequestPromise) return guildsRequestPromise
-        if (get().guilds.length > 0 && Date.now() - lastGuildFetchAt < 1500) return get().guilds
+        if (!force && get().guilds.length > 0 && Date.now() - lastGuildFetchAt < 1500) return get().guilds
 
         set({ isLoading: true })
 

@@ -12,7 +12,6 @@ const {
   validateQuery,
 } = require('../middleware');
 const {
-  guildAccessInviteSchema,
   guildAccessCodeCreateSchema,
   guildAccessRoleSchema,
   guildAccessSuspendSchema,
@@ -106,28 +105,10 @@ router.get('/', (req, res) => {
   res.json(buildOverview(req));
 });
 
-// Invite a collaborator
-router.post('/invite', requireGuildPrimaryOwner, validate(guildAccessInviteSchema), (req, res, next) => {
-  try {
-    const invitedUser = guildAccessService.inviteGuildCollaborator({
-      guildId: req.guild.id,
-      ownerUserId: req.guild.user_id,
-      actorUserId: req.user.id,
-      target: req.body.target,
-      accessRole: req.body.access_role,
-      expiresInHours: req.body.expires_in_hours,
-    });
-
-    notifyProfileRefresh(invitedUser.id, 'guild_access_invited');
-    notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, req.user.id);
-
-    res.status(201).json({
-      message: 'Acces partage ajoute',
-      ...buildOverview(req),
-    });
-  } catch (error) {
-    next(error);
-  }
+router.post('/invite', requireGuildPrimaryOwner, (req, res) => {
+  return res.status(410).json({
+    error: 'Les invitations directes sont retirees. Utilise un code d acces unique.',
+  });
 });
 
 // Generate a single-use join code

@@ -139,7 +139,7 @@ function AppRoot() {
         return
       }
 
-      await useGuildStore.getState().fetchGuilds().catch(() => [])
+      await useGuildStore.getState().fetchGuilds({ force: true }).catch(() => [])
       await useBotStore.getState().fetchStatus().catch(() => {})
       wsService.connect(token)
     }
