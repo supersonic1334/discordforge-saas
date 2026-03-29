@@ -56,6 +56,7 @@ function createWelcomeMessage(content) {
 }
 
 function getAssistantStorageKey(userId, guildId) {
+  // Scope the saved thread to the current user and selected workspace.
   return `discordforger:ai-assistant:${String(userId || 'guest')}:${String(guildId || 'global')}`
 }
 
