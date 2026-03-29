@@ -24,7 +24,6 @@ import { aiAPI, commandsAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
-import VoiceComposerPanel from '../components/VoiceComposerPanel'
 
 const UI = {
   fr: {
@@ -1456,18 +1455,6 @@ export default function CommandsPage() {
                   )}
                 </div>
               </div>
-              {(speech.isListening || speech.isRequestingPermission || speech.isProcessing) && (
-                <VoiceComposerPanel
-                  accent={speech.isRequestingPermission ? 'amber' : 'cyan'}
-                  bars={speech.audioBars}
-                  active={speech.isListening}
-                  processing={speech.isRequestingPermission || speech.isProcessing}
-                  statusLabel={speech.isRequestingPermission ? ui.voicePreparing : speech.isProcessing ? ui.voiceSendTranscript : ui.voiceListening}
-                  helperText={speech.isProcessing
-                    ? ui.voiceSendTranscript
-                    : ui.voiceTranscriptPlaceholder}
-                />
-              )}
             </div>
 
             {quota?.enabled && (

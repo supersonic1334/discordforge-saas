@@ -7,7 +7,6 @@ import { aiAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
-import VoiceComposerPanel from '../components/VoiceComposerPanel'
 
 const VOICE_UI = {
   fr: {
@@ -327,26 +326,6 @@ export default function AIAssistant() {
 
       <div className="p-3 sm:p-4 border-t border-white/[0.06] shrink-0">
         <div className="space-y-2">
-          <AnimatePresence>
-            {speechActive && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <VoiceComposerPanel
-                  accent={speech.isRequestingPermission ? 'amber' : 'violet'}
-                  bars={speech.audioBars}
-                  active={speech.isListening}
-                  processing={speech.isRequestingPermission || speech.isProcessing}
-                  statusLabel={speech.isRequestingPermission ? voiceUi.preparing : speech.isProcessing ? voiceUi.send : voiceUi.listening}
-                  helperText={speech.isProcessing ? voiceUi.send : voiceUi.placeholder}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <div className="relative">
             <textarea
               ref={inputRef}
