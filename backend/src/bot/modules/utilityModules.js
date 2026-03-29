@@ -3,6 +3,61 @@
 const logger = require('../../utils/logger').child('UtilityModules');
 const discordService = require('../../services/discordService');
 const { logBotEvent } = require('../utils/modHelpers');
+const db = require('../../database');
+
+const WELCOME_TEMPLATES = {
+  fr: {
+    title: 'Bienvenue sur {server}',
+    channel: 'Bienvenue sur **{server}**, {user} ! Prends un instant pour lire les informations importantes et profiter de tous les salons.',
+    dm: 'Bienvenue sur {server}, {user}. Consulte les regles, presente-toi et profite de ton acces.',
+  },
+  en: {
+    title: 'Welcome to {server}',
+    channel: 'Welcome to **{server}**, {user}! Take a moment to read the key information and enjoy every channel.',
+    dm: 'Welcome to {server}, {user}. Read the rules, introduce yourself and enjoy your access.',
+  },
+  es: {
+    title: 'Bienvenido a {server}',
+    channel: 'Bienvenido a **{server}**, {user}. Toma un momento para leer la informacion importante y disfrutar todos los canales.',
+    dm: 'Bienvenido a {server}, {user}. Revisa las reglas, presentate y aprovecha tu acceso.',
+  },
+};
+
+const LEGACY_WELCOME_VALUES = new Set([
+  '',
+  'Welcome to **{server}**, {user}! 🎉',
+  'Welcome {user} to **{server}**!',
+  'Welcome to {server}! Please read the rules.',
+  'Welcome to {server}!',
+  'Welcome!',
+]);
+
+function normalizeLocale(value) {
+  const locale = String(value || '').trim().toLowerCase();
+  if (locale === 'fr' || locale === 'en' || locale === 'es') return locale;
+  return null;
+}
+
+function resolveWelcomeLocale(config, userId) {
+  const configured = normalizeLocale(config?.advanced_config?.template_locale);
+  if (configured) return configured;
+
+  if (!userId) return 'fr';
+  const row = db.db.prepare('SELECT site_language FROM users WHERE id = ?').get(userId);
+  return normalizeLocale(row?.site_language) || 'fr';
+}
+
+function isLegacyWelcomeValue(value) {
+  return LEGACY_WELCOME_VALUES.has(String(value || '').trim());
+}
+
+function applyWelcomeTokens(template, { guildName, memberName, memberMention, memberCount }) {
+  return String(template || '')
+    .replace(/{server}/g, guildName)
+    .replace(/{user}/g, memberMention)
+    .replace(/{username}/g, memberName)
+    .replace(/{memberCount}/g, String(memberCount || '?'));
+}
 
 async function handleWelcomeMessage(member, config, botToken, internalGuildId, userId) {
   const { simple_config: sc, advanced_config: ac } = config;
@@ -10,15 +65,21 @@ async function handleWelcomeMessage(member, config, botToken, internalGuildId, u
 
   if (!sc.channel_id && !ac.send_dm) return;
 
-  const message = (sc.message || 'Welcome {user} to **{server}**!')
-    .replace(/{user}/g, `<@${user.id}>`)
-    .replace(/{username}/g, user.username)
-    .replace(/{server}/g, guild.name)
-    .replace(/{memberCount}/g, guild.memberCount?.toString() ?? '?');
+  const locale = resolveWelcomeLocale(config, userId);
+  const template = WELCOME_TEMPLATES[locale] || WELCOME_TEMPLATES.fr;
+  const guildName = guild.name;
+  const memberName = user.globalName || user.username;
+  const memberMention = `<@${user.id}>`;
+  const memberCount = guild.memberCount?.toString() ?? '?';
+  const publicTemplate = isLegacyWelcomeValue(sc.message) ? template.channel : sc.message;
+  const dmTemplate = isLegacyWelcomeValue(ac.dm_message) ? template.dm : ac.dm_message;
+  const embedTitleTemplate = isLegacyWelcomeValue(ac.embed_title) ? template.title : ac.embed_title;
+  const guildIcon = guild.iconURL?.({ extension: 'png', size: 256 }) || guild.iconURL?.() || null;
+  const memberAvatar = user.displayAvatarURL?.({ extension: 'png', size: 256 }) || user.displayAvatarURL?.() || null;
 
-  const dmMessage = (ac.dm_message || 'Welcome to {server}!')
-    .replace(/{user}/g, user.username)
-    .replace(/{server}/g, guild.name);
+  const message = applyWelcomeTokens(publicTemplate, { guildName, memberName, memberMention, memberCount });
+  const dmMessage = applyWelcomeTokens(dmTemplate, { guildName, memberName, memberMention: memberName, memberCount });
+  const embedTitle = applyWelcomeTokens(embedTitleTemplate, { guildName, memberName, memberMention, memberCount });
 
   if (sc.channel_id) {
     try {
@@ -26,10 +87,18 @@ async function handleWelcomeMessage(member, config, botToken, internalGuildId, u
       if (ac.embed) {
         payload = {
           embeds: [{
-            title: ac.embed_title || `Welcome to ${guild.name}!`,
+            author: {
+              name: guild.name,
+              icon_url: guildIcon || undefined,
+            },
+            title: embedTitle,
             description: message,
             color: parseInt((ac.embed_color || '#5865F2').replace('#', ''), 16),
-            thumbnail: ac.embed_thumbnail ? { url: guild.iconURL() ?? '' } : undefined,
+            thumbnail: ac.embed_thumbnail ? { url: memberAvatar || guildIcon || '' } : undefined,
+            footer: {
+              text: `Membre #${memberCount}`,
+              icon_url: guildIcon || undefined,
+            },
             timestamp: new Date().toISOString(),
           }],
         };
@@ -57,7 +126,27 @@ async function handleWelcomeMessage(member, config, botToken, internalGuildId, u
 
   if (ac.send_dm) {
     try {
-      await member.send(dmMessage);
+      if (ac.embed) {
+        await member.send({
+          embeds: [{
+            author: {
+              name: guild.name,
+              icon_url: guildIcon || undefined,
+            },
+            title: embedTitle,
+            description: dmMessage,
+            color: parseInt((ac.embed_color || '#5865F2').replace('#', ''), 16),
+            thumbnail: ac.embed_thumbnail ? { url: memberAvatar || guildIcon || '' } : undefined,
+            footer: {
+              text: `Membre #${memberCount}`,
+              icon_url: guildIcon || undefined,
+            },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+      } else {
+        await member.send(dmMessage);
+      }
     } catch {
       // DM can be disabled
     }

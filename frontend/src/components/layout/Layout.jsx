@@ -337,7 +337,7 @@ export default function Layout() {
     { icon: Server, label: t('layout.nav.servers'), path: '/dashboard/servers' },
     { icon: Users, label: t('layout.nav.team', 'Équipe'), path: '/dashboard/team', needsGuild: true },
     { icon: Shield, label: t('layout.nav.protection', 'Protection'), path: '/dashboard/protection', needsGuild: true },
-    { icon: UserPlus, label: t('layout.nav.onboarding', 'Rôles & Onboarding'), path: '/dashboard/onboarding', needsGuild: true },
+    { icon: UserPlus, label: t('layout.nav.onboarding', 'Accueil & rôles'), path: '/dashboard/onboarding', needsGuild: true },
     { icon: Search, label: t('layout.nav.search', 'Search'), path: '/dashboard/search', needsGuild: true },
     { icon: Fingerprint, label: t('layout.nav.scan', 'Scan'), path: '/dashboard/scan', needsGuild: true },
     { icon: ScrollText, label: t('layout.nav.logs', 'Logs'), path: '/dashboard/logs', needsGuild: true },
