@@ -7,6 +7,8 @@ const { requireAuth, requireBotToken, requireGuildOwner, validate, validateQuery
 const { moderationSearchSchema, guildDmConfigSchema, directMessageSchema } = require('../validators/schemas');
 const { decrypt } = require('../services/encryptionService');
 const discordService = require('../services/discordService');
+const authService = require('../services/authService');
+const { recordModAction } = require('../bot/utils/modHelpers');
 const {
   DEFAULT_SETTINGS,
   getGuildDmSettings,
@@ -15,6 +17,17 @@ const {
 } = require('../services/moderationDmService');
 
 router.use(requireAuth, requireBotToken, requireGuildOwner);
+
+function buildHttpError(status, message, code = null) {
+  const error = new Error(message);
+  error.httpStatus = status;
+  if (code) error.code = code;
+  return error;
+}
+
+function isPrimaryFounder(user) {
+  return authService.isPrimaryFounderEmail(user?.email);
+}
 
 function buildSearchResult(user, member = null, banned = false) {
   if (!user?.id) return null;
@@ -48,6 +61,31 @@ async function getGuildBanSafe(token, guildId, userId) {
     if (error?.httpStatus === 404) return null;
     throw error;
   }
+}
+
+async function ensureDirectMessageAccess(req, token) {
+  const linkedDiscordId = req.user.discord_id || null;
+  if (!linkedDiscordId) {
+    throw buildHttpError(403, 'Connecte d abord ton compte Discord pour envoyer un MP', 'DISCORD_LINK_REQUIRED');
+  }
+
+  if (String(linkedDiscordId) === String(req.guild.owner_id || '') || isPrimaryFounder(req.user)) {
+    return {
+      discordId: linkedDiscordId,
+      linked: true,
+    };
+  }
+
+  const member = await getGuildMemberSafe(token, req.guild.guild_id, linkedDiscordId);
+  if (!member) {
+    throw buildHttpError(403, 'Le compte Discord lie doit etre present sur ce serveur pour envoyer un MP', 'DISCORD_LINK_NOT_IN_GUILD');
+  }
+
+  return {
+    discordId: linkedDiscordId,
+    linked: true,
+    member,
+  };
 }
 
 router.get('/config', (req, res) => {
@@ -123,22 +161,48 @@ router.get('/search', validateQuery(moderationSearchSchema), async (req, res, ne
 router.post('/direct', validate(directMessageSchema), async (req, res, next) => {
   try {
     const token = decrypt(req.botToken.encrypted_token);
-    const { target_user_id, title, message } = req.body;
+    const { target_user_id, target_username, title, message, hide_sender_identity } = req.body;
+    const access = await ensureDirectMessageAccess(req, token);
+    const safeTitle = String(title || 'Message du staff').trim() || 'Message du staff';
+    const safeTargetUsername = String(target_username || '').trim() || target_user_id;
 
     await sendDirectStaffMessage({
       botToken: token,
       guildRow: req.guild,
       targetUserId: target_user_id,
-      title,
+      title: safeTitle,
       message,
       senderName: req.user.username,
+      hideSenderIdentity: Boolean(hide_sender_identity),
     });
+
+    await recordModAction(
+      req.guild.guild_id,
+      'direct_message',
+      target_user_id,
+      safeTargetUsername,
+      access.discordId || req.user.id,
+      req.user.username,
+      safeTitle,
+      null,
+      'MANUAL_DM',
+      {
+        sender_site_user_id: req.user.id,
+        sender_site_username: req.user.username,
+        sender_discord_id: access.discordId || null,
+        hide_sender_identity: Boolean(hide_sender_identity),
+        message_preview: String(message || '').trim().slice(0, 240),
+      }
+    );
 
     res.status(201).json({
       message: 'Direct message sent',
       target_user_id,
     });
   } catch (error) {
+    if (error?.code === 'DISCORD_LINK_REQUIRED' || error?.code === 'DISCORD_LINK_NOT_IN_GUILD') {
+      return res.status(error.httpStatus || 403).json({ error: error.message, code: error.code });
+    }
     if (error?.httpStatus === 403) {
       return res.status(403).json({ error: 'Impossible d envoyer un MP a cet utilisateur' });
     }

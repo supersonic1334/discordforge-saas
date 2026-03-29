@@ -214,7 +214,18 @@ function ActionModal({ action, target, values, onChange, canUseDiscordActions, l
   )
 }
 
-function DirectMessageModal({ target, values, onChange, onClose, onSubmit, submitting }) {
+function DirectMessageModal({
+  target,
+  values,
+  onChange,
+  canSendDirectMessage,
+  linkedDiscordId,
+  onConnectDiscord,
+  connectingDiscord,
+  onClose,
+  onSubmit,
+  submitting,
+}) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onClick={onClose}>
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.97 }} className="feature-hero w-full max-w-xl p-6 space-y-5" onClick={(event) => event.stopPropagation()}>
@@ -228,10 +239,47 @@ function DirectMessageModal({ target, values, onChange, onClose, onSubmit, submi
         <div className="relative z-[1] space-y-4">
           <input className="input-field" value={values.title} onChange={(event) => onChange((current) => ({ ...current, title: event.target.value }))} placeholder="Titre" />
           <textarea className="input-field min-h-[160px] resize-y" value={values.message} onChange={(event) => onChange((current) => ({ ...current, message: event.target.value }))} placeholder="Message" />
+          <label className="flex items-start gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/75">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 shrink-0 accent-violet-400"
+              checked={Boolean(values.hideIdentity)}
+              onChange={(event) => onChange((current) => ({ ...current, hideIdentity: event.target.checked }))}
+            />
+            <span className="leading-6">
+              Masquer mon identite dans le MP recu par le membre. Les logs du site garderont ton vrai nom.
+            </span>
+          </label>
+          {canSendDirectMessage ? (
+            <div className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/10 p-4">
+              <p className="font-display font-700 text-sm text-emerald-200">Compte Discord verifie</p>
+              <p className="mt-2 text-sm leading-6 text-emerald-100/80">
+                Le MP utilisera automatiquement ton compte Discord lie{linkedDiscordId ? ` (${linkedDiscordId})` : ''}.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-[22px] border border-amber-500/20 bg-amber-500/10 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl border border-amber-400/20 bg-amber-400/10 flex items-center justify-center shrink-0">
+                  <Link2 className="w-4 h-4 text-amber-300" />
+                </div>
+                <div>
+                  <p className="font-display font-700 text-sm text-amber-100">Connexion Discord requise</p>
+                  <p className="mt-1 text-sm leading-6 text-amber-100/75">
+                    Pour envoyer un MP staff, connecte d abord ton compte Discord au site.
+                  </p>
+                </div>
+              </div>
+              <button type="button" onClick={onConnectDiscord} disabled={connectingDiscord} className="inline-flex items-center gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm font-mono text-amber-100 transition-all hover:bg-amber-400/15 disabled:opacity-50">
+                <Link2 className="w-4 h-4" />
+                {connectingDiscord ? 'Connexion...' : 'Connecter mon compte Discord'}
+              </button>
+            </div>
+          )}
         </div>
         <div className="relative z-[1] flex gap-3">
           <button type="button" onClick={onClose} className="flex-1 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white/70 transition-all hover:border-white/20 hover:text-white">Annuler</button>
-          <button type="button" onClick={onSubmit} disabled={submitting || !values.message.trim()} className="flex-1 rounded-2xl border border-violet-500/25 bg-violet-500/10 px-4 py-3 text-violet-200 transition-all hover:bg-violet-500/15 disabled:opacity-50">{submitting ? 'Envoi...' : 'Envoyer'}</button>
+          <button type="button" onClick={onSubmit} disabled={submitting || !values.message.trim() || !canSendDirectMessage} className="flex-1 rounded-2xl border border-violet-500/25 bg-violet-500/10 px-4 py-3 text-violet-200 transition-all hover:bg-violet-500/15 disabled:opacity-50">{submitting ? 'Envoi...' : 'Envoyer'}</button>
         </div>
       </motion.div>
     </motion.div>
@@ -268,7 +316,7 @@ export default function SearchPage() {
   const [dmOpen, setDmOpen] = useState(false)
   const [sendingDm, setSendingDm] = useState(false)
   const [actionValues, setActionValues] = useState({ reason: '', duration: '', points: '1', hideIdentity: false })
-  const [dmValues, setDmValues] = useState({ title: '', message: '' })
+  const [dmValues, setDmValues] = useState({ title: '', message: '', hideIdentity: false })
 
   const selectedResult = useMemo(() => results.find((entry) => entry.id === selectedUserId) || null, [results, selectedUserId])
 
@@ -439,6 +487,10 @@ export default function SearchPage() {
 
   async function handleSendDM() {
     if (!selectedGuildId || !selectedUserId || !dmValues.message.trim() || sendingDm) return
+    if (!canSendDirectMessage) {
+      toast.error('Connecte d abord ton compte Discord')
+      return
+    }
     setSendingDm(true)
     try {
       await messagesAPI.send(selectedGuildId, {
@@ -446,9 +498,10 @@ export default function SearchPage() {
         target_username: profileData?.profile?.display_name || selectedResult?.display_name || selectedUserId,
         title: dmValues.title.trim() || 'Message du staff',
         message: dmValues.message.trim(),
+        hide_sender_identity: Boolean(dmValues.hideIdentity),
       })
       toast.success('MP envoye')
-      setDmValues({ title: '', message: '' })
+      setDmValues({ title: '', message: '', hideIdentity: false })
       setDmOpen(false)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -476,6 +529,7 @@ export default function SearchPage() {
   const timeoutActive = hasActiveTimeout(profile)
   const linkedDiscordId = user?.discord_id || null
   const canUseDiscordActions = Boolean(linkedDiscordId)
+  const canSendDirectMessage = Boolean(linkedDiscordId)
 
   if (!selectedGuildId) {
     return <SelectGuildState title="Choisis d'abord un serveur" body="La recherche utilisateur fonctionne serveur par serveur." actionLabel="Choisir un serveur" />
@@ -570,7 +624,7 @@ export default function SearchPage() {
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => loadProfile(selectedUserId, { silent: true })} disabled={refreshing} className="btn-ghost inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"><RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />Recharger</button>
                       <button type="button" onClick={handleCopyId} className="btn-ghost inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"><Copy className="w-4 h-4" />Copier ID</button>
-                      <button type="button" onClick={() => setDmOpen(true)} className="inline-flex items-center gap-2 rounded-2xl border border-violet-500/25 bg-violet-500/10 px-4 py-3 text-violet-200 transition-all hover:bg-violet-500/15"><MessageCircle className="w-4 h-4" />MP</button>
+                      <button type="button" onClick={() => { setDmValues({ title: '', message: '', hideIdentity: false }); setDmOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl border border-violet-500/25 bg-violet-500/10 px-4 py-3 text-violet-200 transition-all hover:bg-violet-500/15"><MessageCircle className="w-4 h-4" />MP</button>
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-4">
@@ -631,7 +685,7 @@ export default function SearchPage() {
       </div>
 
       <AnimatePresence>{actionModal ? <ActionModal action={actionModal} target={profile} values={actionValues} onChange={setActionValues} canUseDiscordActions={canUseDiscordActions} linkedDiscordId={linkedDiscordId} onConnectDiscord={handleConnectDiscord} connectingDiscord={linkingDiscord} onClose={() => setActionModal('')} onSubmit={handleSubmitAction} submitting={submittingAction} /> : null}</AnimatePresence>
-      <AnimatePresence>{dmOpen ? <DirectMessageModal target={profile} values={dmValues} onChange={setDmValues} onClose={() => setDmOpen(false)} onSubmit={handleSendDM} submitting={sendingDm} /> : null}</AnimatePresence>
+      <AnimatePresence>{dmOpen ? <DirectMessageModal target={profile} values={dmValues} onChange={setDmValues} canSendDirectMessage={canSendDirectMessage} linkedDiscordId={linkedDiscordId} onConnectDiscord={handleConnectDiscord} connectingDiscord={linkingDiscord} onClose={() => setDmOpen(false)} onSubmit={handleSendDM} submitting={sendingDm} /> : null}</AnimatePresence>
     </div>
   )
 }

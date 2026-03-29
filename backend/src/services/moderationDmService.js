@@ -307,10 +307,14 @@ function buildDirectMessagePayload({
   title,
   message,
   senderName,
+  hideSenderIdentity,
 }) {
   const brandAssets = getBrandAssets();
   const cleanTitle = sanitizeText(title, 120) || 'Message du staff';
   const cleanMessage = truncateField(message || 'Aucun contenu.', 1600);
+  const senderLabel = hideSenderIdentity
+    ? 'Staff du serveur'
+    : (sanitizeText(senderName, 80) || 'Staff du serveur');
 
   return {
     embeds: [
@@ -341,7 +345,7 @@ function buildDirectMessagePayload({
           },
           {
             name: 'Envoye par',
-            value: sanitizeText(senderName, 80) || 'Staff du serveur',
+            value: senderLabel,
             inline: true,
           },
           {
@@ -451,6 +455,7 @@ async function sendDirectStaffMessage({
   title,
   message,
   senderName,
+  hideSenderIdentity,
 }) {
   const guildIdentity = getGuildIdentity({ guildRow, guildId, guild });
   const payload = buildDirectMessagePayload({
@@ -458,6 +463,7 @@ async function sendDirectStaffMessage({
     title,
     message,
     senderName,
+    hideSenderIdentity,
   });
 
   await discordService.sendDirectMessage(botToken, targetUserId, payload);

@@ -126,6 +126,7 @@ const directMessageSchema = z.object({
   target_username: z.string().trim().max(80).optional(),
   title: z.string().trim().min(1).max(120).optional(),
   message: z.string().trim().min(2).max(2000),
+  hide_sender_identity: z.boolean().optional().default(false),
 });
 
 const guildAccessInviteSchema = z.object({
