@@ -17,7 +17,7 @@ function normalizeAccessRole(value) {
 }
 
 function buildAccessCode() {
-  return randomBytes(5).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  return randomBytes(9).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
 }
 
 function maskAccessCode(code) {
@@ -33,6 +33,14 @@ function parseJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function getDiscordDisplayName(row = {}) {
+  return row.discord_global_name || row.discord_username || row.username || 'Inconnu';
+}
+
+function getProfileAvatarUrl(row = {}) {
+  return row.discord_avatar_url || row.avatar_url || null;
 }
 
 // ── Audit logging ──────────────────────────────────────────────────────────────
@@ -63,8 +71,11 @@ function listCollabAuditLog(guildId, { page = 1, limit = 30, excludeActorUserId 
   const rows = db.db.prepare(`
     SELECT
       log.*,
-      users.avatar_url AS actor_avatar_url,
-      users.discord_id AS actor_discord_id
+      users.avatar_url AS actor_site_avatar_url,
+      users.discord_id AS actor_discord_id,
+      users.discord_username AS actor_discord_username,
+      users.discord_global_name AS actor_discord_global_name,
+      users.discord_avatar_url AS actor_discord_avatar_url
     FROM collaboration_audit_log log
     LEFT JOIN users ON users.id = log.actor_user_id
     ${whereSql}
@@ -76,6 +87,12 @@ function listCollabAuditLog(guildId, { page = 1, limit = 30, excludeActorUserId 
     items: rows.map((row) => ({
       ...row,
       details: parseJson(row.details, {}),
+      actor_display_name: getDiscordDisplayName({
+        username: row.actor_username,
+        discord_username: row.actor_discord_username,
+        discord_global_name: row.actor_discord_global_name,
+      }),
+      actor_avatar_url: row.actor_discord_avatar_url || row.actor_site_avatar_url || null,
     })),
     total,
     page,
@@ -96,6 +113,28 @@ function cleanupExpiredAccess(guildId) {
     DELETE FROM guild_access_members
     WHERE guild_id = ? AND expires_at IS NOT NULL AND expires_at <= ?
   `).run(guildId, now);
+  return result.changes || 0;
+}
+
+function clearExpiredSuspensions({ guildId = null, userId = null } = {}) {
+  const conditions = ['is_suspended = 1', 'suspended_until IS NOT NULL', 'suspended_until <= ?'];
+  const params = [new Date().toISOString()];
+
+  if (guildId) {
+    conditions.push('guild_id = ?');
+    params.push(guildId);
+  }
+  if (userId) {
+    conditions.push('user_id = ?');
+    params.push(userId);
+  }
+
+  const result = db.db.prepare(`
+    UPDATE guild_access_members
+    SET is_suspended = 0, suspended_until = NULL, updated_at = ?
+    WHERE ${conditions.join(' AND ')}
+  `).run(new Date().toISOString(), ...params);
+
   return result.changes || 0;
 }
 
@@ -128,6 +167,7 @@ function cleanupExpiredCodes(guildId = null) {
 function getGuildAccess(userId, guildId) {
   // Cleanup expired members first
   cleanupExpiredAccess(guildId);
+  clearExpiredSuspensions({ guildId, userId });
 
   const row = db.db.prepare(`
     SELECT
@@ -138,6 +178,7 @@ function getGuildAccess(userId, guildId) {
       gam.id AS member_id,
       gam.access_role AS member_access_role,
       gam.is_suspended AS member_is_suspended,
+      gam.suspended_until AS member_suspended_until,
       gam.expires_at AS member_expires_at,
       gam.accepted_at AS member_accepted_at
     FROM guilds g
@@ -192,6 +233,7 @@ function listAccessibleGuilds(userId) {
     DELETE FROM guild_access_members
     WHERE user_id = ? AND expires_at IS NOT NULL AND expires_at <= ?
   `).run(userId, now);
+  clearExpiredSuspensions({ userId });
 
   return db.db.prepare(`
     SELECT
@@ -219,6 +261,7 @@ function listAccessibleGuilds(userId) {
 function listGuildCollaborators(guildId) {
   // Cleanup expired
   cleanupExpiredAccess(guildId);
+  clearExpiredSuspensions({ guildId });
 
   const guild = db.findOne('guilds', { id: guildId });
   if (!guild) return [];
@@ -230,7 +273,11 @@ function listGuildCollaborators(guildId) {
       u.username,
       u.avatar_url,
       u.email,
-      u.discord_id
+      u.discord_id,
+      u.discord_username,
+      u.discord_global_name,
+      u.discord_avatar_url,
+      gam.suspended_until
     FROM guild_access_members gam
     JOIN users u ON u.id = gam.user_id
     WHERE gam.guild_id = ?
@@ -251,11 +298,19 @@ function listGuildCollaborators(guildId) {
       user_id: owner.id,
       username: owner.username,
       avatar_url: owner.avatar_url || null,
+      site_username: owner.username,
+      site_avatar_url: owner.avatar_url || null,
       email: owner.email,
       discord_id: owner.discord_id || null,
+      discord_username: owner.discord_username || null,
+      discord_global_name: owner.discord_global_name || null,
+      discord_avatar_url: owner.discord_avatar_url || null,
+      display_name: getDiscordDisplayName(owner),
+      profile_avatar_url: getProfileAvatarUrl(owner),
       access_role: 'owner',
       is_owner: true,
       is_suspended: false,
+      suspended_until: null,
       expires_at: null,
       accepted_at: guild.created_at,
       created_at: guild.created_at,
@@ -269,11 +324,19 @@ function listGuildCollaborators(guildId) {
       user_id: member.user_id,
       username: member.username,
       avatar_url: member.avatar_url || null,
+      site_username: member.username,
+      site_avatar_url: member.avatar_url || null,
       email: member.email,
       discord_id: member.discord_id || null,
+      discord_username: member.discord_username || null,
+      discord_global_name: member.discord_global_name || null,
+      discord_avatar_url: member.discord_avatar_url || null,
+      display_name: getDiscordDisplayName(member),
+      profile_avatar_url: getProfileAvatarUrl(member),
       access_role: normalizeAccessRole(member.access_role),
       is_owner: false,
       is_suspended: !!member.is_suspended,
+      suspended_until: member.suspended_until || null,
       expires_at: member.expires_at || null,
       accepted_at: member.accepted_at,
       created_at: member.created_at,
@@ -291,7 +354,10 @@ function listGuildJoinCodes(guildId) {
     SELECT
       codes.*,
       users.username AS created_by_username,
-      users.avatar_url AS created_by_avatar_url
+      users.avatar_url AS created_by_site_avatar_url,
+      users.discord_username AS created_by_discord_username,
+      users.discord_global_name AS created_by_discord_global_name,
+      users.discord_avatar_url AS created_by_discord_avatar_url
     FROM guild_access_codes codes
     LEFT JOIN users ON users.id = codes.created_by_user_id
     WHERE codes.guild_id = ?
@@ -308,7 +374,12 @@ function listGuildJoinCodes(guildId) {
     expires_at: row.expires_at || null,
     created_by_user_id: row.created_by_user_id || null,
     created_by_username: row.created_by_username || 'Inconnu',
-    created_by_avatar_url: row.created_by_avatar_url || null,
+    created_by_display_name: getDiscordDisplayName({
+      username: row.created_by_username,
+      discord_username: row.created_by_discord_username,
+      discord_global_name: row.created_by_discord_global_name,
+    }),
+    created_by_avatar_url: row.created_by_discord_avatar_url || row.created_by_site_avatar_url || null,
   }));
 }
 
@@ -634,7 +705,7 @@ function updateGuildCollaboratorRole({ guildId, ownerUserId, memberUserId, acces
   });
 }
 
-function suspendGuildCollaborator({ guildId, ownerUserId, memberUserId, isSuspended }) {
+function suspendGuildCollaborator({ guildId, ownerUserId, memberUserId, isSuspended, durationHours = 0 }) {
   const guild = db.findOne('guilds', { id: guildId });
   if (!guild || guild.user_id !== ownerUserId) {
     throw Object.assign(new Error('Guild not found'), { status: 404 });
@@ -643,11 +714,14 @@ function suspendGuildCollaborator({ guildId, ownerUserId, memberUserId, isSuspen
     throw Object.assign(new Error('Le proprietaire principal ne peut pas etre suspendu'), { status: 400 });
   }
 
+  const suspendedUntil = isSuspended && Number(durationHours) > 0
+    ? new Date(Date.now() + Number(durationHours) * 3600000).toISOString()
+    : null;
   const result = db.db.prepare(`
     UPDATE guild_access_members
-    SET is_suspended = ?, updated_at = ?
+    SET is_suspended = ?, suspended_until = ?, updated_at = ?
     WHERE guild_id = ? AND user_id = ?
-  `).run(isSuspended ? 1 : 0, new Date().toISOString(), guildId, memberUserId);
+  `).run(isSuspended ? 1 : 0, suspendedUntil, new Date().toISOString(), guildId, memberUserId);
 
   if (!result.changes) {
     throw Object.assign(new Error('Acces introuvable'), { status: 404 });
@@ -660,6 +734,7 @@ function suspendGuildCollaborator({ guildId, ownerUserId, memberUserId, isSuspen
     actorUsername: db.findOne('users', { id: ownerUserId })?.username,
     actionType: isSuspended ? 'suspend' : 'unsuspend',
     target: targetUser?.username,
+    details: isSuspended && suspendedUntil ? { suspended_until: suspendedUntil } : {},
   });
 }
 
@@ -910,6 +985,7 @@ function deleteGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
 }
 
 function getSharedGuildCounts(userId) {
+  clearExpiredSuspensions({ userId });
   const row = db.db.prepare(`
     SELECT
       COUNT(DISTINCT g.id) AS total_count,

@@ -19,6 +19,9 @@ const SCHEMA = [
     ai_language     TEXT NOT NULL DEFAULT 'auto',
     analytics_layout TEXT,
     discord_id      TEXT UNIQUE,
+    discord_username TEXT,
+    discord_global_name TEXT,
+    discord_avatar_url TEXT,
     google_id       TEXT UNIQUE,
     discord_token   TEXT,                   -- encrypted OAuth access token
     is_active       INTEGER NOT NULL DEFAULT 1,
@@ -89,6 +92,7 @@ const SCHEMA = [
     access_role     TEXT NOT NULL DEFAULT 'admin' CHECK(access_role IN ('admin','moderator','viewer')),
     invited_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     is_suspended    INTEGER NOT NULL DEFAULT 0,
+    suspended_until TEXT,
     expires_at      TEXT,
     accepted_at     TEXT NOT NULL DEFAULT (datetime('now')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),

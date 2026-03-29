@@ -57,6 +57,16 @@ function parseJsonObject(value, fallback = null) {
   }
 }
 
+function buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl, accessToken }, currentUser = null) {
+  return {
+    discord_id: providerId || currentUser?.discord_id || null,
+    discord_username: username || currentUser?.discord_username || null,
+    discord_global_name: globalName || currentUser?.discord_global_name || null,
+    discord_avatar_url: avatarUrl || currentUser?.discord_avatar_url || null,
+    discord_token: accessToken || currentUser?.discord_token || null,
+  };
+}
+
 // ── JWT ───────────────────────────────────────────────────────────────────────
 function signToken(userId, role) {
   return jwt.sign({ userId, role }, config.JWT_SECRET, { expiresIn: config.JWT_EXPIRES_IN });
@@ -131,7 +141,7 @@ async function login({ email, password }) {
 }
 
 // ── OAuth upsert (Discord / Google) ──────────────────────────────────────────
-async function upsertOAuthUser({ provider, providerId, email, username, avatarUrl, accessToken }) {
+async function upsertOAuthUser({ provider, providerId, email, username, globalName, avatarUrl, accessToken }) {
   const providerField = provider === 'discord' ? 'discord_id' : 'google_id';
   const normalizedEmail = email ? normalizeEmail(email) : null;
 
@@ -150,15 +160,21 @@ async function upsertOAuthUser({ provider, providerId, email, username, avatarUr
   }
 
   if (user) {
+    const discordIdentityPatch = provider === 'discord'
+      ? buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl, accessToken }, user)
+      : {};
     db.update('users', {
       [providerField]: providerId,
       username: username ?? user.username,
       avatar_url: avatarUrl ?? user.avatar_url,
       last_login_at: now,
-      ...(provider === 'discord' && accessToken ? { discord_token: accessToken } : {}),
+      ...discordIdentityPatch,
     }, { id: user.id });
     user = db.findOne('users', { id: user.id });
   } else {
+    const discordIdentityPatch = provider === 'discord'
+      ? buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl, accessToken })
+      : {};
     const id = uuidv4();
     db.insert('users', {
       id,
@@ -168,7 +184,7 @@ async function upsertOAuthUser({ provider, providerId, email, username, avatarUr
       avatar_url: avatarUrl,
       role: 'member',
       [providerField]: providerId,
-      ...(provider === 'discord' && accessToken ? { discord_token: accessToken } : {}),
+      ...discordIdentityPatch,
       is_active: 1,
       created_at: now,
       updated_at: now,
@@ -181,7 +197,7 @@ async function upsertOAuthUser({ provider, providerId, email, username, avatarUr
   return { token, user: safeUser(user) };
 }
 
-function linkDiscordAccount(userId, { providerId, accessToken }) {
+function linkDiscordAccount(userId, { providerId, username, globalName, avatarUrl, accessToken }) {
   const user = db.findOne('users', { id: userId });
   if (!user || !user.is_active) {
     throw Object.assign(new Error('Account not found or deactivated'), { status: 404 });
@@ -197,8 +213,7 @@ function linkDiscordAccount(userId, { providerId, accessToken }) {
   }
 
   db.update('users', {
-    discord_id: providerId,
-    discord_token: accessToken || user.discord_token || null,
+    ...buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl, accessToken }, user),
     updated_at: new Date().toISOString(),
   }, { id: userId });
 

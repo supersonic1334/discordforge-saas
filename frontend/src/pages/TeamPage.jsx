@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle,
@@ -12,7 +12,7 @@ import {
   Database,
   Eye,
   History,
-  Hourglass,
+  Link2,
   Lock,
   Package,
   Pause,
@@ -92,6 +92,7 @@ function formatAuditValue(key, value) {
   if (value == null || value === '') return null
   if (typeof value === 'boolean') return value ? 'oui' : 'non'
   if (key === 'expires_in_hours' && Number(value) > 0) return `${value}h`
+  if (key === 'suspended_until' || key === 'expires_at') return formatDate('fr-FR', value)
   return String(value)
 }
 
@@ -110,7 +111,7 @@ function describeAuditDetails(details = {}) {
   return entries.length > 0 ? entries.join(' · ') : ''
 }
 
-async function connectDiscordAccountWithPopup(returnTo, fetchMe) {
+async function connectDiscordAccountWithPopup(returnTo) {
   const response = await authAPI.createDiscordLink({ return_to: returnTo, mode: 'popup' })
   const nextUrl = response?.data?.url
   if (!nextUrl) throw new Error('Lien Discord indisponible')
@@ -118,8 +119,31 @@ async function connectDiscordAccountWithPopup(returnTo, fetchMe) {
   if (result?.status !== 'success') {
     throw new Error(result?.error || 'discord_link_failed')
   }
-  await fetchMe()
   return result
+}
+
+function getTeamDisplayName(entry) {
+  return entry?.display_name || entry?.discord_global_name || entry?.discord_username || entry?.username || 'Inconnu'
+}
+
+function getTeamAvatar(entry) {
+  return entry?.profile_avatar_url || entry?.discord_avatar_url || entry?.avatar_url || null
+}
+
+function applyImmediateDiscordLink(linkResult) {
+  const linkedDiscordId = String(linkResult?.linkedDiscordId || '').trim()
+  if (!linkedDiscordId) return false
+
+  const currentUser = useAuthStore.getState().user || {}
+  useAuthStore.getState().setUser({
+    ...currentUser,
+    discord_id: linkedDiscordId,
+    discord_username: String(linkResult?.linkedDiscordUsername || currentUser.discord_username || '').trim() || currentUser.discord_username || null,
+    discord_global_name: String(linkResult?.linkedDiscordGlobalName || currentUser.discord_global_name || '').trim() || currentUser.discord_global_name || null,
+    discord_avatar_url: String(linkResult?.linkedDiscordAvatarUrl || currentUser.discord_avatar_url || '').trim() || currentUser.discord_avatar_url || null,
+  })
+
+  return true
 }
 
 const EXPIRY_OPTIONS = [
@@ -130,6 +154,12 @@ const EXPIRY_OPTIONS = [
   { value: 72, label: '3 jours' },
   { value: 168, label: '1 semaine' },
   { value: 720, label: '30 jours' },
+]
+
+const SUSPEND_OPTIONS = [
+  { value: 0, label: 'Bloquer' },
+  { value: 24, label: '24h' },
+  { value: 168, label: '7j' },
 ]
 
 const ROLE_CONFIG = {
@@ -184,12 +214,13 @@ function RoleBadge({ role }) {
   )
 }
 
-function StatusDot({ isSuspended, expiresAt }) {
+function StatusDot({ isSuspended, suspendedUntil, expiresAt }) {
   if (isSuspended) {
+    const remaining = formatRelativeTime(suspendedUntil)
     return (
       <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-red-400">
         <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-        Suspendu
+        {remaining && remaining !== 'Expire' ? `Suspendu ${remaining}` : 'Suspendu'}
       </span>
     )
   }
@@ -303,6 +334,7 @@ function StatPill({ icon: Icon, label, value, tone = 'cyan' }) {
 export default function TeamPage() {
   const { user, fetchMe } = useAuthStore()
   const { guilds, selectedGuildId, selectGuild } = useGuildStore()
+  const location = useLocation()
   const guild = guilds.find((entry) => entry.id === selectedGuildId)
   const [overview, setOverview] = useState({ access: null, collaborators: [], snapshots: [] })
   const [loading, setLoading] = useState(true)
@@ -353,6 +385,19 @@ export default function TeamPage() {
       // Silently fail
     }
   }, [selectedGuildId])
+
+  const syncTeamAfterDiscordLink = useCallback(async (linkResult) => {
+    const immediateLinked = applyImmediateDiscordLink(linkResult)
+
+    await fetchMe()
+    await useGuildStore.getState().fetchGuilds()
+
+    if (selectedGuildId) {
+      await loadOverview({ silent: true })
+    }
+
+    return Boolean(immediateLinked || useAuthStore.getState().user?.discord_id)
+  }, [fetchMe, loadOverview, selectedGuildId])
 
   // Reset on guild change
   useEffect(() => {
@@ -489,8 +534,12 @@ export default function TeamPage() {
   const handleConnectDiscord = async () => {
     setSaving('discord:link')
     try {
-      const returnTo = '/dashboard/team'
-      await connectDiscordAccountWithPopup(returnTo, fetchMe)
+      const returnTo = `${location.pathname}${location.search || ''}`
+      const result = await connectDiscordAccountWithPopup(returnTo)
+      const linked = await syncTeamAfterDiscordLink(result)
+      if (!linked) {
+        throw new Error('Le compte Discord est lie, mais la synchronisation n est pas encore finie.')
+      }
       toast.success('Compte Discord connecte')
     } catch (error) {
       if (String(error?.message || '') !== 'Popup fermee') {
@@ -515,13 +564,20 @@ export default function TeamPage() {
     }
   }
 
-  const handleSuspend = async (memberUserId, username, isSuspended) => {
+  const handleSuspend = async (memberUserId, username, isSuspended, durationHours = 0) => {
     if (!selectedGuildId) return
-    setSaving(`suspend:${memberUserId}`)
+    setSaving(`suspend:${memberUserId}:${durationHours}`)
     try {
-      const response = await teamAPI.suspendMember(selectedGuildId, memberUserId, { is_suspended: isSuspended })
+      const response = await teamAPI.suspendMember(selectedGuildId, memberUserId, {
+        is_suspended: isSuspended,
+        duration_hours: durationHours,
+      })
       setOverview(response.data)
-      toast.success(isSuspended ? `${username} suspendu` : `${username} reactive`)
+      toast.success(
+        isSuspended
+          ? (durationHours > 0 ? `${username} bloque ${durationHours}h` : `${username} suspendu`)
+          : `${username} reactive`
+      )
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -854,6 +910,11 @@ function JoinTeamCard({ user, joinCode, setJoinCode, saving, onRedeem, onConnect
           </button>
         </div>
       ) : null}
+      {linked ? (
+        <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.05] px-4 py-3 text-xs text-emerald-200/80 font-mono">
+          Compte Discord lie: {user?.discord_global_name || user?.discord_username || user?.username || user?.discord_id}
+        </div>
+      ) : null}
       <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
         <input
           className="input-field"
@@ -900,7 +961,7 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
           value={codeForm.expires_in_hours}
           onChange={(event) => setCodeForm((current) => ({ ...current, expires_in_hours: Number(event.target.value) }))}
         >
-          {EXPIRY_OPTIONS.filter((option) => option.value !== 0).map((option) => (
+          {EXPIRY_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
@@ -926,7 +987,7 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
                 <div>
                   <p className="font-display text-lg font-700 text-white tracking-[0.18em]">{entry.code}</p>
                   <p className="mt-1 text-xs text-white/32 font-mono">
-                    {ROLE_CONFIG[entry.access_role]?.label || entry.access_role} · expire {formatRelativeTime(entry.expires_at)}
+                    {ROLE_CONFIG[entry.access_role]?.label || entry.access_role} · {entry.expires_at ? `expire ${formatRelativeTime(entry.expires_at)}` : 'sans expiration'}
                   </p>
                 </div>
                 <button
@@ -938,8 +999,9 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
                   {saving === `code:revoke:${entry.id}` ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 </button>
               </div>
-              <div className="flex items-center justify-between gap-3 text-xs text-white/35">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/35">
                 <span>Cree {timeAgo(entry.created_at)}</span>
+                <span>Par {entry.created_by_display_name || entry.created_by_username || 'Inconnu'}</span>
                 <span className="font-mono">1 seule utilisation</span>
               </div>
             </div>
@@ -982,23 +1044,40 @@ function TeamTab({
 }) {
   const [showInviteForm, setShowInviteForm] = useState(false)
   const ownerEntry = collaborators.find((c) => c.is_owner)
+  const teamOwner = ownerEntry || collaborators[0] || null
 
   return (
     <div className="space-y-5">
+      <WorkspaceSwitchCard
+        ownGuilds={ownGuilds}
+        sharedGuilds={sharedGuilds}
+        selectedGuildId={selectedGuildId}
+        onSelectGuild={onSelectGuild}
+      />
+
+      <JoinTeamCard
+        user={user}
+        joinCode={joinCode}
+        setJoinCode={setJoinCode}
+        saving={saving}
+        onRedeem={onRedeemCode}
+        onConnectDiscord={onConnectDiscord}
+      />
 
       {/* ── Owner card ────────────────────────────────────────────────────── */}
-      {ownerEntry && (
+      {teamOwner && (
         <div className="spotlight-card p-5">
           <div className="flex items-center gap-4">
-            <Avatar src={ownerEntry.avatar_url} label={ownerEntry.username} ring="ring-2 ring-amber-400/30" />
+            <Avatar src={getTeamAvatar(teamOwner)} label={getTeamDisplayName(teamOwner)} ring="ring-2 ring-amber-400/30" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-display font-700 text-white text-base truncate">{ownerEntry.username}</span>
+                <span className="font-display font-700 text-white text-base truncate">{getTeamDisplayName(teamOwner)}</span>
                 <RoleBadge role="owner" />
               </div>
               <div className="flex items-center gap-3 mt-1 text-xs text-white/30 font-mono">
-                <span>Proprietaire du bot</span>
-                {ownerEntry.discord_id && <span>Discord: {ownerEntry.discord_id}</span>}
+                <span>{isOwner ? 'Proprietaire du bot' : 'Espace partage'}</span>
+                {teamOwner.site_username && <span>Site: {teamOwner.site_username}</span>}
+                {teamOwner.discord_id && <span>Discord: {teamOwner.discord_id}</span>}
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2">
@@ -1009,6 +1088,17 @@ function TeamTab({
             </div>
           </div>
         </div>
+      )}
+
+      {isOwner && (
+        <OwnerJoinCodeCard
+          saving={saving}
+          codeForm={codeForm}
+          setCodeForm={setCodeForm}
+          joinCodes={joinCodes}
+          onCreateCode={onCreateCode}
+          onRevokeCode={onRevokeCode}
+        />
       )}
 
       {/* ── Invite section (owner only) ───────────────────────────────────── */}
@@ -1124,20 +1214,20 @@ function TeamTab({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3 min-w-0">
                     <Avatar
-                      src={entry.avatar_url}
-                      label={entry.username}
+                      src={getTeamAvatar(entry)}
+                      label={getTeamDisplayName(entry)}
                       ring={entry.is_suspended ? 'ring-1 ring-red-500/20' : ''}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-display font-600 text-sm truncate ${entry.is_suspended ? 'text-white/35 line-through' : 'text-white'}`}>
-                          {entry.username}
+                          {getTeamDisplayName(entry)}
                         </span>
                         <RoleBadge role={entry.access_role} />
-                        <StatusDot isSuspended={entry.is_suspended} expiresAt={entry.expires_at} />
+                        <StatusDot isSuspended={entry.is_suspended} suspendedUntil={entry.suspended_until} expiresAt={entry.expires_at} />
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-white/25 font-mono">
-                        {entry.email && <span>{entry.email}</span>}
+                        {entry.site_username && <span>Site: {entry.site_username}</span>}
                         {entry.discord_id && <span>Discord: {entry.discord_id}</span>}
                         <span>Depuis {timeAgo(entry.accepted_at || entry.created_at)}</span>
                       </div>
@@ -1145,7 +1235,7 @@ function TeamTab({
                   </div>
 
                   {isOwner && (
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                       <select
                         className="select-compact"
                         value={entry.access_role}
@@ -1156,22 +1246,37 @@ function TeamTab({
                         <option value="moderator">Moderateur</option>
                         <option value="viewer">Lecture</option>
                       </select>
+                      {entry.is_suspended ? (
+                        <button
+                          type="button"
+                          onClick={() => onSuspend(entry.user_id, getTeamDisplayName(entry), false, 0)}
+                          disabled={saving.startsWith(`suspend:${entry.user_id}:`)}
+                          title="Reactiver"
+                          className="p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all disabled:opacity-40"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        SUSPEND_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => onSuspend(entry.user_id, getTeamDisplayName(entry), true, option.value)}
+                            disabled={saving.startsWith(`suspend:${entry.user_id}:`)}
+                            title={option.label}
+                            className={`rounded-xl border px-3 py-2 text-[11px] font-mono transition-all disabled:opacity-40 ${
+                              option.value === 0
+                                ? 'border-amber-400/20 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20'
+                                : 'border-white/10 bg-white/[0.04] text-white/60 hover:border-amber-400/20 hover:text-amber-200'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))
+                      )}
                       <button
                         type="button"
-                        onClick={() => onSuspend(entry.user_id, entry.username, !entry.is_suspended)}
-                        disabled={saving === `suspend:${entry.user_id}`}
-                        title={entry.is_suspended ? 'Reactiver' : 'Suspendre'}
-                        className={`p-2.5 rounded-xl border transition-all disabled:opacity-40 ${
-                          entry.is_suspended
-                            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                            : 'border-amber-400/20 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
-                        }`}
-                      >
-                        {entry.is_suspended ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveMember(entry.user_id, entry.username)}
+                        onClick={() => onRemoveMember(entry.user_id, getTeamDisplayName(entry))}
                         disabled={saving === `remove:${entry.user_id}`}
                         title="Retirer l'acces"
                         className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-40"
@@ -1472,13 +1577,18 @@ function AuditTab({ auditData, locale, onPageChange }) {
                   transition={{ delay: Math.min(index * 0.025, 0.15) }}
                   className="flex items-center gap-3 px-3.5 py-3 rounded-xl border border-white/[0.04] hover:border-white/[0.08] bg-white/[0.01] hover:bg-white/[0.03] transition-all group"
                 >
+                  <Avatar
+                    src={logEntry.actor_avatar_url}
+                    label={logEntry.actor_display_name || logEntry.actor_username}
+                    size="w-9 h-9"
+                  />
                   <div className={`w-8 h-8 rounded-lg ${config.bg} ${config.border} border flex items-center justify-center shrink-0`}>
                     <Icon className={`w-3.5 h-3.5 ${config.text}`} />
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-display font-600 text-white text-[13px]">{logEntry.actor_username || 'Inconnu'}</span>
+                      <span className="font-display font-600 text-white text-[13px]">{logEntry.actor_display_name || logEntry.actor_username || 'Inconnu'}</span>
                       <span className={`text-[11px] font-mono ${config.text}`}>{config.label}</span>
                       {logEntry.target && (
                         <span className="text-[11px] text-white/30 font-mono truncate max-w-[200px]">→ {logEntry.target}</span>
@@ -1486,7 +1596,7 @@ function AuditTab({ auditData, locale, onPageChange }) {
                     </div>
                     {logEntry.details && Object.keys(logEntry.details).length > 0 && (
                       <p className="text-[11px] text-white/20 font-mono mt-0.5 truncate">
-                        {Object.entries(logEntry.details).filter(([, v]) => v != null).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                        {describeAuditDetails(logEntry.details)}
                       </p>
                     )}
                   </div>

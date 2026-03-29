@@ -153,6 +153,7 @@ const guildSnapshotCreateSchema = z.object({
 
 const guildAccessSuspendSchema = z.object({
   is_suspended: z.boolean(),
+  duration_hours: z.number().int().min(0).max(8760).optional().default(0),
 });
 
 const collaborationAuditListSchema = z.object({

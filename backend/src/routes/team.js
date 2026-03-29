@@ -78,10 +78,18 @@ function buildOverview(req) {
       user_id: entry.user_id,
       username: entry.username,
       avatar_url: entry.avatar_url || null,
+      site_username: entry.site_username || entry.username,
+      site_avatar_url: entry.site_avatar_url || entry.avatar_url || null,
       discord_id: entry.discord_id || null,
+      discord_username: entry.discord_username || null,
+      discord_global_name: entry.discord_global_name || null,
+      discord_avatar_url: entry.discord_avatar_url || null,
+      display_name: entry.display_name || entry.username,
+      profile_avatar_url: entry.profile_avatar_url || entry.avatar_url || null,
       access_role: entry.access_role,
       is_owner: !!entry.is_owner,
       is_suspended: !!entry.is_suspended,
+      suspended_until: entry.suspended_until || null,
       expires_at: entry.expires_at || null,
       accepted_at: entry.accepted_at || null,
       created_at: entry.created_at || null,
@@ -194,6 +202,7 @@ router.patch('/members/:memberUserId/suspend', requireGuildPrimaryOwner, validat
       ownerUserId: req.guild.user_id,
       memberUserId: req.params.memberUserId,
       isSuspended: req.body.is_suspended,
+      durationHours: req.body.duration_hours,
     });
 
     // Immediately refresh suspended user's session (kicks them out)
@@ -201,7 +210,9 @@ router.patch('/members/:memberUserId/suspend', requireGuildPrimaryOwner, validat
     notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, req.user.id);
 
     res.json({
-      message: req.body.is_suspended ? 'Collaborateur suspendu' : 'Collaborateur reactived',
+      message: req.body.is_suspended
+        ? (req.body.duration_hours > 0 ? 'Collaborateur suspendu temporairement' : 'Collaborateur suspendu')
+        : 'Collaborateur reactive',
       ...buildOverview(req),
     });
   } catch (error) {

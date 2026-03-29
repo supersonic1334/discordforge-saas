@@ -58,6 +58,7 @@ if (discordOauthEnabled) {
           providerId: profile.id,
           email: profile.email,
           username: profile.username,
+          globalName: profile.global_name || profile.displayName || null,
           avatarUrl: profile.avatar
             ? discordService.getAvatarUrl(profile.id, profile.avatar)
             : null,
@@ -180,6 +181,8 @@ function renderDiscordLinkPopup(res, linkState, { success, error = '', linkedUse
     returnTo,
     linkedDiscordId: success ? String(linkedUser?.discord_id || oauthProfile?.providerId || '') : '',
     linkedDiscordUsername: success ? String(oauthProfile?.username || '') : '',
+    linkedDiscordGlobalName: success ? String(linkedUser?.discord_global_name || oauthProfile?.globalName || '') : '',
+    linkedDiscordAvatarUrl: success ? String(linkedUser?.discord_avatar_url || oauthProfile?.avatarUrl || '') : '',
   };
 
   return res
@@ -309,7 +312,7 @@ router.get('/me', requireAuth, (req, res) => {
       ON gam.guild_id = g.id
       AND gam.user_id = ?
     WHERE g.is_active = 1
-      AND (g.user_id = ? OR gam.user_id IS NOT NULL)
+      AND (g.user_id = ? OR (gam.user_id IS NOT NULL AND gam.is_suspended = 0))
   `).get(req.user.id, req.user.id, req.user.id);
   const totalAccessibleGuilds = Number(accessibleGuildCounts?.total_count || 0);
   const sharedGuildCount = Number(accessibleGuildCounts?.shared_count || 0);

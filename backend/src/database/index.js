@@ -57,7 +57,7 @@ function ensureUsersRoleConstraint() {
     transaction(() => {
       db.exec('DROP TABLE IF EXISTS users__next');
       db.exec(`
-        CREATE TABLE users__next (
+      CREATE TABLE users__next (
           id                TEXT PRIMARY KEY,
           email             TEXT UNIQUE NOT NULL,
           username          TEXT NOT NULL,
@@ -68,6 +68,9 @@ function ensureUsersRoleConstraint() {
           ai_language       TEXT NOT NULL DEFAULT 'auto',
           analytics_layout  TEXT,
           discord_id        TEXT UNIQUE,
+          discord_username  TEXT,
+          discord_global_name TEXT,
+          discord_avatar_url TEXT,
           google_id         TEXT UNIQUE,
           discord_token     TEXT,
           is_active         INTEGER NOT NULL DEFAULT 1,
@@ -84,7 +87,7 @@ function ensureUsersRoleConstraint() {
       db.exec(`
         INSERT INTO users__next (
           id, email, username, password_hash, avatar_url, role,
-          site_language, ai_language, analytics_layout, discord_id, google_id, discord_token,
+          site_language, ai_language, analytics_layout, discord_id, discord_username, discord_global_name, discord_avatar_url, google_id, discord_token,
           is_active, last_seen_ip_hash, last_seen_device_hash, last_seen_user_agent,
           last_seen_at, last_login_at, created_at, updated_at
         )
@@ -104,6 +107,9 @@ function ensureUsersRoleConstraint() {
           COALESCE(ai_language, 'auto'),
           analytics_layout,
           discord_id,
+          NULL,
+          NULL,
+          NULL,
           google_id,
           discord_token,
           COALESCE(is_active, 1),
@@ -218,6 +224,10 @@ function runMigrations() {
   ensureColumn('users', 'last_seen_ip_hash', 'TEXT');
   ensureColumn('users', 'last_seen_device_hash', 'TEXT');
   ensureColumn('users', 'last_seen_user_agent', 'TEXT');
+  ensureColumn('users', 'discord_username', 'TEXT');
+  ensureColumn('users', 'discord_global_name', 'TEXT');
+  ensureColumn('users', 'discord_avatar_url', 'TEXT');
+  ensureColumn('guild_access_members', 'suspended_until', 'TEXT');
   ensureColumn('users', 'last_seen_at', 'TEXT');
   ensureColumn('guilds', 'discord_logs_cleared_before', 'TEXT');
   ensureColumn('support_tickets', 'claimed_once_at', 'TEXT');
