@@ -9,6 +9,7 @@ const { requireAuth, requireBotToken, requireGuildOwner, validateQuery } = requi
 const { decrypt } = require('../services/encryptionService');
 const discordService = require('../services/discordService');
 const authService = require('../services/authService');
+const { MODULE_DEFINITIONS } = require('../bot/modules/definitions');
 const db = require('../database');
 
 router.use(requireAuth, requireBotToken, requireGuildOwner);
@@ -404,6 +405,25 @@ function buildBlacklistMap(ownerUserId) {
   }]));
 }
 
+function buildModuleConfigMap(guildInternalId) {
+  const rows = db.raw(
+    'SELECT module_type, enabled, simple_config, advanced_config FROM modules WHERE guild_id = ?',
+    [guildInternalId]
+  );
+
+  const map = new Map();
+  for (const row of rows) {
+    const definition = MODULE_DEFINITIONS[row.module_type] || { simple_config: {}, advanced_config: {} };
+    map.set(row.module_type, {
+      enabled: Boolean(row.enabled),
+      simple_config: { ...definition.simple_config, ...parseJson(row.simple_config) },
+      advanced_config: { ...definition.advanced_config, ...parseJson(row.advanced_config) },
+    });
+  }
+
+  return map;
+}
+
 function buildRecentWarningsMap(guildInternalId) {
   const rows = db.raw(
     `SELECT target_user_id, reason, points, active, metadata, created_at
@@ -561,6 +581,26 @@ function buildRecentLogEvidenceMap(guildInternalId, evidenceMap) {
       continue;
     }
 
+    if (eventType === 'protection_signal') {
+      const userId = String(metadata.target_user_id || '');
+      if (!userId) continue;
+
+      pushEvidence(evidenceMap, userId, {
+        id: row.id,
+        kind: 'protection_signal',
+        label: metadata.action_label || row.message || 'Signal protection',
+        excerpt: truncateText(metadata.excerpt || metadata.reason || row.message, 280),
+        created_at: row.created_at || null,
+        deleted: false,
+        suspicious: true,
+        flags: Array.isArray(metadata.flags) ? metadata.flags : [],
+        highlights: Array.isArray(metadata.highlights) ? metadata.highlights : [],
+        risk_boost: Number(metadata.risk_boost || 12),
+        source: 'logs',
+      });
+      continue;
+    }
+
     const messageMatches = detectSuspicion(`${row.message || ''} ${metadata.reason || ''}`);
     const relatedUserId = String(metadata.target_user_id || metadata.target_id || metadata.userId || metadata.user_id || '');
     if (relatedUserId && messageMatches.length > 0) {
@@ -609,6 +649,13 @@ function buildMemberSummary(member, context) {
   };
   const blacklist = context.blacklistMap.get(userId) || null;
   const evidence = context.evidenceMap.get(userId) || createEvidenceBucket();
+  const trustConfig = context.moduleConfigMap.get('TRUST_SCORE') || {
+    enabled: false,
+    simple_config: { trusted_after_days: 30 },
+    advanced_config: { warning_penalty: 8, action_penalty: 10, suspicious_penalty: 14, role_bonus: 6 },
+  };
+  const quarantineConfig = context.moduleConfigMap.get('AUTO_QUARANTINE') || null;
+  const quarantineRoleId = quarantineConfig?.enabled ? quarantineConfig.simple_config?.role_id || null : null;
 
   const usernameSignals = detectSuspicion(`${username || ''} ${globalName || ''} ${nickname || ''}`);
   const reasons = [];
@@ -682,6 +729,31 @@ function buildMemberSummary(member, context) {
   const uniqueReasons = [...new Set(reasons.filter(Boolean))].slice(0, 6);
   const riskScore = Math.min(100, Math.max(0, score));
   const riskTier = getRiskTier(riskScore);
+  const trustedAfterDays = Number(trustConfig.simple_config?.trusted_after_days || 30);
+  const warningPenalty = Number(trustConfig.advanced_config?.warning_penalty || 8);
+  const actionPenalty = Number(trustConfig.advanced_config?.action_penalty || 10);
+  const suspiciousPenalty = Number(trustConfig.advanced_config?.suspicious_penalty || 14);
+  const roleBonus = Number(trustConfig.advanced_config?.role_bonus || 6);
+  let confidenceScore = 26;
+
+  if (accountAgeDays !== null) {
+    confidenceScore += Math.min(26, Math.round((accountAgeDays / Math.max(1, trustedAfterDays)) * 26));
+  }
+  if (joinedAgeDays !== null) {
+    confidenceScore += Math.min(14, Math.round(joinedAgeDays / 7));
+  }
+  confidenceScore += Math.min(18, buildRoleSummary(member, context.roleMap, context.guildSnowflake).length * roleBonus);
+  confidenceScore -= Math.min(42, warnings.active_points * warningPenalty);
+  confidenceScore -= Math.min(38, actions.total_actions * actionPenalty);
+  confidenceScore -= Math.min(36, evidence.suspicious_message_count * suspiciousPenalty);
+  confidenceScore -= Math.min(24, evidence.flags.size * 6);
+  if (blacklist) confidenceScore -= 35;
+  if (hasSelfbotSuspicion) confidenceScore -= 26;
+  if (member.pending) confidenceScore -= 10;
+  if (user.bot) confidenceScore -= 8;
+  confidenceScore = Math.max(0, Math.min(100, confidenceScore));
+  const confidenceLabel = confidenceScore >= 75 ? 'Fort' : confidenceScore >= 45 ? 'Moyen' : 'Fragile';
+  const quarantined = Boolean(quarantineRoleId && Array.isArray(member?.roles) && member.roles.includes(quarantineRoleId));
 
   return {
     id: userId,
@@ -702,6 +774,8 @@ function buildMemberSummary(member, context) {
     warning_summary: warnings,
     action_summary: actions,
     blacklist,
+    quarantined,
+    quarantine_role_id: quarantineRoleId,
     evidence_summary: {
       suspicious_message_count: Number(evidence.suspicious_message_count || 0),
       deleted_message_count: Number(evidence.deleted_message_count || 0),
@@ -711,6 +785,8 @@ function buildMemberSummary(member, context) {
     risk_score: riskScore,
     risk_tier: riskTier,
     risk_label: formatRiskLabel(riskTier),
+    confidence_score: confidenceScore,
+    confidence_label: confidenceLabel,
     suspicious: riskScore >= 25 || Boolean(blacklist) || hasSelfbotSuspicion,
     selfbot_suspect: hasSelfbotSuspicion,
     reasons: uniqueReasons,
@@ -786,6 +862,7 @@ async function runGuildScan(req) {
   const warningMap = buildWarningMap(req.guild.id);
   const actionMap = buildActionMap(req.guild.id);
   const blacklistMap = buildBlacklistMap(req.guildOwnerUserId || req.user.id);
+  const moduleConfigMap = buildModuleConfigMap(req.guild.id);
   const evidenceMap = new Map();
   const recentWarningsMap = buildRecentWarningsMap(req.guild.id);
   const recentActionsMap = buildRecentActionsMap(req.guild.id, evidenceMap);
@@ -797,6 +874,7 @@ async function runGuildScan(req) {
     warningMap,
     actionMap,
     blacklistMap,
+    moduleConfigMap,
     evidenceMap,
   };
 
@@ -824,6 +902,7 @@ async function runGuildScan(req) {
     total_members_hint: memberResult.total_members_hint,
     suspicious_members: members.filter((member) => member.suspicious).length,
     bots: members.filter((member) => member.bot).length,
+    quarantined: members.filter((member) => member.quarantined).length,
     critical: members.filter((member) => member.risk_tier === 'critical').length,
     high: members.filter((member) => member.risk_tier === 'high').length,
     medium: members.filter((member) => member.risk_tier === 'medium').length,

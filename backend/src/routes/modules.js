@@ -29,6 +29,123 @@ function parseConfig(rawValue) {
   }
 }
 
+const PROTECTION_PRESET_PROFILES = {
+  balanced: {
+    ANTI_SPAM: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 300000 },
+      advanced_config: { max_messages: 5, window_ms: 5000, delete_messages: true, warn_before_action: true, warn_threshold: 2 },
+    },
+    ANTI_RAID: {
+      simple_config: { action: 'kick', timeout_duration_ms: 300000, lockdown_on_raid: true },
+      advanced_config: { join_threshold: 10, join_window_ms: 10000, account_age_min_days: 7, new_account_action: 'timeout', new_account_timeout_duration_ms: 600000, raid_duration_ms: 300000 },
+    },
+    LOCKDOWN: {
+      simple_config: { trigger_on_raid: true, trigger_on_nuke: true },
+      advanced_config: { duration_ms: 300000 },
+    },
+    ANTI_NUKE: {
+      simple_config: { action: 'ban' },
+      advanced_config: { event_threshold: 3, window_ms: 15000, timeout_duration_ms: 300000 },
+    },
+    ANTI_ALT_ACCOUNT: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 600000 },
+      advanced_config: { max_account_age_days: 14, require_custom_avatar: true, suspicious_name_patterns: true },
+    },
+    ANTI_TOKEN_SCAM: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 1800000 },
+      advanced_config: {},
+    },
+    AUTO_SLOWMODE: {
+      simple_config: { slowmode_seconds: 15 },
+      advanced_config: { trigger_messages: 8, window_ms: 10000, duration_ms: 180000 },
+    },
+    AUTO_QUARANTINE: {
+      simple_config: {},
+      advanced_config: { release_after_ms: 0, on_alt_account: true, on_token_scam: true },
+    },
+    TRUST_SCORE: {
+      simple_config: { trusted_after_days: 30 },
+      advanced_config: { warning_penalty: 8, action_penalty: 10, suspicious_penalty: 14, role_bonus: 6 },
+    },
+  },
+  community: {
+    ANTI_SPAM: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 180000 },
+      advanced_config: { max_messages: 6, window_ms: 6000, delete_messages: true, warn_before_action: true, warn_threshold: 3 },
+    },
+    ANTI_RAID: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 300000, lockdown_on_raid: true },
+      advanced_config: { join_threshold: 14, join_window_ms: 12000, account_age_min_days: 5, new_account_action: 'timeout', new_account_timeout_duration_ms: 300000, raid_duration_ms: 240000 },
+    },
+    LOCKDOWN: {
+      simple_config: { trigger_on_raid: true, trigger_on_nuke: true },
+      advanced_config: { duration_ms: 240000 },
+    },
+    ANTI_NUKE: {
+      simple_config: { action: 'timeout' },
+      advanced_config: { event_threshold: 4, window_ms: 15000, timeout_duration_ms: 900000 },
+    },
+    ANTI_ALT_ACCOUNT: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 300000 },
+      advanced_config: { max_account_age_days: 10, require_custom_avatar: true, suspicious_name_patterns: true },
+    },
+    ANTI_TOKEN_SCAM: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 1200000 },
+      advanced_config: {},
+    },
+    AUTO_SLOWMODE: {
+      simple_config: { slowmode_seconds: 10 },
+      advanced_config: { trigger_messages: 10, window_ms: 12000, duration_ms: 120000 },
+    },
+    AUTO_QUARANTINE: {
+      simple_config: {},
+      advanced_config: { release_after_ms: 3600000, on_alt_account: true, on_token_scam: true },
+    },
+    TRUST_SCORE: {
+      simple_config: { trusted_after_days: 21 },
+      advanced_config: { warning_penalty: 7, action_penalty: 9, suspicious_penalty: 12, role_bonus: 6 },
+    },
+  },
+  fortress: {
+    ANTI_SPAM: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 900000 },
+      advanced_config: { max_messages: 4, window_ms: 4000, delete_messages: true, warn_before_action: false, warn_threshold: 1 },
+    },
+    ANTI_RAID: {
+      simple_config: { action: 'ban', timeout_duration_ms: 900000, lockdown_on_raid: true },
+      advanced_config: { join_threshold: 6, join_window_ms: 8000, account_age_min_days: 21, new_account_action: 'ban', new_account_timeout_duration_ms: 900000, raid_duration_ms: 600000 },
+    },
+    LOCKDOWN: {
+      simple_config: { trigger_on_raid: true, trigger_on_nuke: true },
+      advanced_config: { duration_ms: 600000 },
+    },
+    ANTI_NUKE: {
+      simple_config: { action: 'ban' },
+      advanced_config: { event_threshold: 2, window_ms: 12000, timeout_duration_ms: 900000 },
+    },
+    ANTI_ALT_ACCOUNT: {
+      simple_config: { action: 'timeout', timeout_duration_ms: 1800000 },
+      advanced_config: { max_account_age_days: 21, require_custom_avatar: true, suspicious_name_patterns: true },
+    },
+    ANTI_TOKEN_SCAM: {
+      simple_config: { action: 'blacklist', timeout_duration_ms: 1800000 },
+      advanced_config: {},
+    },
+    AUTO_SLOWMODE: {
+      simple_config: { slowmode_seconds: 20 },
+      advanced_config: { trigger_messages: 6, window_ms: 8000, duration_ms: 240000 },
+    },
+    AUTO_QUARANTINE: {
+      simple_config: {},
+      advanced_config: { release_after_ms: 0, on_alt_account: true, on_token_scam: true },
+    },
+    TRUST_SCORE: {
+      simple_config: { trusted_after_days: 45 },
+      advanced_config: { warning_penalty: 10, action_penalty: 12, suspicious_penalty: 18, role_bonus: 5 },
+    },
+  },
+};
+
 function sanitizeModuleConfigs(type, simpleConfig, advancedConfig) {
   const nextSimple = { ...simpleConfig };
   const nextAdvanced = { ...advancedConfig };
@@ -63,6 +180,47 @@ function sanitizeModuleConfigs(type, simpleConfig, advancedConfig) {
     simple_config: nextSimple,
     advanced_config: nextAdvanced,
   };
+}
+
+function applyProtectionPreset(guildId, profile, now) {
+  const preset = PROTECTION_PRESET_PROFILES[profile] || PROTECTION_PRESET_PROFILES.balanced;
+  const existingRows = db.findMany('modules', { guild_id: guildId });
+
+  for (const [moduleType, overrides] of Object.entries(preset)) {
+    const definition = MODULE_DEFINITIONS[moduleType];
+    if (!definition) continue;
+
+    const existing = existingRows.find((row) => row.module_type === moduleType) || null;
+    const currentSimple = { ...definition.simple_config, ...parseConfig(existing?.simple_config) };
+    const currentAdvanced = { ...definition.advanced_config, ...parseConfig(existing?.advanced_config) };
+    const sanitized = sanitizeModuleConfigs(
+      moduleType,
+      { ...currentSimple, ...(overrides.simple_config || {}) },
+      { ...currentAdvanced, ...(overrides.advanced_config || {}) }
+    );
+
+    if (existing) {
+      db.db.prepare(
+        'UPDATE modules SET enabled = 1, simple_config = ?, advanced_config = ?, updated_at = ? WHERE id = ?'
+      ).run(
+        JSON.stringify(sanitized.simple_config),
+        JSON.stringify(sanitized.advanced_config),
+        now,
+        existing.id
+      );
+    } else {
+      db.insert('modules', {
+        id: uuidv4(),
+        guild_id: guildId,
+        module_type: moduleType,
+        enabled: 1,
+        simple_config: JSON.stringify(sanitized.simple_config),
+        advanced_config: JSON.stringify(sanitized.advanced_config),
+        created_at: now,
+        updated_at: now,
+      });
+    }
+  }
 }
 
 function buildModuleResponse(type, definition, dbModule) {
@@ -253,6 +411,10 @@ router.patch('/:moduleType/config', validate(moduleConfigSchema), async (req, re
       created_at: now,
       updated_at: now,
     });
+  }
+
+  if (type === 'PROTECTION_PRESETS') {
+    applyProtectionPreset(req.guild.id, newSimple.profile, now);
   }
 
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);

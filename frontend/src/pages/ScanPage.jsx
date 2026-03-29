@@ -119,6 +119,16 @@ function RiskBadge({ tier, label }) {
   return <span className={tone}>{label}</span>
 }
 
+function ConfidenceBadge({ label, score }) {
+  const tone = score >= 75
+    ? 'badge-online'
+    : score >= 45
+      ? 'badge-warning'
+      : 'badge-error'
+
+  return <span className={tone}>{`Confiance ${label}`}</span>
+}
+
 function RiskBar({ score }) {
   const color = score >= 85 ? 'from-red-400 via-red-500 to-pink-500' : score >= 55 ? 'from-orange-400 via-amber-400 to-yellow-300' : score >= 25 ? 'from-cyan-400 via-sky-400 to-violet-400' : 'from-white/20 via-white/30 to-white/35'
 
@@ -147,8 +157,10 @@ function MemberCard({ member, active, onClick }) {
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-display font-700 text-white truncate">{member.display_name || member.username || member.id}</p>
               <RiskBadge tier={member.risk_tier} label={member.risk_label} />
+              <ConfidenceBadge label={member.confidence_label} score={member.confidence_score} />
               {member.bot ? <span className="badge-offline">Bot</span> : null}
               {member.selfbot_suspect ? <span className="badge-error">Self-bot suspect</span> : null}
+              {member.quarantined ? <span className="badge-warning">Quarantaine</span> : null}
             </div>
             <p className="mt-1 truncate text-sm text-white/45">@{member.username || member.id}</p>
           </div>
@@ -164,6 +176,7 @@ function MemberCard({ member, active, onClick }) {
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1">{member.warning_summary.active_points || 0} pt actifs</span>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1">{member.action_summary.total_actions || 0} action(s)</span>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1">{member.evidence_summary.suspicious_message_count || 0} activite(s) suspecte(s)</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1">Confiance {member.confidence_score || 0}</span>
         </div>
 
         <div className="space-y-2">
@@ -713,12 +726,13 @@ export default function ScanPage() {
           </div>
         </div>
 
-        <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <MetricCard label="Scannes" value={scan?.summary?.scanned_members || 0} hint={scan?.partial ? 'analyse partielle stable' : 'analyse complete'} />
           <MetricCard label="Suspects" value={scan?.summary?.suspicious_members || 0} tone="border-amber-500/20 bg-amber-500/10 text-amber-100" />
           <MetricCard label="Critiques" value={scan?.summary?.critical || 0} tone="border-red-500/20 bg-red-500/10 text-red-100" />
           <MetricCard label="\u00c9lev\u00e9s" value={scan?.summary?.high || 0} tone="border-orange-500/20 bg-orange-500/10 text-orange-100" />
           <MetricCard label="Bots" value={scan?.summary?.bots || 0} tone="border-violet-500/20 bg-violet-500/10 text-violet-100" />
+          <MetricCard label="Quarantaine" value={scan?.summary?.quarantined || 0} tone="border-cyan-500/20 bg-cyan-500/10 text-cyan-100" />
         </div>
 
         {scan?.partial ? (
@@ -842,9 +856,11 @@ export default function ScanPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="font-display font-800 text-2xl text-white truncate">{detail.display_name || detail.username || detail.id}</h2>
                         <RiskBadge tier={detail.risk_tier} label={detail.risk_label} />
+                        <ConfidenceBadge label={detail.confidence_label} score={detail.confidence_score} />
                         {detail.bot ? <span className="badge-offline">Bot</span> : null}
                         {detail.selfbot_suspect ? <span className="badge-error">Self-bot suspect</span> : null}
                         {detail.blacklist ? <span className="badge-warning">Blacklist reseau</span> : null}
+                        {detail.quarantined ? <span className="badge-warning">Quarantaine</span> : null}
                       </div>
                       <p className="mt-1 text-sm text-white/45">@{detail.username || detail.id}</p>
                       <div className="mt-3 flex flex-wrap gap-3 text-xs font-mono text-white/35">
@@ -859,9 +875,11 @@ export default function ScanPage() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <MetricCard label="Score" value={detail.risk_score || 0} />
+                    <MetricCard label="Confiance" value={detail.confidence_score || 0} hint={detail.confidence_label || 'Fragile'} />
                     <MetricCard label="Activité suspecte" value={detail.evidence_summary?.suspicious_message_count || detail.suspicious_messages?.length || 0} />
                     <MetricCard label="Warnings" value={detail.warning_summary?.active_points || 0} />
                     <MetricCard label="Actions" value={detail.action_summary?.total_actions || 0} />
+                    <MetricCard label="Quarantaine" value={detail.quarantined ? 'Oui' : 'Non'} />
                   </div>
 
                   <div className="flex flex-wrap gap-3">

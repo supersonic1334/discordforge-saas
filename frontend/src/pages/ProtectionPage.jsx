@@ -15,12 +15,20 @@ const MODULE_ORDER = [
   'ANTI_INVITE',
   'ANTI_MASS_MENTION',
   'ANTI_RAID',
+  'LOCKDOWN',
+  'ANTI_NUKE',
+  'ANTI_ALT_ACCOUNT',
   'ANTI_BOT',
+  'ANTI_TOKEN_SCAM',
+  'AUTO_SLOWMODE',
   'WARNING_SYSTEM',
   'AUTO_MOD',
+  'AUTO_QUARANTINE',
+  'TRUST_SCORE',
   'WELCOME_MESSAGE',
   'AUTO_ROLE',
   'LOGGING',
+  'PROTECTION_PRESETS',
   'CUSTOM_COMMANDS',
 ]
 
@@ -45,12 +53,20 @@ const MODULE_ICONS = {
   ANTI_INVITE: Link2,
   ANTI_MASS_MENTION: AtSign,
   ANTI_RAID: AlertTriangle,
+  LOCKDOWN: Shield,
+  ANTI_NUKE: AlertTriangle,
+  ANTI_ALT_ACCOUNT: UserPlus,
   ANTI_BOT: Bot,
+  ANTI_TOKEN_SCAM: Link2,
+  AUTO_SLOWMODE: RefreshCw,
   WARNING_SYSTEM: FileText,
   AUTO_MOD: Sparkles,
+  AUTO_QUARANTINE: UserPlus,
+  TRUST_SCORE: Sparkles,
   WELCOME_MESSAGE: Mail,
   AUTO_ROLE: UserPlus,
   LOGGING: FileText,
+  PROTECTION_PRESETS: Settings,
   CUSTOM_COMMANDS: Terminal,
 }
 
@@ -182,6 +198,38 @@ const UI = {
       spamNote: 'Tous les messages envoyes trop vite comptent, meme si le texte change.',
       warningNote: "Tu definis ici des paliers simples a comprendre, sans script ni JSON.",
       linkNote: 'Le message bloque est supprime, puis la sanction tombe si la personne recommence trop souvent.',
+      triggerOnRaid: 'Declencher pendant un raid',
+      triggerOnNuke: 'Declencher pendant un nuke',
+      excludedChannels: 'Salons ignores par le lockdown',
+      lockdownDuration: 'Duree du lockdown',
+      eventThreshold: 'Actions destructives avant sanction',
+      whitelistUsers: 'Utilisateurs autorises',
+      maxAccountAge: 'Age max du compte (jours)',
+      requireCustomAvatar: 'Exiger un avatar personnalise',
+      suspiciousNames: 'Surveiller les pseudos suspects',
+      slowmodeSeconds: 'Slowmode applique (secondes)',
+      triggerMessages: 'Messages rapides avant slowmode',
+      quarantineRole: 'Role de quarantaine',
+      releaseAfter: 'Fin automatique de quarantaine',
+      quarantineOnAlt: 'Quarantaine sur anti-alt',
+      quarantineOnToken: 'Quarantaine sur scam token',
+      trustedAfterDays: 'Compte fiable apres (jours)',
+      warningPenalty: 'Malus par point actif',
+      actionPenalty: 'Malus par action staff',
+      suspiciousPenalty: 'Malus par signal suspect',
+      roleBonus: 'Bonus par role utile',
+      presetProfile: 'Profil de protection',
+      presetBalanced: 'Equilibre',
+      presetCommunity: 'Communaute',
+      presetFortress: 'Forteresse',
+      lockdownNote: 'Verrouille temporairement les salons texte quand une attaque est detectee.',
+      antiNukeNote: 'Surveille les creations et suppressions rapides de salons et roles via les audit logs Discord.',
+      altNote: 'Repere les comptes recents, sans avatar et aux pseudos suspects des leur arrivee.',
+      tokenScamNote: 'Supprime les messages de scam token, phishing ou cadeau piege avant qu ils circulent.',
+      slowmodeNote: 'Active un slowmode temporaire quand un salon explose soudainement.',
+      quarantineNote: 'Place automatiquement les profils suspects dans un role isole sans bannir trop vite.',
+      trustNote: 'Ajuste le score de confiance visible dans Scan pour mieux prioriser les fiches.',
+      presetNote: 'Applique en un clic un profil coherent sur plusieurs modules sans toucher aux roles et salons deja choisis.',
     },
   },
   en: {
@@ -298,6 +346,38 @@ const UI = {
       spamNote: 'All messages sent too quickly count, even if the text changes.',
       warningNote: 'You define clear sanction steps here, without raw script or JSON.',
       linkNote: 'The blocked message is deleted, then the sanction is applied if the user keeps doing it.',
+      triggerOnRaid: 'Trigger during raid',
+      triggerOnNuke: 'Trigger during nuke',
+      excludedChannels: 'Channels excluded from lockdown',
+      lockdownDuration: 'Lockdown duration',
+      eventThreshold: 'Destructive actions before sanction',
+      whitelistUsers: 'Allowed users',
+      maxAccountAge: 'Max account age (days)',
+      requireCustomAvatar: 'Require a custom avatar',
+      suspiciousNames: 'Watch suspicious usernames',
+      slowmodeSeconds: 'Applied slowmode (seconds)',
+      triggerMessages: 'Fast messages before slowmode',
+      quarantineRole: 'Quarantine role',
+      releaseAfter: 'Automatic quarantine release',
+      quarantineOnAlt: 'Quarantine on anti-alt',
+      quarantineOnToken: 'Quarantine on token scam',
+      trustedAfterDays: 'Trusted after (days)',
+      warningPenalty: 'Penalty per active point',
+      actionPenalty: 'Penalty per staff action',
+      suspiciousPenalty: 'Penalty per suspicious signal',
+      roleBonus: 'Bonus per useful role',
+      presetProfile: 'Protection profile',
+      presetBalanced: 'Balanced',
+      presetCommunity: 'Community',
+      presetFortress: 'Fortress',
+      lockdownNote: 'Temporarily locks text channels when a raid or destructive burst is detected.',
+      antiNukeNote: 'Watches rapid channel and role destruction through Discord audit logs.',
+      altNote: 'Flags fresh accounts, default avatars, and suspicious names right when they join.',
+      tokenScamNote: 'Removes token scam, phishing, and fake gift messages before they spread.',
+      slowmodeNote: 'Turns on slowmode for a short time when a channel suddenly spikes.',
+      quarantineNote: 'Moves risky profiles into an isolated role without banning too quickly.',
+      trustNote: 'Tunes the confidence score shown in Scan so staff can prioritize better.',
+      presetNote: 'Applies a full protection profile in one save while keeping your selected roles and channels.',
     },
   },
   es: {
@@ -414,6 +494,38 @@ const UI = {
       spamNote: 'Todos los mensajes enviados demasiado rapido cuentan, aunque el texto cambie.',
       warningNote: 'Aqui defines etapas claras, sin script ni JSON en bruto.',
       linkNote: 'El mensaje bloqueado se elimina y luego llega la sancion si la persona insiste.',
+      triggerOnRaid: 'Activar durante raid',
+      triggerOnNuke: 'Activar durante nuke',
+      excludedChannels: 'Canales ignorados por el lockdown',
+      lockdownDuration: 'Duracion del lockdown',
+      eventThreshold: 'Acciones destructivas antes de sancion',
+      whitelistUsers: 'Usuarios autorizados',
+      maxAccountAge: 'Edad maxima de la cuenta (dias)',
+      requireCustomAvatar: 'Exigir avatar personalizado',
+      suspiciousNames: 'Vigilar nombres sospechosos',
+      slowmodeSeconds: 'Slowmode aplicado (segundos)',
+      triggerMessages: 'Mensajes rapidos antes del slowmode',
+      quarantineRole: 'Rol de cuarentena',
+      releaseAfter: 'Fin automatica de cuarentena',
+      quarantineOnAlt: 'Cuarentena por anti-alt',
+      quarantineOnToken: 'Cuarentena por scam token',
+      trustedAfterDays: 'Cuenta fiable despues de (dias)',
+      warningPenalty: 'Penalizacion por punto activo',
+      actionPenalty: 'Penalizacion por accion staff',
+      suspiciousPenalty: 'Penalizacion por senal sospechosa',
+      roleBonus: 'Bonus por rol util',
+      presetProfile: 'Perfil de proteccion',
+      presetBalanced: 'Equilibrado',
+      presetCommunity: 'Comunidad',
+      presetFortress: 'Fortaleza',
+      lockdownNote: 'Bloquea temporalmente los canales de texto cuando se detecta una oleada o un nuke.',
+      antiNukeNote: 'Vigila creaciones y borrados rapidos de canales y roles mediante los audit logs de Discord.',
+      altNote: 'Detecta cuentas recientes, sin avatar y con nombres sospechosos al entrar.',
+      tokenScamNote: 'Elimina mensajes de scam token, phishing o regalos falsos antes de que circulen.',
+      slowmodeNote: 'Activa slowmode temporal cuando un canal explota de golpe.',
+      quarantineNote: 'Mueve perfiles de riesgo a un rol aislado sin banear demasiado rapido.',
+      trustNote: 'Ajusta la puntuacion de confianza visible en Scan para priorizar mejor.',
+      presetNote: 'Aplica un perfil completo en un clic sin perder roles ni canales ya elegidos.',
     },
   },
 }
@@ -567,10 +679,48 @@ function getFieldDefs(ui) {
       { path: 'advanced_config.raid_duration_ms', type: 'duration', label: ui.labels.raidDuration },
       { path: 'advanced_config.alert_channel_id', type: 'channel-select', label: ui.labels.alertChannel },
     ],
+    LOCKDOWN: [
+      { path: 'simple_config.trigger_on_raid', type: 'boolean', label: ui.labels.triggerOnRaid },
+      { path: 'simple_config.trigger_on_nuke', type: 'boolean', label: ui.labels.triggerOnNuke },
+      { path: 'advanced_config.duration_ms', type: 'duration', label: ui.labels.lockdownDuration },
+      { path: 'advanced_config.excluded_channels', type: 'channels', label: ui.labels.excludedChannels },
+      { path: 'advanced_config.alert_channel_id', type: 'channel-select', label: ui.labels.alertChannel },
+    ],
+    ANTI_NUKE: [
+      { path: 'simple_config.action', type: 'select', label: ui.labels.action, options: buildActionOptions(ui, ['timeout', 'kick', 'ban', 'blacklist']) },
+      { path: 'advanced_config.event_threshold', type: 'number', label: ui.labels.eventThreshold, min: 2, max: 10 },
+      { path: 'advanced_config.window_ms', type: 'duration', label: ui.labels.window },
+      { path: 'advanced_config.timeout_duration_ms', type: 'duration', label: ui.labels.timeoutDuration, when: (form) => form['simple_config.action'] === 'timeout', help: ui.labels.timeoutMinimum },
+      { path: 'advanced_config.whitelist_users', type: 'textarea-list', label: ui.labels.whitelistUsers, rows: 3 },
+      { path: 'advanced_config.whitelist_roles', type: 'roles', label: ui.labels.whitelistRoles },
+      { path: 'advanced_config.alert_channel_id', type: 'channel-select', label: ui.labels.alertChannel },
+    ],
+    ANTI_ALT_ACCOUNT: [
+      { path: 'simple_config.action', type: 'select', label: ui.labels.action, options: buildActionOptions(ui, ['timeout', 'kick', 'ban', 'blacklist']) },
+      { path: 'simple_config.timeout_duration_ms', type: 'duration', label: ui.labels.timeoutDuration, when: (form) => form['simple_config.action'] === 'timeout', help: ui.labels.timeoutMinimum },
+      { path: 'advanced_config.max_account_age_days', type: 'number', label: ui.labels.maxAccountAge, min: 0, max: 365 },
+      { path: 'advanced_config.require_custom_avatar', type: 'boolean', label: ui.labels.requireCustomAvatar },
+      { path: 'advanced_config.suspicious_name_patterns', type: 'boolean', label: ui.labels.suspiciousNames },
+      { path: 'advanced_config.alert_channel_id', type: 'channel-select', label: ui.labels.alertChannel },
+    ],
     ANTI_BOT: [
       { path: 'simple_config.action', type: 'select', label: ui.labels.action, options: buildActionOptions(ui, ['kick', 'ban', 'blacklist']) },
       { path: 'advanced_config.whitelist_bots', type: 'textarea-list', label: ui.labels.botIds, rows: 4 },
       { path: 'advanced_config.whitelist_roles', type: 'roles', label: ui.labels.whitelistRoles },
+    ],
+    ANTI_TOKEN_SCAM: [
+      { path: 'simple_config.action', type: 'select', label: ui.labels.action, options: buildActionOptions(ui, ['delete', 'timeout', 'kick', 'ban', 'blacklist']) },
+      { path: 'simple_config.timeout_duration_ms', type: 'duration', label: ui.labels.timeoutDuration, when: (form) => form['simple_config.action'] === 'timeout', help: ui.labels.timeoutMinimum },
+      { path: 'advanced_config.whitelist_roles', type: 'roles', label: ui.labels.whitelistRoles },
+      { path: 'advanced_config.whitelist_channels', type: 'channels', label: ui.labels.whitelistChannels },
+      { path: 'advanced_config.alert_channel_id', type: 'channel-select', label: ui.labels.alertChannel },
+    ],
+    AUTO_SLOWMODE: [
+      { path: 'simple_config.slowmode_seconds', type: 'number', label: ui.labels.slowmodeSeconds, min: 1, max: 21600 },
+      { path: 'advanced_config.trigger_messages', type: 'number', label: ui.labels.triggerMessages, min: 2, max: 50 },
+      { path: 'advanced_config.window_ms', type: 'duration', label: ui.labels.window },
+      { path: 'advanced_config.duration_ms', type: 'duration', label: ui.labels.lockdownDuration },
+      { path: 'advanced_config.whitelist_channels', type: 'channels', label: ui.labels.whitelistChannels },
     ],
     WARNING_SYSTEM: [
       { path: 'simple_config.escalate_automatically', type: 'boolean', label: ui.labels.escalation },
@@ -587,6 +737,19 @@ function getFieldDefs(ui) {
       { path: 'advanced_config.dm_warning', type: 'boolean', label: ui.labels.dmWarning, when: (form) => form['advanced_config.punishment_action'] === 'warn' },
       { path: 'advanced_config.whitelist_roles', type: 'roles', label: ui.labels.whitelistRoles },
       { path: 'advanced_config.whitelist_channels', type: 'channels', label: ui.labels.whitelistChannels },
+    ],
+    AUTO_QUARANTINE: [
+      { path: 'simple_config.role_id', type: 'role-select', label: ui.labels.quarantineRole },
+      { path: 'advanced_config.release_after_ms', type: 'duration', label: ui.labels.releaseAfter },
+      { path: 'advanced_config.on_alt_account', type: 'boolean', label: ui.labels.quarantineOnAlt },
+      { path: 'advanced_config.on_token_scam', type: 'boolean', label: ui.labels.quarantineOnToken },
+    ],
+    TRUST_SCORE: [
+      { path: 'simple_config.trusted_after_days', type: 'number', label: ui.labels.trustedAfterDays, min: 1, max: 3650 },
+      { path: 'advanced_config.warning_penalty', type: 'number', label: ui.labels.warningPenalty, min: 1, max: 50 },
+      { path: 'advanced_config.action_penalty', type: 'number', label: ui.labels.actionPenalty, min: 1, max: 50 },
+      { path: 'advanced_config.suspicious_penalty', type: 'number', label: ui.labels.suspiciousPenalty, min: 1, max: 50 },
+      { path: 'advanced_config.role_bonus', type: 'number', label: ui.labels.roleBonus, min: 0, max: 20 },
     ],
     WELCOME_MESSAGE: [
       { path: 'simple_config.channel_id', type: 'channel-select', label: ui.labels.channel },
@@ -607,6 +770,18 @@ function getFieldDefs(ui) {
       { path: 'advanced_config.ignore_bots', type: 'boolean', label: ui.labels.ignoreBots },
       { path: 'advanced_config.ignore_channels', type: 'channels', label: ui.labels.ignoreChannels },
     ],
+    PROTECTION_PRESETS: [
+      {
+        path: 'simple_config.profile',
+        type: 'select',
+        label: ui.labels.presetProfile,
+        options: [
+          { value: 'balanced', label: ui.labels.presetBalanced },
+          { value: 'community', label: ui.labels.presetCommunity },
+          { value: 'fortress', label: ui.labels.presetFortress },
+        ],
+      },
+    ],
     CUSTOM_COMMANDS: [
       { path: 'simple_config.prefix', type: 'text', label: ui.labels.prefix, placeholder: '!' },
       { path: 'advanced_config.case_sensitive', type: 'boolean', label: ui.labels.caseSensitive },
@@ -620,7 +795,7 @@ function formatFieldValue(field, rawValue) {
   if (field.type === 'textarea-list') return normalizeList(rawValue).join('\n')
   if (field.type === 'roles' || field.type === 'channels' || field.type === 'guilds' || field.type === 'checklist') return normalizeList(rawValue)
   if (field.type === 'warning-steps') return normalizeList(rawValue).map((step) => createWarningStep(step))
-  if (field.type === 'channel-select') return rawValue || ''
+  if (field.type === 'channel-select' || field.type === 'role-select') return rawValue || ''
   if (field.type === 'boolean') return !!rawValue
   if (field.type === 'number') return Number(rawValue ?? field.min ?? 0)
   return rawValue ?? ''
@@ -639,7 +814,7 @@ function serializeFieldValue(field, rawValue) {
   if (field.type === 'textarea-list') return splitLines(rawValue)
   if (field.type === 'roles' || field.type === 'channels' || field.type === 'guilds' || field.type === 'checklist') return normalizeList(rawValue)
   if (field.type === 'warning-steps') return serializeWarningSteps(rawValue)
-  if (field.type === 'channel-select') return rawValue || null
+  if (field.type === 'channel-select' || field.type === 'role-select') return rawValue || null
   if (field.type === 'number') return Number(rawValue || 0)
   if (field.type === 'boolean') return !!rawValue
   return typeof rawValue === 'string' ? rawValue.trim() : rawValue
@@ -925,6 +1100,19 @@ function ModuleField({ field, formState, setFormState, ui, roles, channels, guil
         </select>
       )}
 
+      {field.type === 'role-select' && (
+        <select
+          className="select-field"
+          value={value}
+          onChange={(event) => updateValue(event.target.value)}
+        >
+          <option value="">{ui.noRoles}</option>
+          {roleOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      )}
+
       {field.type === 'checklist' && (
         <MultiToggleList
           items={field.options}
@@ -962,9 +1150,17 @@ function getModuleNote(moduleType, formState, ui) {
   if (moduleType === 'WARNING_SYSTEM') return ui.labels.warningNote
   if (moduleType === 'AUTO_MOD') return ui.labels.autoModNote
   if (moduleType === 'ANTI_RAID') return ui.labels.antiRaidNote
+  if (moduleType === 'LOCKDOWN') return ui.labels.lockdownNote
+  if (moduleType === 'ANTI_NUKE') return ui.labels.antiNukeNote
+  if (moduleType === 'ANTI_ALT_ACCOUNT') return ui.labels.altNote
   if (moduleType === 'ANTI_BOT') return ui.labels.antiBotNote
+  if (moduleType === 'ANTI_TOKEN_SCAM') return ui.labels.tokenScamNote
+  if (moduleType === 'AUTO_SLOWMODE') return ui.labels.slowmodeNote
+  if (moduleType === 'AUTO_QUARANTINE') return ui.labels.quarantineNote
+  if (moduleType === 'TRUST_SCORE') return ui.labels.trustNote
   if (moduleType === 'WELCOME_MESSAGE') return ''
   if (moduleType === 'LOGGING') return ui.labels.loggingNote
+  if (moduleType === 'PROTECTION_PRESETS') return ui.labels.presetNote
   if (moduleType === 'CUSTOM_COMMANDS') return ui.labels.commandsNote
   return ''
 }

@@ -192,7 +192,10 @@ async function handleAntiRaid(member, config, botToken, ownerUserId) {
     if (ac.new_account_action) {
       await punishSecurityAction(ac.new_account_action, guild, user, botToken, 'Anti-Raid: account too new', ac.new_account_timeout_duration_ms, 'ANTI_RAID', ownerUserId);
     }
-    return;
+    return {
+      raidTriggered: false,
+      suspiciousNewAccount: true,
+    };
   }
 
   const threshold = ac.join_threshold || 10;
@@ -220,10 +223,19 @@ async function handleAntiRaid(member, config, botToken, ownerUserId) {
 
     if (data.raidActive && now < data.raidUntil) {
       await punishSecurityAction(sc.action || 'kick', guild, user, botToken, 'Anti-Raid: raid in progress', sc.timeout_duration_ms, 'ANTI_RAID', ownerUserId);
+      return {
+        raidTriggered: true,
+        suspiciousNewAccount: false,
+      };
     } else {
       data.raidActive = false;
     }
   }
+
+  return {
+    raidTriggered: false,
+    suspiciousNewAccount: false,
+  };
 }
 
 // ── Shared punishment helper ──────────────────────────────────────────────────

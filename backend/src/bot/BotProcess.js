@@ -11,6 +11,7 @@ const { safeSendModerationDm } = require('../services/moderationDmService');
 const { MODULE_DEFINITIONS } = require('./modules/definitions');
 const { handleAntiSpam } = require('./modules/antiSpam');
 const { handleAntiLink, handleAntiInvite, handleAntiMassMention, handleAntiBotJoin, handleAntiRaid, punishSecurityAction } = require('./modules/securityModules');
+const { activateLockdown, handleAntiAltAccount, handleAntiNukeEvent, handleAntiTokenScam, handleAutoSlowmode } = require('./modules/advancedProtection');
 const { handleWelcomeMessage, handleAutoRole, handleLogging, handleCustomCommand } = require('./modules/utilityModules');
 const { addWarning, checkEscalation, logBotEvent } = require('./utils/modHelpers');
 const { syncNativeAutoModRules, getManagedRuleKey, RULE_KEYS } = require('../services/discordAutoModService');
@@ -213,6 +214,10 @@ class BotProcess extends EventEmitter {
     c.on(Events.GuildBanAdd, (ban) => this._onBanAdd(ban));
     c.on(Events.GuildMemberUpdate, (oldMember, newMember) => this._onMemberUpdate(oldMember, newMember));
     c.on(Events.AutoModerationActionExecution, (execution) => this._onAutoModerationActionExecution(execution));
+    c.on(Events.ChannelCreate, (channel) => this._onGuildStructureEvent('channel_create', channel));
+    c.on(Events.ChannelDelete, (channel) => this._onGuildStructureEvent('channel_delete', channel));
+    c.on(Events.GuildRoleCreate, (role) => this._onGuildStructureEvent('role_create', role));
+    c.on(Events.GuildRoleDelete, (role) => this._onGuildStructureEvent('role_delete', role));
 
     c.on(Events.ShardDisconnect, (event, shardId) => {
       logger.warn(`Bot disconnected (shard ${shardId}, code ${event.code})`, { userId: this.userId });
@@ -343,6 +348,7 @@ class BotProcess extends EventEmitter {
 
     const guildId = message.guild.id;
     const configs = await this._getEnabledModules(guildId);
+    const internalGuildId = this._resolveInternalGuildId(guildId);
 
     // Security modules — process message content
     const promises = [];
@@ -358,6 +364,12 @@ class BotProcess extends EventEmitter {
     }
     if (configs.ANTI_MASS_MENTION?.enabled) {
       promises.push(handleAntiMassMention(message, configs.ANTI_MASS_MENTION, this.token, this.userId).catch((e) => logger.error(`AntiMassMention error: ${e.message}`)));
+    }
+    if (configs.ANTI_TOKEN_SCAM?.enabled) {
+      promises.push(handleAntiTokenScam(message, configs.ANTI_TOKEN_SCAM, this.token, this.userId, internalGuildId, configs).catch((e) => logger.error(`AntiTokenScam error: ${e.message}`)));
+    }
+    if (configs.AUTO_SLOWMODE?.enabled) {
+      promises.push(handleAutoSlowmode(message, configs.AUTO_SLOWMODE, this.token, this.userId, internalGuildId).catch((e) => logger.error(`AutoSlowmode error: ${e.message}`)));
     }
 
     // Custom commands
@@ -447,9 +459,16 @@ class BotProcess extends EventEmitter {
     const internalId = guildRow?.id;
 
     const promises = [];
+    let raidResult = { raidTriggered: false, suspiciousNewAccount: false };
 
     if (configs.ANTI_RAID?.enabled) {
-      promises.push(handleAntiRaid(member, configs.ANTI_RAID, this.token, this.userId).catch((e) => logger.error(`AntiRaid error: ${e.message}`)));
+      raidResult = await handleAntiRaid(member, configs.ANTI_RAID, this.token, this.userId).catch((e) => {
+        logger.error(`AntiRaid error: ${e.message}`);
+        return { raidTriggered: false, suspiciousNewAccount: false };
+      });
+    }
+    if (configs.ANTI_ALT_ACCOUNT?.enabled && !raidResult?.raidTriggered && !raidResult?.suspiciousNewAccount) {
+      promises.push(handleAntiAltAccount(member, configs.ANTI_ALT_ACCOUNT, this.token, this.userId, internalId, configs).catch((e) => logger.error(`AntiAlt error: ${e.message}`)));
     }
     if (configs.ANTI_BOT?.enabled) {
       promises.push(handleAntiBotJoin(member, configs.ANTI_BOT, this.token, this.userId).catch((e) => logger.error(`AntiBot error: ${e.message}`)));
@@ -465,6 +484,17 @@ class BotProcess extends EventEmitter {
     }
 
     await Promise.allSettled(promises);
+    if (configs.LOCKDOWN?.enabled && configs.LOCKDOWN.simple_config?.trigger_on_raid && raidResult?.raidTriggered) {
+      await activateLockdown({
+        guild: member.guild,
+        configs,
+        botToken: this.token,
+        ownerUserId: this.userId,
+        internalGuildId: internalId,
+        source: 'anti_raid',
+        reason: 'Lockdown automatique apres detection anti-raid',
+      }).catch((e) => logger.error(`Lockdown error: ${e.message}`));
+    }
     this._notifyScanUpdate(member.guild.id, {
       memberId: member.user?.id || null,
       reason: 'member_join',
@@ -683,6 +713,39 @@ class BotProcess extends EventEmitter {
     } catch (error) {
       logger.warn(`Native AutoMod execution failed for ${ruleName}: ${error.message}`, { userId: this.userId, guildId: guild.id });
     }
+  }
+
+  async _onGuildStructureEvent(kind, entity) {
+    const guild = entity?.guild;
+    if (!guild) return;
+
+    const configs = await this._getEnabledModules(guild.id);
+    if (!configs.ANTI_NUKE?.enabled) return;
+
+    const auditActionType = (
+      kind === 'channel_create' ? 10
+        : kind === 'channel_delete' ? 12
+          : kind === 'role_create' ? 30
+            : kind === 'role_delete' ? 32
+              : null
+    );
+    if (!auditActionType) return;
+
+    const internalGuildId = this._resolveInternalGuildId(guild.id);
+
+    await handleAntiNukeEvent({
+      guild,
+      kind,
+      auditActionType,
+      targetId: entity?.id || null,
+      targetLabel: entity?.name || entity?.id || kind,
+    }, configs.ANTI_NUKE, this.token, this.userId, internalGuildId, configs).catch((error) => {
+      logger.error(`AntiNuke event error: ${error.message}`);
+    });
+
+    this._notifyScanUpdate(guild.id, {
+      reason: 'anti_nuke_event',
+    });
   }
 
   // ── Module Config Cache ─────────────────────────────────────────────────────
