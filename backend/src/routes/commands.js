@@ -10,6 +10,7 @@ const db = require('../database');
 const botManager = require('../services/botManager');
 const aiService = require('../services/aiService');
 const logger = require('../utils/logger').child('CommandsRoutes');
+const { logBotEvent } = require('../bot/utils/modHelpers');
 
 router.use(requireAuth, requireBotToken, requireGuildOwner);
 
@@ -392,6 +393,21 @@ function scheduleCommandSync(userId, discordGuildId) {
   scheduledCommandSyncs.set(key, existing);
 }
 
+function logCommandSiteAction(req, actionLabel, command, details = []) {
+  const label = command?.display_trigger || command?.trigger || command?.command_name || 'Commande';
+  logBotEvent(req.user.id, req.guild.id, 'info', 'site_action', `${req.user.username} - ${actionLabel} - ${label}`, {
+    action: actionLabel,
+    action_label: actionLabel,
+    actor_name: req.user.username,
+    actor_user_id: req.user.id,
+    target_label: label,
+    command_id: command?.id || null,
+    command_trigger: command?.display_trigger || command?.trigger || null,
+    command_type: command?.command_type || null,
+    details,
+  });
+}
+
 function extractCommandDraft(text) {
   const match = String(text || '').match(/```command\s*([\s\S]*?)```/i);
   if (!match) return null;
@@ -682,10 +698,16 @@ router.post('/assistant', validate(commandAssistantSchema), async (req, res, nex
     const savedId = saveCommand(req.guild.id, payload, currentCommand?.id || null);
     const saved = db.raw('SELECT * FROM custom_commands WHERE id = ?', [savedId])[0];
     scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
+    const mappedSaved = mapCommandRow(saved);
+    logCommandSiteAction(req, currentCommand ? 'Commande modifiee par IA' : 'Commande creee par IA', mappedSaved, [
+      `Declencheur : ${mappedSaved.display_trigger}`,
+      `Mode : ${mappedSaved.command_type}`,
+      currentCommand ? 'Type : edition' : 'Type : creation',
+    ]);
 
     res.json({
       assistant_message: String(completion.text || '').replace(/```command[\s\S]*?```/gi, '').replace(/\[variety-seed:[^\]]*\]/g, '').trim(),
-      command: mapCommandRow(saved),
+      command: mappedSaved,
       quota: completion.quota,
       usage: completion.usage,
       updated: !!currentCommand,
@@ -707,8 +729,14 @@ router.post('/', validate(customCommandSchema), async (req, res) => {
   const id = saveCommand(req.guild.id, payload);
   const created = db.raw('SELECT * FROM custom_commands WHERE id = ?', [id])[0];
   scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
+  const mappedCreated = mapCommandRow(created);
+  logCommandSiteAction(req, 'Commande creee', mappedCreated, [
+    `Declencheur : ${mappedCreated.display_trigger}`,
+    `Mode : ${mappedCreated.command_type}`,
+    mappedCreated.description ? `Description : ${mappedCreated.description}` : '',
+  ].filter(Boolean));
 
-  res.status(201).json({ message: 'Command created', command: mapCommandRow(created) });
+  res.status(201).json({ message: 'Command created', command: mappedCreated });
 });
 
 router.patch('/:id', validate(customCommandSchema.partial()), async (req, res) => {
@@ -730,11 +758,21 @@ router.patch('/:id', validate(customCommandSchema.partial()), async (req, res) =
   saveCommand(req.guild.id, payload, row.id);
   const updated = db.raw('SELECT * FROM custom_commands WHERE id = ?', [row.id])[0];
   scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
+  const mappedUpdated = mapCommandRow(updated);
+  logCommandSiteAction(req, 'Commande modifiee', mappedUpdated, [
+    `Declencheur : ${mappedUpdated.display_trigger}`,
+    `Mode : ${mappedUpdated.command_type}`,
+    mappedUpdated.description ? `Description : ${mappedUpdated.description}` : '',
+  ].filter(Boolean));
 
-  res.json({ message: 'Command updated', command: mapCommandRow(updated) });
+  res.json({ message: 'Command updated', command: mappedUpdated });
 });
 
 router.delete('/:id', async (req, res) => {
+  const existing = db.raw(
+    'SELECT * FROM custom_commands WHERE id = ? AND guild_id = ?',
+    [req.params.id, req.guild.id]
+  )[0];
   const deleted = db.db.prepare(
     'DELETE FROM custom_commands WHERE id = ? AND guild_id = ?'
   ).run(req.params.id, req.guild.id).changes;
@@ -742,6 +780,13 @@ router.delete('/:id', async (req, res) => {
   if (!deleted) return res.status(404).json({ error: 'Command not found' });
 
   scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
+  if (existing) {
+    const mappedExisting = mapCommandRow(existing);
+    logCommandSiteAction(req, 'Commande supprimee', mappedExisting, [
+      `Declencheur : ${mappedExisting.display_trigger}`,
+      `Mode : ${mappedExisting.command_type}`,
+    ]);
+  }
   res.json({ message: 'Command deleted' });
 });
 
@@ -767,7 +812,13 @@ router.patch('/:id/toggle', validate(commandToggleSchema), async (req, res) => {
 
   scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   const updated = db.raw('SELECT * FROM custom_commands WHERE id = ?', [cmd.id])[0];
-  res.json({ enabled: !!newState, command: mapCommandRow(updated) });
+  const mappedToggle = mapCommandRow(updated);
+  logCommandSiteAction(req, newState ? 'Commande activee' : 'Commande desactivee', mappedToggle, [
+    `Declencheur : ${mappedToggle.display_trigger}`,
+    `Mode : ${mappedToggle.command_type}`,
+    `Etat : ${newState ? 'activee' : 'desactivee'}`,
+  ]);
+  res.json({ enabled: !!newState, command: mappedToggle });
 });
 
 module.exports = router;

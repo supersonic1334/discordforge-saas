@@ -11,6 +11,7 @@ const { syncNativeAutoModRules } = require('../services/discordAutoModService');
 const { decrypt } = require('../services/encryptionService');
 const db = require('../database');
 const { v4: uuidv4 } = require('uuid');
+const { logBotEvent } = require('../bot/utils/modHelpers');
 const ANTI_SPAM_LEGACY_KEYS = ['duplicate_max_messages', 'duplicate_window_ms'];
 const ANTI_MENTION_LEGACY_SIMPLE_KEYS = ['max_mentions'];
 const ANTI_MENTION_LEGACY_ADVANCED_KEYS = ['max_role_mentions', 'max_everyone_here', 'include_replied_user', 'whitelist_roles', 'punishment_action'];
@@ -27,6 +28,19 @@ function parseConfig(rawValue) {
   } catch {
     return {};
   }
+}
+
+function logModuleSiteAction(req, actionLabel, moduleType, moduleName, details = []) {
+  logBotEvent(req.user.id, req.guild.id, 'info', 'site_action', `${req.user.username} - ${actionLabel} - ${moduleName}`, {
+    action: actionLabel,
+    action_label: actionLabel,
+    actor_name: req.user.username,
+    actor_user_id: req.user.id,
+    target_label: moduleName,
+    module_type: moduleType,
+    module_name: moduleName,
+    details,
+  });
 }
 
 const PROTECTION_PRESET_PROFILES = {
@@ -341,6 +355,7 @@ router.patch('/:moduleType/toggle', validate(moduleToggleSchema), async (req, re
   if (!typeResult.success) return res.status(400).json({ error: 'Unknown module type' });
 
   const type = typeResult.data;
+  const moduleName = MODULE_DEFINITIONS[type]?.name || type;
   const { enabled } = req.body;
   const now = new Date().toISOString();
 
@@ -369,6 +384,11 @@ router.patch('/:moduleType/toggle', validate(moduleToggleSchema), async (req, re
   // Invalidate bot's in-memory module cache
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  logModuleSiteAction(req, enabled ? 'Module active' : 'Module desactive', type, moduleName, [
+    `Module : ${moduleName}`,
+    `Etat : ${enabled ? 'active' : 'desactive'}`,
+    `Serveur : ${req.guild.name || req.guild.guild_id}`,
+  ]);
 
   res.json({ type, enabled, message: `Module ${enabled ? 'enabled' : 'disabled'}` });
 });
@@ -380,6 +400,7 @@ router.patch('/:moduleType/config', validate(moduleConfigSchema), async (req, re
 
   const type = typeResult.data;
   const def = MODULE_DEFINITIONS[type];
+  const moduleName = def?.name || type;
   const now = new Date().toISOString();
 
   const existing = db.raw(
@@ -419,6 +440,14 @@ router.patch('/:moduleType/config', validate(moduleConfigSchema), async (req, re
 
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  const changedSimpleKeys = Object.keys(req.body.simple_config || {});
+  const changedAdvancedKeys = Object.keys(req.body.advanced_config || {});
+  logModuleSiteAction(req, 'Configuration module mise a jour', type, moduleName, [
+    `Module : ${moduleName}`,
+    changedSimpleKeys.length ? `Champs simples : ${changedSimpleKeys.join(', ')}` : '',
+    changedAdvancedKeys.length ? `Champs avances : ${changedAdvancedKeys.join(', ')}` : '',
+    type === 'PROTECTION_PRESETS' && newSimple.profile ? `Preset applique : ${newSimple.profile}` : '',
+  ].filter(Boolean));
 
   res.json({
     type,
@@ -435,6 +464,7 @@ router.post('/:moduleType/reset', async (req, res) => {
 
   const type = typeResult.data;
   const def = MODULE_DEFINITIONS[type];
+  const moduleName = def?.name || type;
   const now = new Date().toISOString();
 
   const existing = db.raw(
@@ -461,6 +491,11 @@ router.post('/:moduleType/reset', async (req, res) => {
 
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  logModuleSiteAction(req, 'Module reinitialise', type, moduleName, [
+    `Module : ${moduleName}`,
+    'Etat : desactive',
+    'Configuration remise par defaut',
+  ]);
   res.json({ message: 'Module reset to defaults', type });
 });
 

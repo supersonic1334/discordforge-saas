@@ -30,6 +30,87 @@ const LOG_LEVELS = [
   { value: 'error', label: 'Error' },
 ]
 
+function formatDurationLabel(durationMs) {
+  const ms = Number(durationMs || 0)
+  if (!Number.isFinite(ms) || ms <= 0) return ''
+  const minutes = Math.round(ms / 60000)
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} h`
+  const days = Math.round(hours / 24)
+  return `${days} j`
+}
+
+function normalizeSiteEventLog(log) {
+  const metadata = log?.metadata || {}
+  const actor = log?.actor || {
+    username: metadata.actor_name || 'System',
+    avatar_url: null,
+    user_id: null,
+  }
+  const details = [
+    ...(Array.isArray(metadata.details) ? metadata.details : []),
+    metadata.message_preview ? `Apercu : ${metadata.message_preview}` : '',
+    log?.category ? `Categorie : ${log.category}` : '',
+    log?.level ? `Niveau : ${log.level}` : '',
+  ].filter(Boolean)
+
+  return {
+    id: `site-${log.id}`,
+    created_at: log.created_at,
+    actor,
+    target: {
+      label: metadata.target_label || null,
+      avatar_url: null,
+      id: metadata.target_id || null,
+    },
+    action_key: String(metadata.action || log.category || 'site_action').toLowerCase(),
+    action_label: log.action_performed || metadata.action_label || 'Action site',
+    summary: log.message || log.action_performed || 'Action site',
+    reason: metadata.reason || '',
+    details,
+    source_kind: 'site_event',
+    level: log.level || 'info',
+  }
+}
+
+function normalizeModerationActionLog(log) {
+  const metadata = log?.metadata || {}
+  const actionLabel = ACTION_LABELS[log.action_type] || log.action_type || 'Action'
+  const details = [
+    log?.reason ? `Raison : ${log.reason}` : '',
+    log?.module_source ? `Source : ${log.module_source}` : '',
+    metadata.points ? `Points : ${metadata.points}` : '',
+    log?.duration_ms ? `Duree : ${formatDurationLabel(log.duration_ms)}` : '',
+    metadata.message_preview ? `Message detecte : ${metadata.message_preview}` : '',
+    metadata.blacklist_scope ? `Portee : ${metadata.blacklist_scope}` : '',
+    typeof metadata.hide_sender_identity === 'boolean' ? `Identite masquee pour le membre : ${metadata.hide_sender_identity ? 'oui' : 'non'}` : '',
+    metadata.sender_discord_id ? `Discord staff : ${metadata.sender_discord_id}` : '',
+  ].filter(Boolean)
+
+  return {
+    id: `moderation-${log.id}`,
+    created_at: log.created_at,
+    actor: {
+      username: metadata.moderator_display_name || log.moderator_username || log.moderator_id || 'Staff',
+      avatar_url: metadata.moderator_site_avatar_url || metadata.moderator_discord_avatar_url || null,
+      user_id: metadata.moderator_discord_id || log.moderator_id || null,
+    },
+    target: {
+      label: log.target_username || log.target_user_id || 'Utilisateur',
+      avatar_url: metadata.target_avatar_url || null,
+      id: log.target_user_id || null,
+    },
+    action_key: String(log.action_type || '').toLowerCase(),
+    action_label: actionLabel,
+    summary: `${actionLabel} applique a ${log.target_username || log.target_user_id || 'un membre'}`,
+    reason: log.reason || '',
+    details,
+    source_kind: 'moderation_action',
+    level: 'info',
+  }
+}
+
 function HeaderPill({ icon: Icon, label }) {
   return (
     <span className="feature-chip">
@@ -61,8 +142,15 @@ export default function LogsPage() {
     if (!selectedGuildId) return
     if (!silent) setLoading(true)
     try {
-      const response = await modAPI.actions(selectedGuildId, { page: 1, limit: 50 })
-      setSiteLogs(response.data.actions || [])
+      const [siteResponse, actionResponse] = await Promise.all([
+        logsAPI.list(selectedGuildId, { page: 1, limit: 50 }),
+        modAPI.actions(selectedGuildId, { page: 1, limit: 50 }),
+      ])
+      const merged = [
+        ...(siteResponse?.data?.logs || []).map(normalizeSiteEventLog),
+        ...(actionResponse?.data?.actions || []).map(normalizeModerationActionLog),
+      ].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      setSiteLogs(merged)
     } catch (error) {
       if (!silent) toast.error(getErrorMessage(error))
     } finally {
@@ -150,6 +238,10 @@ export default function LogsPage() {
       const searchLower = searchQuery.toLowerCase().trim()
       if (searchLower) {
         const matchesSearch = 
+          log.summary?.toLowerCase().includes(searchLower) ||
+          log.action_label?.toLowerCase().includes(searchLower) ||
+          log.actor?.username?.toLowerCase().includes(searchLower) ||
+          log.target?.label?.toLowerCase().includes(searchLower) ||
           log.target_username?.toLowerCase().includes(searchLower) ||
           log.target_user_id?.toLowerCase().includes(searchLower) ||
           log.moderator_username?.toLowerCase().includes(searchLower) ||
@@ -169,7 +261,7 @@ export default function LogsPage() {
       }
 
       if (filterAction) {
-        const currentAction = String(activeTab === 'discord' ? (log.action_name || '') : (log.action_type || '')).toLowerCase()
+        const currentAction = String(activeTab === 'discord' ? (log.action_name || '') : (log.action_key || log.action_type || '')).toLowerCase()
         if (currentAction !== filterAction) return false
       }
       if (filterLevel && log.level && log.level !== filterLevel) return false
@@ -434,23 +526,32 @@ export default function LogsPage() {
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
-                  {renderAvatar(log.metadata?.target_avatar_url || null, log.target_username || log.target_user_id)}
+                  {renderAvatar(
+                    log.actor?.avatar_url || log.target?.avatar_url || null,
+                    log.actor?.username || log.target?.label || 'Staff',
+                    'from-cyan-500/25 to-violet-500/25'
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-display font-700 text-white truncate">{log.target_username || log.target_user_id}</p>
-                      <span className={`px-2.5 py-1 rounded-full border text-xs font-mono ${ACTION_COLORS[log.action_type] || 'border-white/10 bg-white/[0.04] text-white/55'}`}>
-                        {ACTION_LABELS[log.action_type] || log.action_type}
+                      <p className="font-display font-700 text-white truncate">{log.action_label}</p>
+                      <span className={`px-2.5 py-1 rounded-full border text-xs font-mono ${ACTION_COLORS[log.action_key] || 'border-white/10 bg-white/[0.04] text-white/55'}`}>
+                        {log.source_kind === 'moderation_action' ? 'moderation' : 'site'}
                       </span>
+                      {log.target?.label ? (
+                        <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/[0.04] text-xs font-mono text-white/60">
+                          {log.target.label}
+                        </span>
+                      ) : null}
                     </div>
                     <p className="text-sm text-white/55 truncate mt-1 flex items-center gap-2">
                       <User className="w-3 h-3" />
-                      Par {log.moderator_username || log.moderator_id}
+                      Par {log.actor?.username || 'System'}
                     </p>
+                    {log.summary ? (
+                      <p className="mt-3 text-sm leading-6 text-white/80">{log.summary}</p>
+                    ) : null}
                     <div className="flex flex-wrap gap-3 mt-3 text-xs text-white/35 font-mono">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-1 h-1 rounded-full bg-white/35" />
-                        ID: {log.target_user_id}
-                      </span>
+                      {log.target?.id ? <span className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-white/35" />ID: {log.target.id}</span> : null}
                       <span className="flex items-center gap-1.5">
                         <Calendar className="w-3 h-3" />
                         {formatDate(locale, log.created_at)}
@@ -458,14 +559,51 @@ export default function LogsPage() {
                     </div>
                   </div>
                 </div>
+                <div className="flex shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleDetails(log.id)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-mono text-white/65 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+                  >
+                    Infos utiles
+                    <ChevronDown className={`w-3 h-3 transition-transform ${expandedDetails[log.id] ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
               </div>
 
-              {log.reason && (
+              {log.reason ? (
                 <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
                   <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30 mb-2">Raison</p>
                   <p className="text-white/80 text-sm">{log.reason}</p>
                 </div>
-              )}
+              ) : null}
+
+              <AnimatePresence initial={false}>
+                {expandedDetails[log.id] ? (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4 space-y-3">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/30">Infos utiles</p>
+                      {Array.isArray(log.details) && log.details.length > 0 ? (
+                        <div className="space-y-2">
+                          {log.details.map((detail, index) => (
+                            <div key={`${log.id}-${index}`} className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-2 text-sm text-white/78">
+                              {detail}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-white/45">Aucune information complementaire utile sur cette entree.</p>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </motion.div>
           ))}
 
