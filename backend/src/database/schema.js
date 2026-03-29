@@ -409,6 +409,38 @@ const SCHEMA = [
   )`,
 
   // ────────────────────────────────────────────────────────────────────────────
+  // PLAYBOOKS (automated moderation workflows)
+  // ────────────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS playbooks (
+    id              TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    description     TEXT DEFAULT '',
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    conditions      TEXT NOT NULL DEFAULT '[]',    -- JSON array of conditions
+    actions         TEXT NOT NULL DEFAULT '[]',    -- JSON array of actions
+    cooldown_ms     INTEGER NOT NULL DEFAULT 60000,
+    trigger_count   INTEGER NOT NULL DEFAULT 0,
+    last_triggered_at TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(guild_id, name)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS playbook_logs (
+    id              TEXT PRIMARY KEY,
+    playbook_id     TEXT NOT NULL REFERENCES playbooks(id) ON DELETE CASCADE,
+    guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    target_user_id  TEXT NOT NULL,
+    target_username TEXT,
+    triggered_by    TEXT NOT NULL,           -- which condition triggered it
+    actions_taken   TEXT NOT NULL DEFAULT '[]',
+    success         INTEGER NOT NULL DEFAULT 1,
+    error_message   TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  // ────────────────────────────────────────────────────────────────────────────
   // SPAM TRACKING (in-memory mostly, but we persist daily stats)
   // ────────────────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS spam_stats (

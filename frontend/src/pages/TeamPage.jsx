@@ -1471,7 +1471,87 @@ function SimpleTeamTab({ isOwner, collaborators, activeCollabs, suspendedCollabs
   )
 }
 
+function CollaboratorDetailField({ label, value, mono = false }) {
+  if (!value) return null
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+      <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/28">{label}</p>
+      <p className={`mt-1 text-sm ${mono ? 'font-mono break-all' : ''} text-white/78 leading-relaxed`}>{value}</p>
+    </div>
+  )
+}
+
+function CollaboratorDetailsPanel({ entry }) {
+  const discordLabel = entry.discord_global_name || entry.discord_username || 'Compte Discord non lie'
+  const siteLabel = entry.site_username || entry.username || 'Compte site'
+  const joinedAt = formatDate('fr-FR', entry.accepted_at || entry.created_at)
+  const updatedAt = formatDate('fr-FR', entry.updated_at || entry.accepted_at || entry.created_at)
+  const suspendedUntil = entry.suspended_until ? formatDate('fr-FR', entry.suspended_until) : null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8, height: 0 }}
+      animate={{ opacity: 1, y: 0, height: 'auto' }}
+      exit={{ opacity: 0, y: -4, height: 0 }}
+      transition={{ duration: 0.2 }}
+      className="overflow-hidden"
+    >
+      <div className="grid gap-3 pt-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+        <div className="rounded-2xl border border-violet-400/15 bg-violet-500/[0.05] p-4">
+          <div className="flex items-center gap-4">
+            <Avatar
+              src={entry.discord_avatar_url || entry.profile_avatar_url || entry.site_avatar_url}
+              label={discordLabel}
+              size="w-16 h-16"
+              ring="ring-2 ring-violet-400/20"
+            />
+            <div className="min-w-0">
+              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-violet-200/60">Profil Discord</p>
+              <p className="mt-1 font-display font-700 text-white text-lg truncate">{discordLabel}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <RoleBadge role={entry.access_role} />
+                <StatusDot isSuspended={entry.is_suspended} suspendedUntil={entry.suspended_until} expiresAt={entry.expires_at} />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <CollaboratorDetailField label="Pseudo Discord" value={entry.discord_username ? `@${entry.discord_username}` : 'Aucun pseudo lie'} />
+            <CollaboratorDetailField label="ID Discord" value={entry.discord_id || 'Compte Discord non lie'} mono />
+            <CollaboratorDetailField label="Nom affiche" value={entry.discord_global_name || 'Non defini'} />
+            <CollaboratorDetailField label="Statut" value={entry.is_suspended ? 'Acces bloque temporairement' : 'Acces actif'} />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-neon-cyan/15 bg-neon-cyan/[0.04] p-4">
+          <div className="flex items-center gap-4">
+            <Avatar
+              src={entry.site_avatar_url || entry.profile_avatar_url || entry.discord_avatar_url}
+              label={siteLabel}
+              size="w-16 h-16"
+              ring="ring-2 ring-neon-cyan/20"
+            />
+            <div className="min-w-0">
+              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-neon-cyan/70">Compte site</p>
+              <p className="mt-1 font-display font-700 text-white text-lg truncate">{siteLabel}</p>
+              <p className="mt-1 text-xs text-white/45">Toutes les modifications restent tracees dans l'activite proprietaire.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <CollaboratorDetailField label="Email" value={entry.email || entry.site_email || 'Aucun email visible'} mono />
+            <CollaboratorDetailField label="Rejoint le" value={joinedAt} />
+            <CollaboratorDetailField label="Derniere mise a jour" value={updatedAt} />
+            <CollaboratorDetailField label="Expiration" value={entry.expires_at ? formatDate('fr-FR', entry.expires_at) : 'Aucune'} />
+            {suspendedUntil && <CollaboratorDetailField label="Bloque jusqu'a" value={suspendedUntil} />}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 function CollaboratorsTab({ isOwner, nonOwnerCollabs, saving, onSuspend, onRemoveMember }) {
+  const [expandedId, setExpandedId] = useState(null)
+
   return (
     <div className="space-y-5">
       {isOwner && (
@@ -1544,8 +1624,22 @@ function CollaboratorsTab({ isOwner, nonOwnerCollabs, saving, onSuspend, onRemov
                     </div>
                   </div>
 
-                  {isOwner && (
-                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                  <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId((current) => (current === entry.id ? null : entry.id))}
+                      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-mono transition-all ${
+                        expandedId === entry.id
+                          ? 'border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan'
+                          : 'border-white/10 bg-white/[0.04] text-white/65 hover:border-neon-cyan/20 hover:text-neon-cyan'
+                      }`}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      {expandedId === entry.id ? 'Masquer les details' : 'Plus d informations'}
+                    </button>
+
+                    {isOwner && (
+                      <>
                       {entry.is_suspended ? (
                         <button
                           type="button"
@@ -1585,9 +1679,14 @@ function CollaboratorsTab({ isOwner, nonOwnerCollabs, saving, onSuspend, onRemov
                       >
                         Retirer
                       </button>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                <AnimatePresence initial={false}>
+                  {expandedId === entry.id && <CollaboratorDetailsPanel entry={entry} />}
+                </AnimatePresence>
               </motion.div>
             ))}
           </div>

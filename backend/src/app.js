@@ -27,6 +27,7 @@ const { aiRouter, adminRouter } = require('./routes/aiAdmin');
 const providerRoutes = require('./routes/providerAI');
 const supportRoutes = require('./routes/support');
 const reviewsRoutes = require('./routes/reviews');
+const playbooksRoutes = require('./routes/playbooks');
 
 // ── App ───────────────────────────────────────────────────────────────────────
 const app = express();
@@ -322,6 +323,7 @@ app.use(`${prefix}/admin`,   adminRouter);
 app.use(`${prefix}/provider`, providerRoutes);
 app.use(`${prefix}/support`, supportRoutes);
 app.use(`${prefix}/reviews`, reviewsRoutes);
+app.use(`${prefix}/guilds/:guildId/playbooks`, playbooksRoutes);
 
 if (fs.existsSync(frontendDistDir)) {
   app.use(express.static(frontendDistDir, {

@@ -17,7 +17,19 @@ function normalizeAccessRole(value) {
 }
 
 function buildAccessCode() {
-  return randomBytes(24).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 30);
+  let raw = '';
+  while (raw.length < 30) {
+    raw += randomBytes(24)
+      .toString('base64url')
+      .toUpperCase()
+      .replace(/[01ILO]/g, '')
+      .replace(/[^A-Z2-9]/g, '');
+  }
+
+  return raw
+    .slice(0, 30)
+    .match(/.{1,6}/g)
+    .join('-');
 }
 
 function maskAccessCode(code) {
