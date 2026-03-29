@@ -241,6 +241,7 @@ export const logsAPI = {
 // ── AI ────────────────────────────────────────────────────────────────────────
 export const aiAPI = {
   chat:   (data) => api.post('/ai/chat', data),
+  continueAction: (data) => api.post('/ai/continue-action', data),
   status: ()     => api.get('/ai/status'),
   transcribe: (data) => api.post('/ai/transcribe', data),
 }

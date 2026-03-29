@@ -7,6 +7,8 @@ const botManager = require('./botManager');
 const { decrypt } = require('./encryptionService');
 const aiProviderKeyService = require('./aiProviderKeyService');
 const discordService = require('./discordService');
+const guildAccessService = require('./guildAccessService');
+const { resolveLinkedModeratorAccess } = require('./discordModeratorAccessService');
 const { safeSendModerationDm } = require('./moderationDmService');
 const wsServer = require('../websocket');
 const { addWarning } = require('../bot/utils/modHelpers');
@@ -18,6 +20,14 @@ const DEFAULT_AI_USER_QUOTA_TOKENS = 4000;
 const DEFAULT_AI_SITE_QUOTA_TOKENS = 20000;
 const DEFAULT_AI_QUOTA_WINDOW_HOURS = 5;
 const GLOBAL_QUOTA_ID = 'site-global';
+const DIRECT_ACTIONS = new Set(['start_bot', 'stop_bot', 'restart_bot', 'sync_guilds']);
+const SENSITIVE_ASSISTANT_ACTIONS = new Set(['add_warning', 'kick_user', 'ban_user', 'timeout_user']);
+const IMAGE_REQUEST_MATCHERS = [
+  /\b(genere|genere moi|cree|creee?|fabrique|dessine|imagine|produis)\b.*\b(image|illustration|visuel|affiche|logo|banner|banniere|avatar|thumbnail)\b/i,
+  /\b(generate|create|make|draw)\b.*\b(image|illustration|poster|logo|banner|avatar|thumbnail)\b/i,
+  /\bimage\b.*\b(discord|serveur|server|logo|banner|avatar)\b/i,
+];
+const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image-preview';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -251,6 +261,89 @@ function normalizeTokenUsage(rawUsage, promptText, completionText) {
   return { inputTokens, outputTokens, totalTokens };
 }
 
+function trimConversationHistory(conversationHistory = [], maxMessages = 6, maxChars = 700) {
+  return (Array.isArray(conversationHistory) ? conversationHistory : [])
+    .slice(-maxMessages)
+    .map((message) => ({
+      role: message?.role === 'assistant' ? 'assistant' : 'user',
+      content: String(message?.content || '').trim().slice(0, maxChars),
+    }))
+    .filter((message) => message.content);
+}
+
+function buildGuildSummary(guilds = []) {
+  const visibleGuilds = guilds.slice(0, 8);
+  const items = visibleGuilds.map((guild) => `- ${guild.name} (${guild.id})`).join('\n');
+  const hiddenCount = Math.max(0, guilds.length - visibleGuilds.length);
+  return hiddenCount > 0 ? `${items}\n- +${hiddenCount} autres espaces` : (items || '- aucun serveur actif');
+}
+
+function getAccessibleGuilds(userId) {
+  return guildAccessService.listAccessibleGuilds(userId) || [];
+}
+
+function findAccessibleGuildRecord(userId, guildId) {
+  if (!guildId) return null;
+  const access = guildAccessService.getGuildAccess(userId, guildId);
+  return access || null;
+}
+
+function buildLinkedDiscordState(user) {
+  const linkedDiscordId = String(user?.discord_id || '').trim();
+  if (!linkedDiscordId) {
+    return 'Compte Discord lie: non. Pour bannir, warn, timeout ou kick via l assistant, une liaison Discord est obligatoire.';
+  }
+
+  const label = user?.discord_global_name || user?.discord_username || linkedDiscordId;
+  return `Compte Discord lie: oui (${label}, ${linkedDiscordId}).`;
+}
+
+function isImageGenerationRequest(message) {
+  const text = String(message || '').trim();
+  if (!text) return false;
+  return IMAGE_REQUEST_MATCHERS.some((matcher) => matcher.test(text));
+}
+
+function normalizeImagePrompt(message) {
+  const raw = String(message || '').trim();
+  return raw
+    .replace(/^(peux[- ]?tu|tu peux|merci de|stp|svp)\s+/i, '')
+    .replace(/^(genere|cree|fabrique|dessine|imagine|generate|create|draw|make)\s+(moi\s+)?/i, '')
+    .replace(/^(une|un)\s+/i, '')
+    .trim() || raw;
+}
+
+function buildLinkRequiredMessage(actionBlock) {
+  const action = String(actionBlock?.action || '').trim();
+  const labels = {
+    add_warning: 'mettre un avertissement',
+    timeout_user: 'mettre un timeout',
+    kick_user: 'expulser un membre',
+    ban_user: 'bannir un membre',
+  };
+  const actionLabel = labels[action] || 'executer cette action';
+  return `Lie ton compte Discord pour ${actionLabel}. Des que la liaison est terminee, je reprends automatiquement.`;
+}
+
+function buildPermissionDeniedMessage() {
+  return 'Ton compte Discord lie n a pas les permissions necessaires sur ce serveur pour executer cette action.';
+}
+
+function buildMissingGuildMessage() {
+  return 'Selectionne d abord un serveur actif pour que je puisse agir dessus.';
+}
+
+function buildActionResultMessage(actionBlock, actionResult, fallbackText = '') {
+  if (actionResult?.error) {
+    return `Action impossible: ${actionResult.error}`;
+  }
+
+  const successMessage = String(actionResult?.message || '').trim();
+  if (successMessage) return successMessage;
+  if (fallbackText) return fallbackText;
+  return 'Action terminee.';
+}
+
 function mapAIConfigRow(row) {
   if (!row || !row.enabled) return null;
 
@@ -371,6 +464,28 @@ function getAIConfig() {
       role: fallbackProviderKey.owner_role,
       avatar_url: fallbackProviderKey.owner_avatar_url,
     },
+  };
+}
+
+function getGeminiImageConfig() {
+  const activeConfig = getAIConfig();
+  if (activeConfig?.provider === 'gemini' && activeConfig.apiKey) {
+    return {
+      provider: 'gemini',
+      apiKey: activeConfig.apiKey,
+      model: GEMINI_IMAGE_MODEL,
+      providerKeyId: activeConfig.providerKeyId || null,
+    };
+  }
+
+  const pooledGeminiKey = aiProviderKeyService.getBestAvailableProviderKey('gemini');
+  if (!pooledGeminiKey?.encrypted_api_key) return null;
+
+  return {
+    provider: 'gemini',
+    apiKey: decrypt(pooledGeminiKey.encrypted_api_key),
+    model: GEMINI_IMAGE_MODEL,
+    providerKeyId: pooledGeminiKey.id || null,
   };
 }
 
@@ -899,6 +1014,92 @@ RULES:
 Respond naturally in markdown. Only include one action block per response.`;
 }
 
+function buildSiteKnowledge() {
+  const team = getPublicTeamSnapshot();
+  const founderList = team.founders.length ? team.founders.join(', ') : 'aucun';
+  const adminList = team.admins.length ? team.admins.join(', ') : 'aucun';
+
+  return `PLATFORM:
+- Produit: DiscordForger
+- Fondateur principal: ${team.primaryFounder}
+- Fondateurs actifs: ${founderList}
+- Admins actifs: ${adminList}
+- Sections: Dashboard, Serveurs, Equipe, Protection, Search, Logs, Messages, Notifications, Controle d Acces, Commandes, Analytics, Scan, Centre DM, Incidents, Roles et Onboarding, Assistant IA, Parametres, Panel Admin
+- Capacites: moderation, protection, logs, messages prives, commandes, scan, incidents, tickets, gestion du bot, construction ou clonage de serveur
+- Regles: jamais de secret, jamais de donnees privees, jamais de contournement de permissions.`;
+}
+
+function buildFocusedGuildKnowledge(focusedGuild) {
+  if (!focusedGuild) {
+    return 'SERVEUR ACTIF:\n- Aucun serveur selectionne.\n';
+  }
+
+  return `SERVEUR ACTIF:
+- Nom: ${focusedGuild.name}
+- Id interne: ${focusedGuild.id}
+- Id Discord: ${focusedGuild.guild_id}
+- Membres: ${focusedGuild.member_count || 0}
+- Utilise ce serveur par defaut si la demande vise ce serveur.
+`;
+}
+
+function buildSystemPrompt(user, guilds, focusedGuild = null) {
+  const guildList = buildGuildSummary(guilds);
+
+  return `Tu es l assistant IA de DiscordForger.
+
+UTILISATEUR:
+- Pseudo site: ${user.username}
+- Role site: ${user.role}
+- ${buildLinkedDiscordState(user)}
+- Espaces accessibles:
+${guildList}
+
+${buildFocusedGuildKnowledge(focusedGuild)}
+${buildSiteKnowledge()}
+
+ACTION BLOCK UNIQUE:
+\`\`\`action
+{"action":"ACTION_NAME","params":{}}
+\`\`\`
+
+ACTIONS REELLES:
+- toggle_module { guildId, moduleType, enabled }
+- update_module_config { guildId, moduleType, simple_config?, advanced_config? }
+- add_warning { guildId, targetUserId, targetUsername?, reason, points? }
+- kick_user { guildId, targetUserId, reason }
+- ban_user { guildId, targetUserId, reason }
+- timeout_user { guildId, targetUserId, durationMs, reason }
+- leave_guild { guildId }
+- start_bot {}
+- stop_bot {}
+- restart_bot {}
+- sync_guilds {}
+- server_builder { guildId, structure }
+- server_clone { sourceGuildId, targetGuildId, cleanup_target? }
+- create_channels { guildId, channels }
+- create_roles { guildId, roles }
+- delete_channels { guildId, channelNames }
+- delete_roles { guildId, roleNames }
+- rename_channels { guildId, renames }
+- send_announcement { guildId, channelName, message, embed? }
+- mass_role_assign { guildId, roleName, action }
+
+REGLES:
+1. ${buildLanguageInstruction(user)}
+2. Reponds court, clair, utile et personnalise.
+3. Suis strictement la demande utilisateur, jamais un mot hors sujet.
+4. Si un ID, une raison, une duree ou un serveur manque, pose seulement la ou les questions minimales.
+5. Pour warn, timeout, kick ou ban: ne promets jamais le succes sans les infos minimales et sans compte Discord lie.
+6. Pour les actions destructrices, demande confirmation si elle n a pas deja ete donnee.
+7. Utilise le serveur actif par defaut quand la demande vise ce serveur.
+8. N invente jamais un resultat d action. Si l execution echoue, la verite backend prime.
+9. N expose jamais de secret, token, cle, email prive ou detail interne sensible.
+10. Reste specialise Discord, DiscordForger, moderation, protection, commandes, messages, tickets, roles, structure serveur et gestion du bot.
+
+Reponds en markdown naturel. Un seul action block maximum par reponse.`;
+}
+
 function extractAction(text) {
   const match = text.match(/```action\s*([\s\S]*?)```/);
   if (!match) return null;
@@ -983,6 +1184,49 @@ function detectImplicitAction(userMessage) {
   return null;
 }
 
+function getActionGuildId(actionBlock) {
+  return String(
+    actionBlock?.params?.guildId
+    || actionBlock?.params?.targetGuildId
+    || actionBlock?.params?.sourceGuildId
+    || ''
+  ).trim();
+}
+
+function getActionBotOwnerUserId(userId, actionBlock) {
+  const guildId = getActionGuildId(actionBlock);
+  if (!guildId) return userId;
+  const access = findAccessibleGuildRecord(userId, guildId);
+  return access?.owner_user_id || userId;
+}
+
+function resolveActionGuildContext(userId, guildId) {
+  const access = findAccessibleGuildRecord(userId, guildId);
+  if (!access) return null;
+
+  const tokenOwnerUserId = access.owner_user_id || access.guild.user_id || userId;
+  const tokenRow = db.findOne('bot_tokens', { user_id: tokenOwnerUserId });
+
+  return {
+    access,
+    guild: access.guild,
+    tokenOwnerUserId,
+    tokenRow,
+  };
+}
+
+function buildAssistantModeratorName(user, member) {
+  return (
+    member?.nick
+    || member?.user?.global_name
+    || member?.user?.username
+    || user?.discord_global_name
+    || user?.discord_username
+    || user?.username
+    || 'Assistant IA'
+  );
+}
+
 async function executeAction(userId, actionBlock, botToken) {
   const { action, params } = actionBlock;
   const token = decrypt(botToken.encrypted_token);
@@ -1020,65 +1264,118 @@ async function executeAction(userId, actionBlock, botToken) {
     }
 
     case 'add_warning': {
-      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
-      if (!guild) return { error: 'Guild not found' };
-      await addWarning(guild.guild_id, params.targetUserId, params.targetUsername, userId, 'AI Agent', params.reason, params.points ?? 1);
+      const user = db.findOne('users', { id: userId });
+      const guildContext = resolveActionGuildContext(userId, params.guildId);
+      if (!guildContext?.guild) return { error: 'Guild not found' };
+      if (!guildContext.tokenRow) return { error: 'Bot token missing' };
+      const moderationAccess = await resolveLinkedModeratorAccess({
+        user,
+        guildRow: guildContext.guild,
+        botToken: decrypt(guildContext.tokenRow.encrypted_token),
+        actionName: action,
+      });
+      const moderatorName = buildAssistantModeratorName(user, moderationAccess.member);
+      await addWarning(
+        guildContext.guild.guild_id,
+        params.targetUserId,
+        params.targetUsername,
+        userId,
+        moderatorName,
+        params.reason,
+        params.points ?? 1
+      );
       await safeSendModerationDm({
-        botToken: token,
-        guildRow: guild,
+        botToken: decrypt(guildContext.tokenRow.encrypted_token),
+        guildRow: guildContext.guild,
         actionType: 'warn',
         targetUserId: params.targetUserId,
         reason: params.reason,
         points: params.points ?? 1,
-        moderatorName: 'Assistant IA',
+        moderatorName,
       });
-      return { success: true, message: `Warning added to ${params.targetUsername}` };
+      return { success: true, message: `Avertissement ajoute a ${params.targetUsername || params.targetUserId}` };
     }
 
     case 'kick_user': {
-      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
-      if (!guild) return { error: 'Guild not found' };
+      const user = db.findOne('users', { id: userId });
+      const guildContext = resolveActionGuildContext(userId, params.guildId);
+      if (!guildContext?.guild) return { error: 'Guild not found' };
+      if (!guildContext.tokenRow) return { error: 'Bot token missing' };
+      const actionToken = decrypt(guildContext.tokenRow.encrypted_token);
+      const moderationAccess = await resolveLinkedModeratorAccess({
+        user,
+        guildRow: guildContext.guild,
+        botToken: actionToken,
+        actionName: action,
+      });
+      const moderatorName = buildAssistantModeratorName(user, moderationAccess.member);
       await safeSendModerationDm({
-        botToken: token,
-        guildRow: guild,
+        botToken: actionToken,
+        guildRow: guildContext.guild,
         actionType: 'kick',
         targetUserId: params.targetUserId,
         reason: params.reason ?? 'Action de l assistant IA',
-        moderatorName: 'Assistant IA',
+        moderatorName,
       });
-      await discordService.kickMember(token, guild.guild_id, params.targetUserId, params.reason ?? 'AI Agent action');
-      return { success: true, message: 'User kicked' };
+      await discordService.kickMember(actionToken, guildContext.guild.guild_id, params.targetUserId, params.reason ?? 'Action de l assistant IA');
+      return { success: true, message: 'Membre expulse' };
     }
 
     case 'ban_user': {
-      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
-      if (!guild) return { error: 'Guild not found' };
+      const user = db.findOne('users', { id: userId });
+      const guildContext = resolveActionGuildContext(userId, params.guildId);
+      if (!guildContext?.guild) return { error: 'Guild not found' };
+      if (!guildContext.tokenRow) return { error: 'Bot token missing' };
+      const actionToken = decrypt(guildContext.tokenRow.encrypted_token);
+      const moderationAccess = await resolveLinkedModeratorAccess({
+        user,
+        guildRow: guildContext.guild,
+        botToken: actionToken,
+        actionName: action,
+      });
+      const moderatorName = buildAssistantModeratorName(user, moderationAccess.member);
       await safeSendModerationDm({
-        botToken: token,
-        guildRow: guild,
+        botToken: actionToken,
+        guildRow: guildContext.guild,
         actionType: 'ban',
         targetUserId: params.targetUserId,
         reason: params.reason ?? 'Action de l assistant IA',
-        moderatorName: 'Assistant IA',
+        moderatorName,
       });
-      await discordService.banMember(token, guild.guild_id, params.targetUserId, params.reason ?? 'AI Agent action');
-      return { success: true, message: 'User banned' };
+      await discordService.banMember(actionToken, guildContext.guild.guild_id, params.targetUserId, params.reason ?? 'Action de l assistant IA');
+      return { success: true, message: 'Membre banni' };
     }
 
     case 'timeout_user': {
-      const guild = db.findOne('guilds', { id: params.guildId, user_id: userId });
-      if (!guild) return { error: 'Guild not found' };
-      await discordService.timeoutMember(token, guild.guild_id, params.targetUserId, params.durationMs, params.reason ?? 'AI Agent action');
+      const user = db.findOne('users', { id: userId });
+      const guildContext = resolveActionGuildContext(userId, params.guildId);
+      if (!guildContext?.guild) return { error: 'Guild not found' };
+      if (!guildContext.tokenRow) return { error: 'Bot token missing' };
+      const actionToken = decrypt(guildContext.tokenRow.encrypted_token);
+      const moderationAccess = await resolveLinkedModeratorAccess({
+        user,
+        guildRow: guildContext.guild,
+        botToken: actionToken,
+        actionName: action,
+      });
+      const moderatorName = buildAssistantModeratorName(user, moderationAccess.member);
+      await discordService.timeoutMember(
+        actionToken,
+        guildContext.guild.guild_id,
+        params.targetUserId,
+        params.durationMs,
+        params.reason ?? 'Action de l assistant IA'
+      );
       await safeSendModerationDm({
-        botToken: token,
-        guildRow: guild,
+        botToken: actionToken,
+        guildRow: guildContext.guild,
         actionType: 'timeout',
         targetUserId: params.targetUserId,
         reason: params.reason ?? 'Action de l assistant IA',
         durationMs: params.durationMs,
-        moderatorName: 'Assistant IA',
+        moderatorName,
       });
-      return { success: true, message: 'User timed out' };
+      return { success: true, message: 'Timeout applique' };
     }
 
     case 'leave_guild': {
@@ -1644,6 +1941,61 @@ async function requestGeminiChat(aiConfig, systemPrompt, messages) {
   };
 }
 
+async function requestGeminiImage(imageConfig, prompt) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${imageConfig.model}:generateContent?key=${imageConfig.apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          role: 'user',
+          parts: [{ text: prompt }],
+        }],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE'],
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    await throwProviderError('gemini', response, imageConfig.model);
+  }
+
+  const data = await response.json();
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find((part) => part?.inlineData?.data);
+  const textPart = parts.find((part) => typeof part?.text === 'string' && part.text.trim());
+
+  if (!imagePart?.inlineData?.data) {
+    throw Object.assign(new Error('Aucune image generee par le fournisseur IA.'), { status: 502 });
+  }
+
+  const mimeType = imagePart.inlineData.mimeType || 'image/png';
+  const base64 = imagePart.inlineData.data;
+  const dataUrl = `data:${mimeType};base64,${base64}`;
+
+  return {
+    image: {
+      mimeType,
+      dataUrl,
+      prompt,
+      model: imageConfig.model,
+    },
+    text: String(textPart?.text || '').trim(),
+    usage: normalizeTokenUsage(
+      {
+        promptTokenCount: data?.usageMetadata?.promptTokenCount,
+        candidateTokens: data?.usageMetadata?.candidatesTokenCount,
+        totalTokens: data?.usageMetadata?.totalTokenCount,
+      },
+      prompt,
+      textPart?.text || '[image]'
+    ),
+  };
+}
+
 async function completeConversation(userId, { systemPrompt, messages }) {
   const aiConfig = getAIConfig();
   if (!aiConfig) {
@@ -1733,8 +2085,245 @@ async function chat(userId, userMessage, conversationHistory = [], guildId = nul
   };
 }
 
+function normalizePendingAction(actionBlock, guildId = null) {
+  if (!actionBlock || typeof actionBlock !== 'object') return null;
+  const nextAction = {
+    action: String(actionBlock.action || '').trim(),
+    params: actionBlock.params && typeof actionBlock.params === 'object'
+      ? { ...actionBlock.params }
+      : {},
+  };
+
+  if (!nextAction.action) return null;
+
+  if (
+    guildId
+    && !nextAction.params.guildId
+    && !nextAction.params.targetGuildId
+    && !nextAction.params.sourceGuildId
+  ) {
+    nextAction.params.guildId = guildId;
+  }
+
+  return nextAction;
+}
+
+async function executeAssistantActionFlow(userId, actionBlock, { guildId = null, fallbackMessage = '' } = {}) {
+  const normalizedAction = normalizePendingAction(actionBlock, guildId);
+  if (!normalizedAction) {
+    return {
+      message: 'Action IA invalide.',
+      actionExecuted: null,
+      requiresDiscordLink: false,
+      pendingAction: null,
+    };
+  }
+
+  if (SENSITIVE_ASSISTANT_ACTIONS.has(normalizedAction.action) && !normalizedAction.params.guildId) {
+    return {
+      message: buildMissingGuildMessage(),
+      actionExecuted: {
+        action: normalizedAction.action,
+        result: { error: 'Serveur actif manquant', code: 'MISSING_GUILD_CONTEXT' },
+      },
+      requiresDiscordLink: false,
+      pendingAction: null,
+    };
+  }
+
+  const tokenOwnerUserId = getActionBotOwnerUserId(userId, normalizedAction);
+  const tokenRow = db.findOne('bot_tokens', { user_id: tokenOwnerUserId });
+  if (!tokenRow) {
+    return {
+      message: 'Aucun token de bot valide n est disponible pour executer cette action.',
+      actionExecuted: {
+        action: normalizedAction.action,
+        result: { error: 'Bot token missing', code: 'NO_BOT_TOKEN' },
+      },
+      requiresDiscordLink: false,
+      pendingAction: null,
+    };
+  }
+
+  try {
+    const actionResult = await executeAction(userId, normalizedAction, tokenRow);
+    return {
+      message: fallbackMessage && !actionResult?.error
+        ? fallbackMessage
+        : buildActionResultMessage(normalizedAction, actionResult, fallbackMessage),
+      actionExecuted: { action: normalizedAction.action, result: actionResult },
+      requiresDiscordLink: false,
+      pendingAction: null,
+    };
+  } catch (error) {
+    const result = { error: error.message, code: error.code || null };
+    if (error.code === 'DISCORD_LINK_REQUIRED') {
+      return {
+        message: buildLinkRequiredMessage(normalizedAction),
+        actionExecuted: { action: normalizedAction.action, result },
+        requiresDiscordLink: true,
+        pendingAction: normalizedAction,
+      };
+    }
+
+    if (error.code === 'DISCORD_PERMISSION_DENIED' || error.code === 'DISCORD_LINK_NOT_IN_GUILD') {
+      return {
+        message: error.code === 'DISCORD_PERMISSION_DENIED'
+          ? buildPermissionDeniedMessage()
+          : error.message,
+        actionExecuted: { action: normalizedAction.action, result },
+        requiresDiscordLink: false,
+        pendingAction: null,
+      };
+    }
+
+    return {
+      message: `Action impossible: ${error.message}`,
+      actionExecuted: { action: normalizedAction.action, result },
+      requiresDiscordLink: false,
+      pendingAction: null,
+    };
+  }
+}
+
+async function generateAssistantImage(userId, userMessage) {
+  const imageConfig = getGeminiImageConfig();
+  if (!imageConfig?.apiKey) {
+    return {
+      message: 'La generation d image demande une cle Gemini configuree sur le site.',
+      generatedImage: null,
+      actionExecuted: null,
+      requiresDiscordLink: false,
+      pendingAction: null,
+      usage: null,
+      quota: null,
+    };
+  }
+
+  const aiConfig = getAIConfig();
+  const user = db.findOne('users', { id: userId });
+  const prompt = normalizeImagePrompt(userMessage);
+  if (aiConfig) {
+    ensureQuotaAvailable(user, userId, aiConfig, estimateTokenCount(prompt));
+  }
+
+  let providerResult;
+  try {
+    providerResult = await requestGeminiImage(imageConfig, prompt);
+  } catch (error) {
+    if (imageConfig.providerKeyId && error?.providerKeyStatus) {
+      aiProviderKeyService.markProviderKeyStatus(imageConfig.providerKeyId, error.providerKeyStatus, error.message);
+    }
+    throw error;
+  }
+
+  if (imageConfig.providerKeyId) {
+    aiProviderKeyService.markProviderKeyStatus(imageConfig.providerKeyId, 'valid', 'Image generation succeeded.');
+    aiProviderKeyService.markProviderKeyUsed(imageConfig.providerKeyId);
+  }
+
+  const quota = aiConfig ? recordQuotaUsage(userId, aiConfig, providerResult.usage) : null;
+
+  return {
+    message: providerResult.text || 'Image generee. Tu peux la telecharger ou la copier.',
+    generatedImage: providerResult.image,
+    actionExecuted: null,
+    requiresDiscordLink: false,
+    pendingAction: null,
+    usage: providerResult.usage,
+    quota,
+  };
+}
+
+async function continueAction(userId, pendingAction, guildId = null) {
+  const result = await executeAssistantActionFlow(userId, pendingAction, { guildId });
+  return {
+    message: result.message,
+    actionExecuted: result.actionExecuted,
+    requiresDiscordLink: result.requiresDiscordLink,
+    pendingAction: result.pendingAction,
+    usage: null,
+    quota: null,
+  };
+}
+
+async function chat(userId, userMessage, conversationHistory = [], guildId = null) {
+  const user = db.findOne('users', { id: userId });
+  const guilds = getAccessibleGuilds(userId);
+  const focusedGuild = guildId ? (findAccessibleGuildRecord(userId, guildId)?.guild || null) : null;
+  const trimmedMessage = String(userMessage || '').trim().slice(0, 2000);
+
+  if (!trimmedMessage) {
+    return {
+      message: 'Message vide.',
+      actionExecuted: null,
+      requiresDiscordLink: false,
+      pendingAction: null,
+      usage: null,
+      quota: null,
+    };
+  }
+
+  const directAction = detectImplicitAction(trimmedMessage);
+  if (directAction && DIRECT_ACTIONS.has(directAction.action)) {
+    const directResult = await executeAssistantActionFlow(userId, directAction, {
+      guildId: focusedGuild?.id || guildId || null,
+      fallbackMessage: '',
+    });
+    return {
+      message: directResult.message,
+      actionExecuted: directResult.actionExecuted,
+      requiresDiscordLink: directResult.requiresDiscordLink,
+      pendingAction: directResult.pendingAction,
+      usage: null,
+      quota: null,
+    };
+  }
+
+  if (isImageGenerationRequest(trimmedMessage)) {
+    return generateAssistantImage(userId, trimmedMessage);
+  }
+
+  const systemPrompt = buildSystemPrompt(user, guilds, focusedGuild);
+  const messages = [
+    ...trimConversationHistory(conversationHistory),
+    { role: 'user', content: trimmedMessage },
+  ];
+
+  const completion = await completeConversation(userId, { systemPrompt, messages });
+  const cleanText = completion.text.replace(/```action[\s\S]*?```/g, '').trim();
+  const actionBlock = extractAction(completion.text);
+
+  if (!actionBlock) {
+    return {
+      message: cleanText || 'Je suis pret.',
+      actionExecuted: null,
+      requiresDiscordLink: false,
+      pendingAction: null,
+      usage: completion.usage,
+      quota: completion.quota,
+    };
+  }
+
+  const actionFlow = await executeAssistantActionFlow(userId, actionBlock, {
+    guildId: focusedGuild?.id || guildId || null,
+    fallbackMessage: cleanText,
+  });
+
+  return {
+    message: actionFlow.message,
+    actionExecuted: actionFlow.actionExecuted,
+    requiresDiscordLink: actionFlow.requiresDiscordLink,
+    pendingAction: actionFlow.pendingAction,
+    generatedImage: null,
+    usage: completion.usage,
+    quota: completion.quota,
+  };
+}
+
 module.exports = {
   chat,
+  continueAction,
   completeConversation,
   getAIConfig,
   getQuotaOverview,

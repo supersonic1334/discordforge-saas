@@ -6,7 +6,7 @@ const adminRouter = express.Router();
 
 const config = require('../config');
 const { requireAuth, requireBotToken, requireFounder, requireAdminPanelAccess, validate } = require('../middleware');
-const { aiMessageSchema, aiConfigSchema, userStatusSchema, adminRoleSchema, adminPasswordSchema, providerAiModelSchema } = require('../validators/schemas');
+const { aiMessageSchema, aiContinueActionSchema, aiConfigSchema, userStatusSchema, adminRoleSchema, adminPasswordSchema, providerAiModelSchema } = require('../validators/schemas');
 const aiService = require('../services/aiService');
 const { encrypt } = require('../services/encryptionService');
 const { applyAdvancedBlocksForUser, clearAdvancedBlocksForUser } = require('../services/accessControlService');
@@ -120,6 +120,16 @@ aiRouter.post('/chat', requireAuth, validate(aiMessageSchema), async (req, res, 
   try {
     const { message, guild_id, conversation_history } = req.body;
     const result = await aiService.chat(req.user.id, message, conversation_history, guild_id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+aiRouter.post('/continue-action', requireAuth, validate(aiContinueActionSchema), async (req, res, next) => {
+  try {
+    const { guild_id, pending_action } = req.body;
+    const result = await aiService.continueAction(req.user.id, pending_action, guild_id);
     res.json(result);
   } catch (err) {
     next(err);

@@ -218,6 +218,16 @@ const aiMessageSchema = z.object({
   })).optional().default([]),
 });
 
+const aiPendingActionSchema = z.object({
+  action: z.string().trim().min(1).max(80),
+  params: z.record(z.unknown()).optional().default({}),
+});
+
+const aiContinueActionSchema = z.object({
+  guild_id: z.string().trim().optional(),
+  pending_action: aiPendingActionSchema,
+});
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 const aiConfigSchema = z.object({
   provider: z.enum(AI_PROVIDER_IDS),
@@ -351,6 +361,7 @@ module.exports = {
   commandAssistantSchema,
   commandToggleSchema,
   aiMessageSchema,
+  aiContinueActionSchema,
   aiConfigSchema,
   providerAiKeySchema,
   providerAiModelSchema,
