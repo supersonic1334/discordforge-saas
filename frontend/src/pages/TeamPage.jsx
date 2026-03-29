@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Copy,
   Crown,
   Database,
   Eye,
@@ -144,6 +145,30 @@ function applyImmediateDiscordLink(linkResult) {
   })
 
   return true
+}
+
+async function copyText(value, successMessage = 'Copie terminee') {
+  const text = String(value || '').trim()
+  if (!text) return
+
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const input = document.createElement('textarea')
+      input.value = text
+      input.setAttribute('readonly', '')
+      input.style.position = 'absolute'
+      input.style.left = '-9999px'
+      document.body.appendChild(input)
+      input.select()
+      document.execCommand('copy')
+      document.body.removeChild(input)
+    }
+    toast.success(successMessage)
+  } catch {
+    toast.error('Copie impossible')
+  }
 }
 
 const EXPIRY_OPTIONS = [
@@ -339,8 +364,8 @@ export default function TeamPage() {
   const [overview, setOverview] = useState({ access: null, collaborators: [], snapshots: [] })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
-  const [inviteForm, setInviteForm] = useState({ target: '', access_role: 'admin', expires_in_hours: 0 })
-  const [codeForm, setCodeForm] = useState({ access_role: 'admin', expires_in_hours: 1 })
+  const [inviteForm, setInviteForm] = useState({ target: '', expires_in_hours: 0 })
+  const [codeForm, setCodeForm] = useState({ expires_in_hours: 1 })
   const [joinCode, setJoinCode] = useState('')
   const [snapshotLabel, setSnapshotLabel] = useState('')
   const [activeTab, setActiveTab] = useState('team')
@@ -401,8 +426,8 @@ export default function TeamPage() {
 
   // Reset on guild change
   useEffect(() => {
-    setInviteForm({ target: '', access_role: 'admin', expires_in_hours: 0 })
-    setCodeForm({ access_role: 'admin', expires_in_hours: 1 })
+    setInviteForm({ target: '', expires_in_hours: 0 })
+    setCodeForm({ expires_in_hours: 1 })
     setJoinCode('')
     setSnapshotLabel('')
     setOverview({ access: null, collaborators: [], snapshots: [] })
@@ -468,7 +493,7 @@ export default function TeamPage() {
     try {
       const response = await teamAPI.invite(selectedGuildId, {
         target: inviteForm.target.trim(),
-        access_role: inviteForm.access_role,
+        access_role: 'admin',
         expires_in_hours: inviteForm.expires_in_hours,
       })
       setOverview(response.data)
@@ -486,7 +511,7 @@ export default function TeamPage() {
     setSaving('code:create')
     try {
       const response = await teamAPI.createCode(selectedGuildId, {
-        access_role: codeForm.access_role,
+        access_role: 'admin',
         expires_in_hours: codeForm.expires_in_hours,
       })
       setOverview(response.data)
@@ -694,7 +719,10 @@ export default function TeamPage() {
 
   const tabs = [
     { id: 'team', label: 'Equipe', icon: Users },
+    { id: 'collaborators', label: 'Collaborateurs', icon: UserCheck },
+    { id: 'spaces', label: 'Espaces', icon: ArrowRight },
     ...(isOwner ? [
+      { id: 'codes', label: 'Codes d’accès', icon: Shield },
       { id: 'backups', label: 'Sauvegardes', icon: Database },
       { id: 'audit', label: 'Activite', icon: ScrollText },
     ] : []),
@@ -712,7 +740,7 @@ export default function TeamPage() {
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-cyan/20 to-violet-500/20 border border-white/10 flex items-center justify-center">
                   <Users className="w-5 h-5 text-neon-cyan" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h1 className="font-display font-800 text-2xl text-white sm:text-3xl leading-tight">Equipe</h1>
                   <p className="text-white/40 text-xs font-mono mt-0.5">{guild?.name || 'Serveur'}</p>
                 </div>
@@ -763,36 +791,58 @@ export default function TeamPage() {
       <AnimatePresence mode="wait">
         {activeTab === 'team' && (
           <motion.div key="team" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
-            <TeamTab
+            <SimpleTeamTab
               isOwner={isOwner}
               collaborators={collaborators}
-              nonOwnerCollabs={nonOwnerCollabs}
               activeCollabs={activeCollabs}
               suspendedCollabs={suspendedCollabs}
+              joinCodes={joinCodes}
+              locale={locale}
+            />
+          </motion.div>
+        )}
+
+        {activeTab === 'collaborators' && (
+          <motion.div key="collaborators" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
+            <CollaboratorsTab
+              isOwner={isOwner}
+              nonOwnerCollabs={nonOwnerCollabs}
               saving={saving}
-              user={user}
               inviteForm={inviteForm}
               setInviteForm={setInviteForm}
-              codeForm={codeForm}
-              setCodeForm={setCodeForm}
+              onInvite={handleInvite}
+              onSuspend={handleSuspend}
+              onRemoveMember={handleRemoveMember}
+            />
+          </motion.div>
+        )}
+
+        {activeTab === 'spaces' && (
+          <motion.div key="spaces" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
+            <SpacesTab
+              user={user}
               joinCode={joinCode}
               setJoinCode={setJoinCode}
-              joinCodes={joinCodes}
-              overview={overview}
-              locale={locale}
-              guilds={guilds}
+              saving={saving}
               ownGuilds={ownGuilds}
               sharedGuilds={sharedGuilds}
               selectedGuildId={selectedGuildId}
               onSelectGuild={selectGuild}
-              onInvite={handleInvite}
-              onCreateCode={handleCreateCode}
-              onRevokeCode={handleRevokeCode}
               onRedeemCode={handleRedeemCode}
               onConnectDiscord={handleConnectDiscord}
-              onMemberRole={handleMemberRole}
-              onSuspend={handleSuspend}
-              onRemoveMember={handleRemoveMember}
+            />
+          </motion.div>
+        )}
+
+        {activeTab === 'codes' && isOwner && (
+          <motion.div key="codes" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
+            <AccessCodesTab
+              saving={saving}
+              codeForm={codeForm}
+              setCodeForm={setCodeForm}
+              joinCodes={joinCodes}
+              onCreateCode={handleCreateCode}
+              onRevokeCode={handleRevokeCode}
             />
           </motion.div>
         )}
@@ -864,8 +914,8 @@ function WorkspaceSwitchCard({ ownGuilds, sharedGuilds, selectedGuildId, onSelec
     <div className="spotlight-card p-5 space-y-4">
       <SectionTitle
         icon={ArrowRight}
-        title="Basculer d espace"
-        subtitle="Passe de ton espace principal a un espace partage sans te deconnecter."
+        title="Mes espaces"
+        subtitle="Passe de ton espace principal à un espace partagé sans te déconnecter."
         tone="cyan"
       />
       <div className="grid gap-4 lg:grid-cols-2">
@@ -942,20 +992,11 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
     <div className="spotlight-card p-5 space-y-4">
       <SectionTitle
         icon={Shield}
-        title="Codes d acces rapides"
-        subtitle="Genere un code a usage unique, choisis le role et sa duree, puis partage-le."
+        title="Codes d'accès"
+        subtitle="Un code = une personne. Accès complet à l'équipe, hors sauvegardes et activité."
         tone="violet"
       />
-      <div className="grid gap-3 sm:grid-cols-[180px_160px_auto]">
-        <select
-          className="select-field"
-          value={codeForm.access_role}
-          onChange={(event) => setCodeForm((current) => ({ ...current, access_role: event.target.value }))}
-        >
-          <option value="admin">Admin</option>
-          <option value="moderator">Moderateur</option>
-          <option value="viewer">Lecture seule</option>
-        </select>
+      <div className="grid gap-3 lg:grid-cols-[220px_auto]">
         <select
           className="select-field"
           value={codeForm.expires_in_hours}
@@ -972,20 +1013,23 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/10 px-5 py-3 text-sm font-mono text-violet-300 transition-all hover:bg-violet-500/20 disabled:opacity-40"
         >
           {saving === 'code:create' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {saving === 'code:create' ? 'Generation...' : 'Generer un code'}
+          {saving === 'code:create' ? 'Génération...' : 'Générer un code'}
         </button>
+      </div>
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-white/38">
+        Le code reste actif jusqu'à son expiration ou sa première utilisation.
       </div>
       {joinCodes.length === 0 ? (
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-sm text-white/35">
-          Aucun code actif pour l instant.
+          Aucun code actif pour l'instant.
         </div>
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
           {joinCodes.map((entry) => (
             <div key={entry.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-display text-lg font-700 text-white tracking-[0.18em]">{entry.code}</p>
+                <div className="min-w-0">
+                  <p className="font-display text-lg font-700 text-white tracking-[0.18em] break-all">{entry.code}</p>
                   <p className="mt-1 text-xs text-white/32 font-mono">
                     {ROLE_CONFIG[entry.access_role]?.label || entry.access_role} · {entry.expires_at ? `expire ${formatRelativeTime(entry.expires_at)}` : 'sans expiration'}
                   </p>
@@ -1347,6 +1391,351 @@ function TeamTab({
 // ══════════════════════════════════════════════════════════════════════════════
 // BACKUPS TAB (Owner-only private section)
 // ══════════════════════════════════════════════════════════════════════════════
+
+function SimpleTeamTab({ isOwner, collaborators, activeCollabs, suspendedCollabs, joinCodes }) {
+  const ownerEntry = collaborators.find((entry) => entry.is_owner)
+  const teamOwner = ownerEntry || collaborators[0] || null
+
+  return (
+    <div className="space-y-5">
+      {teamOwner && (
+        <div className="spotlight-card p-5">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4 min-w-0">
+              <Avatar src={getTeamAvatar(teamOwner)} label={getTeamDisplayName(teamOwner)} ring="ring-2 ring-amber-400/30" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-display font-700 text-white text-lg truncate">{getTeamDisplayName(teamOwner)}</span>
+                  <RoleBadge role="owner" />
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-white/30 font-mono">
+                  <span>{isOwner ? 'Espace principal' : 'Espace partagé'}</span>
+                  {teamOwner.site_username && <span>Site: {teamOwner.site_username}</span>}
+                  {teamOwner.discord_id && <span>ID Discord: {teamOwner.discord_id}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatPill icon={Users} label="Collaborateurs" value={Math.max(collaborators.length - 1, 0)} tone="violet" />
+              <StatPill icon={UserCheck} label="Actifs" value={activeCollabs.length} tone="emerald" />
+              <StatPill icon={Pause} label="Bloqués" value={suspendedCollabs.length} tone="amber" />
+              <StatPill icon={Shield} label="Codes actifs" value={joinCodes.length} tone="cyan" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+          <SectionTitle
+            icon={ShieldCheck}
+            title="Sécurité du token"
+            subtitle="Les invités n'ont jamais accès au token ni aux sauvegardes privées."
+            tone="emerald"
+          />
+          <p className="mt-4 text-sm text-white/50 leading-relaxed">
+            Chaque accès partagé reste isolé, contrôlé et révocable en un clic.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+          <SectionTitle
+            icon={Zap}
+            title="Synchronisation"
+            subtitle="Les espaces partagés se mettent à jour en temps réel pour toute l'équipe."
+            tone="cyan"
+          />
+          <p className="mt-4 text-sm text-white/50 leading-relaxed">
+            Les changements visibles sont propagés sans rechargement manuel.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Collaborateurs</p>
+          <p className="mt-2 text-sm text-white/60 leading-relaxed">Gère l'accès, bloque temporairement ou retire un membre sans quitter la page.</p>
+        </div>
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Codes d’accès</p>
+          <p className="mt-2 text-sm text-white/60 leading-relaxed">Génère un code sécurisé, copie-le en un clic et laisse-le expirer automatiquement.</p>
+        </div>
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Espaces</p>
+          <p className="mt-2 text-sm text-white/60 leading-relaxed">Passe facilement de ton espace principal aux espaces partagés sans te déconnecter.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CollaboratorsTab({ isOwner, nonOwnerCollabs, saving, inviteForm, setInviteForm, onInvite, onSuspend, onRemoveMember }) {
+  const [showInviteForm, setShowInviteForm] = useState(false)
+
+  return (
+    <div className="space-y-5">
+      {isOwner && (
+        <div className="spotlight-card overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowInviteForm((current) => !current)}
+            className="w-full flex items-center justify-between p-5 hover:bg-white/[0.02] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl border border-emerald-400/20 bg-emerald-400/10 flex items-center justify-center">
+                <UserPlus className="w-[18px] h-[18px] text-emerald-400" />
+              </div>
+              <div className="text-left">
+                <p className="font-display font-700 text-white text-sm">Inviter un collaborateur</p>
+                <p className="text-white/35 text-xs mt-0.5">Accès unique à l’équipe, sans réglage complexe.</p>
+              </div>
+            </div>
+            <motion.div animate={{ rotate: showInviteForm ? 45 : 0 }} transition={{ duration: 0.2 }}>
+              <Plus className="w-5 h-5 text-white/40" />
+            </motion.div>
+          </button>
+
+          <AnimatePresence>
+            {showInviteForm && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="px-5 pb-5 pt-4 space-y-3 border-t border-white/[0.06]">
+                  <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
+                    <input
+                      className="input-field"
+                      placeholder="Pseudo, email ou ID Discord"
+                      value={inviteForm.target}
+                      onChange={(event) => setInviteForm((current) => ({ ...current, target: event.target.value }))}
+                      onKeyDown={(event) => event.key === 'Enter' && onInvite()}
+                    />
+                    <select
+                      className="select-field"
+                      value={inviteForm.expires_in_hours}
+                      onChange={(event) => setInviteForm((current) => ({ ...current, expires_in_hours: Number(event.target.value) }))}
+                    >
+                      {EXPIRY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={onInvite}
+                      disabled={saving === 'invite' || !inviteForm.target.trim()}
+                      className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-400/25 text-emerald-300 font-mono text-sm hover:from-emerald-500/30 hover:to-emerald-600/30 transition-all disabled:opacity-40"
+                    >
+                      {saving === 'invite' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                      {saving === 'invite' ? 'Ajout...' : 'Inviter'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-white/30">Chaque invité a l’accès équipe complet, hors sauvegardes et activité privée.</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      <div className="spotlight-card p-5 space-y-4">
+        <SectionTitle
+          icon={Users}
+          title={`Collaborateurs${nonOwnerCollabs.length > 0 ? ` (${nonOwnerCollabs.length})` : ''}`}
+          subtitle={isOwner ? 'Gère les accès de ton équipe depuis une vue claire.' : 'Les personnes qui partagent cet espace avec toi.'}
+          tone="cyan"
+        />
+
+        {nonOwnerCollabs.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            message={isOwner ? 'Aucun collaborateur pour le moment. Invite quelqu’un pour commencer.' : 'Aucun autre collaborateur sur ce serveur.'}
+          />
+        ) : (
+          <div className="space-y-3">
+            {nonOwnerCollabs.map((entry, index) => (
+              <motion.div
+                key={entry.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(index * 0.04, 0.2) }}
+                className={`rounded-2xl border p-4 transition-all hover:bg-white/[0.02] ${
+                  entry.is_suspended ? 'border-red-500/10 bg-red-500/[0.02]' : 'border-white/[0.06] bg-white/[0.01]'
+                }`}
+              >
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar src={getTeamAvatar(entry)} label={getTeamDisplayName(entry)} ring={entry.is_suspended ? 'ring-1 ring-red-500/20' : ''} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`font-display font-600 text-sm truncate ${entry.is_suspended ? 'text-white/35 line-through' : 'text-white'}`}>
+                          {getTeamDisplayName(entry)}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neon-cyan/20 bg-neon-cyan/10 text-[11px] font-mono text-neon-cyan">
+                          <Shield className="w-3 h-3" />
+                          Accès équipe
+                        </span>
+                        <StatusDot isSuspended={entry.is_suspended} suspendedUntil={entry.suspended_until} expiresAt={entry.expires_at} />
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/28 font-mono">
+                        {entry.email && <span>Email: {entry.email}</span>}
+                        {entry.site_username && <span>Site: {entry.site_username}</span>}
+                        {entry.discord_username && <span>Discord: {entry.discord_username}</span>}
+                        {entry.discord_id && <span>ID Discord: {entry.discord_id}</span>}
+                        <span>Depuis {timeAgo(entry.accepted_at || entry.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isOwner && (
+                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                      {entry.is_suspended ? (
+                        <button
+                          type="button"
+                          onClick={() => onSuspend(entry.user_id, getTeamDisplayName(entry), false, 0)}
+                          disabled={saving.startsWith(`suspend:${entry.user_id}:`)}
+                          className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] font-mono text-emerald-300 hover:bg-emerald-500/20 transition-all disabled:opacity-40"
+                        >
+                          Réactiver
+                        </button>
+                      ) : (
+                        SUSPEND_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => onSuspend(entry.user_id, getTeamDisplayName(entry), true, option.value)}
+                            disabled={saving.startsWith(`suspend:${entry.user_id}:`)}
+                            className={`rounded-xl border px-3 py-2 text-[11px] font-mono transition-all disabled:opacity-40 ${
+                              option.value === 0
+                                ? 'border-amber-400/20 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20'
+                                : 'border-white/10 bg-white/[0.04] text-white/60 hover:border-amber-400/20 hover:text-amber-200'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onRemoveMember(entry.user_id, getTeamDisplayName(entry))}
+                        disabled={saving === `remove:${entry.user_id}`}
+                        className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-mono text-red-300 hover:bg-red-500/20 transition-all disabled:opacity-40"
+                      >
+                        Retirer
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SpacesTab({ user, joinCode, setJoinCode, saving, ownGuilds, sharedGuilds, selectedGuildId, onSelectGuild, onRedeemCode, onConnectDiscord }) {
+  return (
+    <div className="space-y-5">
+      <WorkspaceSwitchCard
+        ownGuilds={ownGuilds}
+        sharedGuilds={sharedGuilds}
+        selectedGuildId={selectedGuildId}
+        onSelectGuild={onSelectGuild}
+      />
+      <JoinTeamCard
+        user={user}
+        joinCode={joinCode}
+        setJoinCode={setJoinCode}
+        saving={saving}
+        onRedeem={onRedeemCode}
+        onConnectDiscord={onConnectDiscord}
+      />
+    </div>
+  )
+}
+
+function AccessCodesTab({ saving, codeForm, setCodeForm, joinCodes, onCreateCode, onRevokeCode }) {
+  return (
+    <div className="space-y-5">
+      <div className="spotlight-card p-5 space-y-4">
+        <SectionTitle
+          icon={Shield}
+          title="Codes d’accès"
+          subtitle="Crée un code sécurisé, copie-le et partage-le à une seule personne."
+          tone="violet"
+        />
+        <div className="grid gap-3 lg:grid-cols-[220px_auto]">
+          <select
+            className="select-field"
+            value={codeForm.expires_in_hours}
+            onChange={(event) => setCodeForm((current) => ({ ...current, expires_in_hours: Number(event.target.value) }))}
+          >
+            {EXPIRY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={onCreateCode}
+            disabled={saving === 'code:create'}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/10 px-5 py-3 text-sm font-mono text-violet-300 transition-all hover:bg-violet-500/20 disabled:opacity-40"
+          >
+            {saving === 'code:create' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {saving === 'code:create' ? 'Génération...' : 'Générer un code'}
+          </button>
+        </div>
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-white/38">
+          Chaque code donne un accès équipe complet, hors sauvegardes et activité privée.
+        </div>
+        {joinCodes.length === 0 ? (
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-sm text-white/35">
+            Aucun code actif pour l'instant.
+          </div>
+        ) : (
+          <div className="grid gap-3 xl:grid-cols-2">
+            {joinCodes.map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-display text-lg font-700 text-white tracking-[0.18em] break-all">{entry.code}</p>
+                    <p className="mt-1 text-xs text-white/32 font-mono">
+                      {entry.expires_at ? `Expire ${formatRelativeTime(entry.expires_at)}` : 'Sans expiration'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => copyText(entry.code, 'Code copié')}
+                      className="inline-flex items-center justify-center rounded-xl border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs font-mono text-neon-cyan transition-all hover:bg-neon-cyan/20"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRevokeCode(entry.id)}
+                      disabled={saving === `code:revoke:${entry.id}`}
+                      className="inline-flex items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300 transition-all hover:bg-red-500/20 disabled:opacity-40"
+                    >
+                      {saving === `code:revoke:${entry.id}` ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/35">
+                  <span>Créé {timeAgo(entry.created_at)}</span>
+                  <span>Par {entry.created_by_display_name || entry.created_by_username || 'Inconnu'}</span>
+                  <span className="font-mono">Usage unique</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function BackupsTab({ snapshots, saving, snapshotLabel, setSnapshotLabel, locale, hasCollaborators, onCreateSnapshot, onRestoreSnapshot, onDeleteSnapshot }) {
   return (

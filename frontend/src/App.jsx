@@ -18,11 +18,14 @@ import SearchPage from './pages/SearchPage'
 import ScanPage from './pages/ScanPage'
 import LogsPage from './pages/LogsPage'
 import MessagesPage from './pages/MessagesPage'
+import DMCenterPage from './pages/DMCenterPage'
 import NotificationsPage from './pages/NotificationsPage'
 import AccessControlPage from './pages/AccessControlPage'
 import CommandsPage from './pages/CommandsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
+import IncidentsPage from './pages/IncidentsPage'
 import ReviewsPage from './pages/ReviewsPage'
+import RolesOnboardingPage from './pages/RolesOnboardingPage'
 import SupportPage from './pages/SupportPage'
 import TeamPage from './pages/TeamPage'
 import SettingsPage from './pages/SettingsPage'
@@ -213,12 +216,15 @@ function AppRoot() {
           <Route path="servers" element={<PageTransition><ServersPage /></PageTransition>} />
           <Route path="servers/:guildId" element={<Navigate to="/dashboard/servers" replace />} />
           <Route path="protection" element={<PageTransition><ProtectionPage /></PageTransition>} />
+          <Route path="onboarding" element={<PageTransition><RolesOnboardingPage /></PageTransition>} />
           <Route path="search" element={<PageTransition><SearchPage /></PageTransition>} />
           <Route path="scan" element={<PageTransition><ScanPage /></PageTransition>} />
           <Route path="rassican" element={<Navigate to="/dashboard/scan" replace />} />
           <Route path="logs" element={<PageTransition><LogsPage /></PageTransition>} />
+          <Route path="incidents" element={<PageTransition><IncidentsPage /></PageTransition>} />
           <Route path="moderation" element={<Navigate to="/dashboard/search" replace />} />
           <Route path="messages" element={<PageTransition><MessagesPage /></PageTransition>} />
+          <Route path="dm-center" element={<PageTransition><DMCenterPage /></PageTransition>} />
           <Route path="notifications" element={<PageTransition><NotificationsPage /></PageTransition>} />
           <Route path="blocked" element={<PageTransition><AccessControlPage /></PageTransition>} />
           <Route path="commands" element={<PageTransition><CommandsPage /></PageTransition>} />
