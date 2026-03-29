@@ -14,6 +14,7 @@
   body,
   #root {
     @apply bg-surface-0 text-white;
+    height: var(--app-height);
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
@@ -21,12 +22,14 @@
   }
   body {
     font-family: 'DM Sans', sans-serif;
+    height: var(--app-height);
     min-height: var(--app-height);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
   #root {
+    height: var(--app-height);
     min-height: var(--app-height);
   }
   *,
