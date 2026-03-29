@@ -125,6 +125,10 @@ function normalizeDiscordLinkMode(value) {
   return String(value || '').trim().toLowerCase() === 'redirect' ? 'redirect' : 'popup';
 }
 
+function normalizeDiscordLinkPrompt(value) {
+  return value ? 'consent' : '';
+}
+
 function buildFrontendRedirect(pathname, params = {}) {
   const url = new URL(sanitizeFrontendReturnPath(pathname), config.FRONTEND_URL);
   Object.entries(params).forEach(([key, value]) => {
@@ -135,13 +139,14 @@ function buildFrontendRedirect(pathname, params = {}) {
   return url.toString();
 }
 
-function signDiscordLinkState(userId, returnTo, mode = 'popup') {
+function signDiscordLinkState(userId, returnTo, mode = 'popup', forcePrompt = false) {
   return jwt.sign(
     {
       type: 'discord-link',
       userId,
       returnTo: sanitizeFrontendReturnPath(returnTo),
       mode: normalizeDiscordLinkMode(mode),
+      prompt: normalizeDiscordLinkPrompt(forcePrompt),
     },
     config.JWT_SECRET,
     { expiresIn: '10m' }
@@ -161,6 +166,7 @@ function decodeDiscordLinkState(rawState, { throwOnInvalid = false } = {}) {
       userId: payload.userId,
       returnTo: sanitizeFrontendReturnPath(payload.returnTo),
       mode: normalizeDiscordLinkMode(payload.mode),
+      prompt: normalizeDiscordLinkPrompt(payload.prompt === 'consent'),
     };
   } catch (error) {
     if (throwOnInvalid) throw error;
@@ -269,7 +275,7 @@ router.post('/discord/link', requireAuth, validate(discordLinkSchema), (req, res
 
   const returnTo = sanitizeFrontendReturnPath(req.body.return_to);
   const mode = normalizeDiscordLinkMode(req.body.mode);
-  const state = signDiscordLinkState(req.user.id, returnTo, mode);
+  const state = signDiscordLinkState(req.user.id, returnTo, mode, req.body.force_prompt);
   res.json({
     url: `${config.API_PREFIX}/auth/discord?state=${encodeURIComponent(state)}`,
     return_to: returnTo,
@@ -357,7 +363,12 @@ router.post('/ws-ticket', requireAuth, (req, res) => {
 if (discordOauthEnabled) {
   router.get('/discord', (req, res, next) => {
     const state = String(req.query.state || '').trim();
-    return passport.authenticate('discord', state ? { state } : undefined)(req, res, next);
+    const linkState = decodeDiscordLinkState(state);
+    const authOptions = state ? { state } : {};
+    if (linkState?.prompt) {
+      authOptions.prompt = linkState.prompt;
+    }
+    return passport.authenticate('discord', Object.keys(authOptions).length > 0 ? authOptions : undefined)(req, res, next);
   });
 
   router.get('/discord/callback', (req, res, next) => {

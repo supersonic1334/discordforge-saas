@@ -65,6 +65,7 @@ const preferencesSchema = z.object({
 const discordLinkSchema = z.object({
   return_to: z.string().trim().max(500).optional().default('/dashboard/search'),
   mode: z.enum(['redirect', 'popup']).optional().default('popup'),
+  force_prompt: z.boolean().optional().default(false),
 });
 
 // ── Bot Token ─────────────────────────────────────────────────────────────────

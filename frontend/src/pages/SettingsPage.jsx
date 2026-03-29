@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Save, Key, User, Lock, Languages, ImagePlus, Trash2 } from 'lucide-react'
+import { Save, Key, User, Lock, Languages, ImagePlus, Trash2, Link2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { authAPI } from '../services/api'
-import { useAuthStore, useBotStore } from '../stores'
+import { useAuthStore, useBotStore, useGuildStore } from '../stores'
 import { AI_LANGUAGE_OPTIONS, SITE_LANGUAGE_OPTIONS, getOptionLabel, useI18n } from '../i18n'
 import { prepareAvatarDataUrl } from '../utils/avatarUpload'
 import { getQuickBotToken, setQuickBotToken } from '../utils/quickBotToken'
+import { openDiscordLinkPopup } from '../utils/discordLinkPopup'
 
 function normalizePreference(value, fallback = 'auto') {
   return ['auto', 'fr', 'en', 'es'].includes(value) ? value : fallback
@@ -76,6 +77,7 @@ function SettingsMetric({ label, value, tone }) {
 export default function SettingsPage() {
   const { user, fetchMe, setUser, logout } = useAuthStore()
   const { fetchStatus: refreshBotStatus } = useBotStore()
+  const { fetchGuilds } = useGuildStore()
   const { t, locale } = useI18n()
   const navigate = useNavigate()
   const preferencesReadyRef = useRef(false)
@@ -310,6 +312,41 @@ export default function SettingsPage() {
     navigate('/auth')
   }
 
+  const reconnectDiscord = async () => {
+    setSaving('discord-link')
+    try {
+      const response = await authAPI.createDiscordLink({
+        return_to: '/dashboard/settings',
+        mode: 'popup',
+        force_prompt: true,
+      })
+      const nextUrl = response?.data?.url
+      if (!nextUrl) throw new Error('Lien Discord indisponible')
+
+      const linkResult = await openDiscordLinkPopup(nextUrl)
+      if (linkResult?.status !== 'success') {
+        throw new Error(linkResult?.error || 'Liaison Discord impossible')
+      }
+
+      setUser({
+        ...(useAuthStore.getState().user || {}),
+        discord_id: String(linkResult?.linkedDiscordId || '').trim() || null,
+        discord_username: String(linkResult?.linkedDiscordUsername || '').trim() || null,
+        discord_global_name: String(linkResult?.linkedDiscordGlobalName || '').trim() || null,
+        discord_avatar_url: String(linkResult?.linkedDiscordAvatarUrl || '').trim() || null,
+      })
+
+      await fetchMe()
+      await fetchGuilds({ force: true })
+      toast.success(user?.discord_id ? 'Compte Discord mis a jour' : 'Compte Discord lie')
+    } catch (e) {
+      if (String(e?.message || '') !== 'Popup fermee') {
+        toast.error(getErrorMessage(e, 'Impossible de changer le compte Discord.'))
+      }
+    }
+    setSaving(null)
+  }
+
   return (
     <div className="px-4 py-5 sm:p-6 max-w-6xl mx-auto space-y-5">
       <div className="feature-hero p-6 sm:p-7">
@@ -463,6 +500,52 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-5">
+          <SettingsPanel
+            icon={Link2}
+            iconTone="border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan"
+            title="Compte Discord lie"
+            hint="Choisis ici le compte Discord utilise pour les actions rapides, le scan et l assistant IA."
+          >
+            <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-[20px] border border-white/10 bg-white/[0.04] overflow-hidden shrink-0 flex items-center justify-center text-white/45 font-display font-700">
+                  {user?.discord_avatar_url ? (
+                    <img src={user.discord_avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    (user?.discord_global_name || user?.discord_username || '?').slice(0, 1).toUpperCase()
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-display font-700 text-white truncate">
+                    {user?.discord_global_name || user?.discord_username || 'Aucun compte Discord lie'}
+                  </p>
+                  <p className="mt-1 text-sm text-white/40 break-all">
+                    {user?.discord_username ? `@${user.discord_username}` : 'Lie un compte Discord pour utiliser les actions staff securisees.'}
+                  </p>
+                  {user?.discord_id && (
+                    <p className="mt-1 text-[11px] font-mono text-white/28 break-all">ID Discord: {user.discord_id}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={reconnectDiscord}
+                disabled={saving === 'discord-link'}
+                className="px-5 py-3 rounded-2xl bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm font-mono hover:bg-neon-cyan/20 transition-all disabled:opacity-40"
+              >
+                {saving === 'discord-link'
+                  ? 'Connexion...'
+                  : (user?.discord_id ? 'Changer le compte Discord' : 'Lier mon compte Discord')}
+              </button>
+              <p className="self-center text-xs text-white/30">
+                Si Discord ouvre le mauvais compte, clique sur le changement de compte dans la popup puis reconnecte-toi.
+              </p>
+            </div>
+          </SettingsPanel>
+
           <SettingsPanel
             icon={Key}
             iconTone="border-amber-500/20 bg-amber-500/10 text-amber-400"
