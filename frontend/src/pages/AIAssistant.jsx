@@ -453,7 +453,7 @@ export default function AIAssistant() {
   }
 
   return (
-    <div className="flex h-full max-h-screen flex-col overflow-x-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-x-hidden">
       <div className="shrink-0 border-b border-white/[0.06] p-4 sm:p-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">

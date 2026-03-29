@@ -28,7 +28,7 @@ export default class AppErrorBoundary extends React.Component {
     }
 
     return (
-      <div className="min-h-screen bg-surface-0 text-white flex items-center justify-center p-6">
+      <div className="min-h-[var(--app-height)] bg-surface-0 text-white flex items-center justify-center p-6">
         <div className="w-full max-w-lg rounded-3xl border border-white/[0.08] bg-surface-1/90 backdrop-blur-xl p-8 shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
           <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-red-400/20 bg-red-500/10 text-red-300">
             <span className="text-2xl font-bold">!</span>

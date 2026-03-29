@@ -5,6 +5,11 @@
 /* ── Base ──────────────────────────────────────────────────────────────────── */
 
 @layer base {
+  :root {
+    --app-height: 100dvh;
+    --app-width: 100vw;
+  }
+
   html,
   body,
   #root {
@@ -16,11 +21,13 @@
   }
   body {
     font-family: 'DM Sans', sans-serif;
-    min-height: 100vh;
-    min-height: 100dvh;
+    min-height: var(--app-height);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+  #root {
+    min-height: var(--app-height);
   }
   *,
   *::before,
@@ -326,6 +333,7 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     overscroll-behavior-x: none;
+    min-height: 0;
   }
   .sidebar-shell:hover {
     box-shadow:
@@ -571,6 +579,7 @@
     scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: none;
+    min-height: 0;
   }
 }
 

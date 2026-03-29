@@ -408,7 +408,7 @@ export default function AuthPage() {
 
   return (
     <div
-      className="min-h-screen min-h-[100dvh] bg-surface-0 relative overflow-x-hidden p-4 md:px-6 md:py-8"
+      className="min-h-[var(--app-height)] bg-surface-0 relative overflow-x-hidden p-4 md:px-6 md:py-8"
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >

@@ -24,7 +24,7 @@ export default function OAuthCallback() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-surface-0 flex items-center justify-center">
+    <div className="min-h-[var(--app-height)] bg-surface-0 flex items-center justify-center">
       <div className="text-center">
         <div className="w-8 h-8 border-2 border-neon-cyan/30 border-t-neon-cyan rounded-full animate-spin mx-auto mb-3" />
         <p className="text-white/40 font-mono">{t('oauth.loading')}</p>

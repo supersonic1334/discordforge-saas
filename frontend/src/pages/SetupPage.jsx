@@ -85,7 +85,7 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface-0 flex items-center justify-center relative overflow-hidden p-4">
+    <div className="min-h-[var(--app-height)] bg-surface-0 flex items-center justify-center relative overflow-hidden p-4">
       <AuthSnowBackdrop className="z-0" />
 
       <div className="relative z-10 w-full max-w-2xl">

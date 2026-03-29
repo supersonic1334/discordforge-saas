@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { motion } from 'framer-motion'
@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard'
 import AIAssistant from './pages/AIAssistant'
 import ServersPage from './pages/ServersPage'
 import ProtectionPage from './pages/ProtectionPage'
+import PlaybooksPage from './pages/PlaybooksPage'
 import SearchPage from './pages/SearchPage'
 import ScanPage from './pages/ScanPage'
 import LogsPage from './pages/LogsPage'
@@ -95,6 +96,41 @@ function DashboardHome() {
 
 function AppRoot() {
   const { token, fetchMe, logout } = useAuthStore()
+  const viewportRafRef = useRef(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const applyViewportSize = () => {
+      viewportRafRef.current = null
+      const nextHeight = Math.round(window.visualViewport?.height || window.innerHeight || 0)
+      const nextWidth = Math.round(window.visualViewport?.width || window.innerWidth || 0)
+
+      document.documentElement.style.setProperty('--app-height', `${nextHeight}px`)
+      document.documentElement.style.setProperty('--app-width', `${nextWidth}px`)
+    }
+
+    const scheduleViewportSize = () => {
+      if (viewportRafRef.current) {
+        window.cancelAnimationFrame(viewportRafRef.current)
+      }
+      viewportRafRef.current = window.requestAnimationFrame(applyViewportSize)
+    }
+
+    scheduleViewportSize()
+    window.addEventListener('resize', scheduleViewportSize)
+    window.addEventListener('orientationchange', scheduleViewportSize)
+    window.visualViewport?.addEventListener('resize', scheduleViewportSize)
+
+    return () => {
+      if (viewportRafRef.current) {
+        window.cancelAnimationFrame(viewportRafRef.current)
+      }
+      window.removeEventListener('resize', scheduleViewportSize)
+      window.removeEventListener('orientationchange', scheduleViewportSize)
+      window.visualViewport?.removeEventListener('resize', scheduleViewportSize)
+    }
+  }, [])
 
   useEffect(() => {
     // Intentionally empty — client-side blocking (right-click, DevTools,
@@ -216,6 +252,7 @@ function AppRoot() {
           <Route path="servers" element={<PageTransition><ServersPage /></PageTransition>} />
           <Route path="servers/:guildId" element={<Navigate to="/dashboard/servers" replace />} />
           <Route path="protection" element={<PageTransition><ProtectionPage /></PageTransition>} />
+          <Route path="playbooks" element={<PageTransition><PlaybooksPage /></PageTransition>} />
           <Route path="onboarding" element={<PageTransition><RolesOnboardingPage /></PageTransition>} />
           <Route path="search" element={<PageTransition><SearchPage /></PageTransition>} />
           <Route path="scan" element={<PageTransition><ScanPage /></PageTransition>} />

@@ -559,7 +559,7 @@ export default function Layout() {
   }
 
   return (
-    <div className="dashboard-shell relative flex min-h-screen min-h-[100dvh] md:h-screen max-w-full overflow-hidden">
+    <div className="dashboard-shell relative flex h-[var(--app-height)] min-h-[var(--app-height)] max-w-full overflow-hidden">
       <AuthSnowBackdrop className="z-[1]" />
 
       {hasSelectedGuild && (
