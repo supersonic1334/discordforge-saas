@@ -57,11 +57,15 @@ function resolveSelectedGuildId(guilds = [], preferredGuildId = null, fallbackGu
 function sanitizePersistedUser(user) {
   if (!user) return user
   const nextUser = { ...user }
+  nextUser.display_avatar_url = nextUser.display_avatar_url
+    || nextUser.avatar_url
+    || (nextUser.is_discord_oauth_account ? nextUser.discord_avatar_url || null : null)
   if (
     nextUser.discord_id
     && typeof nextUser.avatar_url === 'string'
     && nextUser.avatar_url.includes('cdn.discordapp.com/avatars/')
     && nextUser.avatar_url.includes(`/${String(nextUser.discord_id)}/`)
+    && !nextUser.is_discord_oauth_account
   ) {
     nextUser.avatar_url = null
   }

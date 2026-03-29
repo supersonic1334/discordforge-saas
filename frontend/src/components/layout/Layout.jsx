@@ -257,8 +257,8 @@ const SidebarContent = memo(function SidebarContent({
 
         <div className={`flex items-center gap-3 px-3 py-2 mt-1 ${collapsed ? 'justify-center' : ''}`}>
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-cyan to-neon-violet flex items-center justify-center text-xs font-display font-700 shrink-0">
-            {user?.avatar_url
-              ? <img src={user.avatar_url} className="w-full h-full rounded-full object-cover" alt="" />
+            {(user?.display_avatar_url || user?.avatar_url)
+              ? <img src={user.display_avatar_url || user.avatar_url} className="w-full h-full rounded-full object-cover" alt="" />
               : user?.username?.[0]?.toUpperCase()}
           </div>
           {!collapsed && (

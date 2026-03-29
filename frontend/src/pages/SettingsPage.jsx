@@ -120,6 +120,7 @@ export default function SettingsPage() {
     : user?.role === 'api_provider'
     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
     : 'bg-white/5 text-white/40 border border-white/10'
+  const profileAvatarPreview = avatarDraft || user?.display_avatar_url || user?.avatar_url || ''
 
   useEffect(() => {
     fetchMe().catch(() => {})
@@ -396,7 +397,7 @@ export default function SettingsPage() {
           >
             <div className="flex items-center gap-4 rounded-[24px] border border-white/8 bg-black/15 p-4">
               <div className="w-16 h-16 rounded-[22px] bg-gradient-to-br from-neon-cyan to-neon-violet flex items-center justify-center font-display font-800 text-2xl text-white shrink-0 overflow-hidden shadow-[0_18px_44px_rgba(0,0,0,0.28)]">
-                {avatarDraft ? <img src={avatarDraft} className="w-full h-full object-cover" alt="" /> : user?.username?.[0]?.toUpperCase()}
+                {profileAvatarPreview ? <img src={profileAvatarPreview} className="w-full h-full object-cover" alt="" /> : user?.username?.[0]?.toUpperCase()}
               </div>
               <div className="min-w-0">
                 <p className="font-display font-700 text-white">{user?.username}</p>

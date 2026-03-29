@@ -74,9 +74,12 @@ function signToken(userId, role) {
 
 function safeUser(user) {
   const { password_hash, discord_token, ...safe } = user;
+  const isDiscordOauthAccount = !password_hash && !!safe.discord_id;
   safe.site_language = SITE_LANGUAGES.includes(safe.site_language) ? safe.site_language : 'auto';
   safe.ai_language = AI_LANGUAGES.includes(safe.ai_language) ? safe.ai_language : 'auto';
   safe.analytics_layout = parseJsonObject(safe.analytics_layout, null);
+  safe.is_discord_oauth_account = isDiscordOauthAccount;
+  safe.display_avatar_url = safe.avatar_url || (isDiscordOauthAccount ? safe.discord_avatar_url || null : null);
   safe.is_primary_founder = isPrimaryFounderEmail(safe.email);
   if (isPrimaryFounderEmail(safe.email)) {
     safe.email = maskEmail(safe.email, { hideCompletely: true });
