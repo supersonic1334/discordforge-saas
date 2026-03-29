@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, Clock3, Flame, Radar, ShieldAlert } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { AlertTriangle, ArrowRight, Calendar, ChevronDown, Clock3, Flame, Radar, ShieldAlert } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { logsAPI } from '../services/api'
 import { useGuildStore } from '../stores'
@@ -11,36 +12,109 @@ function getErrorMessage(error) {
 }
 
 function formatDate(value) {
-  if (!value) return '—'
+  if (!value) return '-'
   try {
     return new Date(value).toLocaleString('fr-FR')
   } catch {
-    return value
+    return String(value)
   }
 }
 
 function inferSeverity(entry) {
-  const level = String(entry?.level || entry?.severity || entry?.type || '').toLowerCase()
+  const level = String(entry?.level || entry?.severity || '').toLowerCase()
   const action = String(entry?.action || entry?.action_name || entry?.title || '').toLowerCase()
 
-  if (level.includes('error') || level.includes('critical') || action.includes('ban') || action.includes('nuke')) return 'critical'
-  if (level.includes('warn') || action.includes('timeout') || action.includes('raid') || action.includes('blacklist')) return 'high'
+  if (
+    level.includes('error')
+    || level.includes('critical')
+    || action.includes('ban')
+    || action.includes('nuke')
+    || action.includes('suppression multiple')
+  ) return 'critical'
+
+  if (
+    level.includes('warn')
+    || action.includes('timeout')
+    || action.includes('raid')
+    || action.includes('blacklist')
+    || action.includes('kick')
+  ) return 'high'
+
   return 'medium'
+}
+
+function uniqueLines(lines = []) {
+  return [...new Set(lines.map((line) => String(line || '').trim()).filter(Boolean))]
+}
+
+function buildIncidentSummary(entry, actionLabel, targetLabel) {
+  const summary = String(entry?.summary || entry?.message || entry?.reason || entry?.description || '').trim()
+  if (summary) return summary
+  if (targetLabel) return `${actionLabel} sur ${targetLabel}.`
+  return `${actionLabel} detecte.`
+}
+
+function buildIncidentDetails(entry, targetLabel) {
+  const metadata = entry?.metadata && typeof entry.metadata === 'object' ? entry.metadata : {}
+  const options = entry?.options && typeof entry.options === 'object' ? entry.options : {}
+
+  return uniqueLines([
+    ...(Array.isArray(entry?.details) ? entry.details : []),
+    entry?.reason ? `Cause : ${entry.reason}` : '',
+    options?.count ? `Elements touches : ${options.count}` : '',
+    options?.channel_name || options?.channel_id
+      ? `Canal concerne : ${options.channel_name ? `#${String(options.channel_name).replace(/^#/, '')}` : options.channel_id}`
+      : '',
+    metadata?.source_kind === 'runtime' ? 'Source : evenement capture en temps reel' : '',
+    metadata?.source_kind === 'audit' ? 'Source : journal d audit Discord' : '',
+    metadata?.changes_count ? `Changements detectes : ${metadata.changes_count}` : '',
+    !Array.isArray(entry?.details) || entry.details.length === 0
+      ? targetLabel
+        ? `Element concerne : ${targetLabel}`
+        : ''
+      : '',
+  ])
 }
 
 function normalizeEntry(entry, source) {
   const severity = inferSeverity(entry)
+  const actor =
+    entry?.actor?.global_name
+    || entry?.actor?.username
+    || entry?.executor?.global_name
+    || entry?.executor?.username
+    || entry?.metadata?.actor_name
+    || entry?.username
+    || 'Systeme'
+
+  const actionLabel =
+    entry?.event_type
+    || entry?.action_label
+    || entry?.action
+    || entry?.action_name
+    || entry?.title
+    || 'Evenement'
+
+  const targetLabel =
+    entry?.target?.label
+    || entry?.metadata?.target_label
+    || entry?.target_username
+    || null
+
+  const details = buildIncidentDetails(entry, targetLabel)
+
   return {
     id: entry?.id || `${source}-${entry?.timestamp || entry?.created_at || Math.random()}`,
     source,
     severity,
-    title: entry?.action || entry?.action_name || entry?.title || entry?.message || 'Événement',
-    detail: entry?.message || entry?.reason || entry?.summary || entry?.description || 'Aucun détail complémentaire.',
-    actor: entry?.actor?.global_name || entry?.actor?.username || entry?.executor?.global_name || entry?.executor?.username || entry?.username || 'Système',
+    title: actionLabel,
+    detail: buildIncidentSummary(entry, actionLabel, targetLabel),
+    actor,
     actorAvatar: entry?.actor?.avatar_url || entry?.executor?.avatar_url || entry?.metadata?.actor_avatar_url || null,
-    targetLabel: entry?.target?.label || entry?.metadata?.target_label || entry?.target_username || null,
+    targetLabel,
     targetSubtitle: entry?.target?.subtitle || entry?.metadata?.target_subtitle || null,
     timestamp: entry?.timestamp || entry?.created_at || entry?.executed_at || entry?.date || null,
+    details,
   }
 }
 
@@ -60,6 +134,8 @@ function MetricCard({ label, value, tone }) {
 }
 
 function IncidentRow({ item }) {
+  const [expanded, setExpanded] = useState(false)
+
   const severityUI = {
     critical: 'border-red-500/20 bg-red-500/[0.05] text-red-300',
     high: 'border-amber-400/20 bg-amber-400/[0.05] text-amber-300',
@@ -78,15 +154,25 @@ function IncidentRow({ item }) {
             </p>
           </div>
         </div>
-        <span className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.16em] ${severityUI[item.severity]}`}>
-          {item.severity}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.16em] ${severityUI[item.severity]}`}>
+            {item.severity}
+          </span>
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] font-mono text-white/60 transition-all hover:border-white/15 hover:text-white"
+          >
+            Informations complementaires
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {item.targetLabel ? (
         <div className="flex flex-wrap gap-2">
           <span className="inline-flex items-center rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] font-mono text-white/58">
-            Cible: {item.targetLabel}
+            Cible : {item.targetLabel}
           </span>
           {item.targetSubtitle ? (
             <span className="inline-flex items-center rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] font-mono text-white/42">
@@ -102,6 +188,31 @@ function IncidentRow({ item }) {
         <Clock3 className="h-3.5 w-3.5" />
         {formatDate(item.timestamp)}
       </div>
+
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2 rounded-2xl border border-white/[0.08] bg-black/15 p-4">
+              <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Informations complementaires</p>
+              {item.details.length > 0 ? (
+                item.details.map((line, index) => (
+                  <div key={`${item.id}-${index}`} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-sm text-white/78">
+                    {line}
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-white/42">Aucune information complementaire utile pour cette entree.</p>
+              )}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }
@@ -120,7 +231,7 @@ export default function IncidentsPage() {
   }, [items])
 
   useEffect(() => {
-    if (!selectedGuildId) return
+    if (!selectedGuildId) return undefined
     let active = true
 
     async function loadIncidents() {
@@ -132,8 +243,8 @@ export default function IncidentsPage() {
 
         if (!active) return
 
-        const siteItems = (siteResponse.data?.logs || siteResponse.data?.items || []).map((entry) => normalizeEntry(entry, 'site'))
-        const discordItems = (discordResponse.data?.logs || discordResponse.data?.items || []).map((entry) => normalizeEntry(entry, 'discord'))
+        const siteItems = (siteResponse.data?.logs || []).map((entry) => normalizeEntry(entry, 'site'))
+        const discordItems = (discordResponse.data?.logs || []).map((entry) => normalizeEntry(entry, 'discord'))
 
         setItems(
           [...siteItems, ...discordItems]
@@ -162,7 +273,7 @@ export default function IncidentsPage() {
         <div className="glass-card p-10 text-center">
           <ShieldAlert className="mx-auto mb-4 h-12 w-12 text-white/10" />
           <p className="font-display text-xl font-700 text-white">Choisis d'abord un serveur</p>
-          <p className="mt-2 text-white/40">La vue Incidents dépend du serveur actif.</p>
+          <p className="mt-2 text-white/40">La vue Incidents depend du serveur actif.</p>
           <Link to="/dashboard/servers" className="mt-5 inline-flex items-center gap-2 rounded-xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-3 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/20">
             Choisir un serveur
             <ArrowRight className="h-4 w-4" />
@@ -185,7 +296,7 @@ export default function IncidentsPage() {
             <div>
               <h1 className="font-display text-3xl font-800 text-white sm:text-4xl">Incidents</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55 sm:text-[15px]">
-                Vue plus claire des événements critiques avec la personne, la cible et le contexte visibles en un coup d'œil.
+                Vue plus claire des evenements sensibles, avec l'auteur, la cible et les details utiles quand tu ouvres l'entree.
               </p>
             </div>
           </div>
@@ -193,8 +304,8 @@ export default function IncidentsPage() {
 
         <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-3">
           <MetricCard label="Critiques" value={grouped.critical.length} tone="critical" />
-          <MetricCard label="Élevés" value={grouped.high.length} tone="high" />
-          <MetricCard label="Modérés" value={grouped.medium.length} tone="medium" />
+          <MetricCard label="Eleves" value={grouped.high.length} tone="high" />
+          <MetricCard label="Moderes" value={grouped.medium.length} tone="medium" />
         </div>
       </div>
 
@@ -208,7 +319,7 @@ export default function IncidentsPage() {
             </>
           ) : items.length === 0 ? (
             <div className="spotlight-card p-10 text-center text-white/40">
-              Aucun incident récent pour le moment.
+              Aucun incident recent pour le moment.
             </div>
           ) : (
             items.map((item) => <IncidentRow key={item.id} item={item} />)
@@ -222,8 +333,8 @@ export default function IncidentsPage() {
                 <AlertTriangle className="h-5 w-5 text-red-300" />
               </div>
               <div>
-                <p className="font-display text-lg font-700 text-white">Réponses rapides</p>
-                <p className="mt-1 text-sm text-white/40">Va directement à la bonne zone selon la situation.</p>
+                <p className="font-display text-lg font-700 text-white">Reponses rapides</p>
+                <p className="mt-1 text-sm text-white/40">Va directement dans la bonne zone selon le type d'incident.</p>
               </div>
             </div>
 
@@ -234,12 +345,24 @@ export default function IncidentsPage() {
               </Link>
               <Link to="/dashboard/logs" className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-white/70 transition-all hover:border-white/12 hover:text-white">
                 <p className="font-display font-700 text-white">Logs</p>
-                <p className="mt-1 text-sm text-white/45">Ouvre les journaux complets avec plus de détails.</p>
+                <p className="mt-1 text-sm text-white/45">Ouvre les journaux complets avec plus de contexte.</p>
               </Link>
               <Link to="/dashboard/blocked" className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-white/70 transition-all hover:border-white/12 hover:text-white">
-                <p className="font-display font-700 text-white">Contrôle d'accès</p>
-                <p className="mt-1 text-sm text-white/45">Vérifie les bannis et la blacklist réseau.</p>
+                <p className="font-display font-700 text-white">Controle d'acces</p>
+                <p className="mt-1 text-sm text-white/45">Verifie les bannis serveur et la blacklist reseau.</p>
               </Link>
+            </div>
+          </div>
+
+          <div className="spotlight-card p-5 sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03]">
+                <Calendar className="h-5 w-5 text-white/65" />
+              </div>
+              <div>
+                <p className="font-display text-lg font-700 text-white">Lecture rapide</p>
+                <p className="mt-1 text-sm text-white/40">Chaque carte reste compacte, puis affiche les details exacts dans Informations complementaires.</p>
+              </div>
             </div>
           </div>
         </div>

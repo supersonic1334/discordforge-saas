@@ -75,6 +75,13 @@ function normalizeRoleLabel(name, fallbackId) {
 
 function formatAuditActionLabel(type, changes = []) {
   const actionType = Number(type || 0);
+  if (actionType === 1) return 'guild_update';
+  if (actionType === 10) return 'channel_create';
+  if (actionType === 11) return 'channel_update';
+  if (actionType === 12) return 'channel_delete';
+  if (actionType === 13) return 'channel_overwrite_create';
+  if (actionType === 14) return 'channel_overwrite_update';
+  if (actionType === 15) return 'channel_overwrite_delete';
   if (actionType === 20) return 'kick';
   if (actionType === 22) return 'ban';
   if (actionType === 23) return 'unban';
@@ -82,33 +89,97 @@ function formatAuditActionLabel(type, changes = []) {
     const isTimeout = changes.some((entry) => entry?.key === 'communication_disabled_until');
     return isTimeout ? 'timeout' : 'member_update';
   }
+  if (actionType === 30) return 'role_create';
   if (actionType === 25) return 'role_update';
+  if (actionType === 31) return 'role_update';
+  if (actionType === 32) return 'role_delete';
   if (actionType === 26) return 'voice_move';
   if (actionType === 27) return 'voice_disconnect';
   if (actionType === 28) return 'bot_add';
+  if (actionType === 40) return 'invite_create';
+  if (actionType === 41) return 'invite_update';
+  if (actionType === 42) return 'invite_delete';
+  if (actionType === 50) return 'webhook_create';
+  if (actionType === 51) return 'webhook_update';
+  if (actionType === 52) return 'webhook_delete';
+  if (actionType === 60) return 'emoji_create';
+  if (actionType === 61) return 'emoji_update';
+  if (actionType === 62) return 'emoji_delete';
   if (actionType === 72) return 'message_delete';
   if (actionType === 73) return 'message_bulk_delete';
   if (actionType === 74) return 'message_pin';
   if (actionType === 75) return 'message_unpin';
+  if (actionType === 83) return 'stage_create';
+  if (actionType === 84) return 'stage_update';
+  if (actionType === 85) return 'stage_delete';
+  if (actionType === 90) return 'sticker_create';
+  if (actionType === 91) return 'sticker_update';
+  if (actionType === 92) return 'sticker_delete';
+  if (actionType === 100) return 'event_create';
+  if (actionType === 101) return 'event_update';
+  if (actionType === 102) return 'event_delete';
+  if (actionType === 110) return 'thread_create';
+  if (actionType === 111) return 'thread_update';
+  if (actionType === 112) return 'thread_delete';
+  if (actionType === 140) return 'automod_rule_create';
+  if (actionType === 141) return 'automod_rule_update';
+  if (actionType === 142) return 'automod_rule_delete';
+  if (actionType === 143) return 'automod_block_message';
+  if (actionType === 144) return 'automod_flag_message';
   if (actionType === 145) return 'timeout_remove';
   return `action_${actionType || 'unknown'}`;
 }
 
 const DISCORD_ACTION_LABELS = {
+  guild_update: 'Serveur modifie',
+  channel_create: 'Salon cree',
+  channel_update: 'Salon modifie',
+  channel_delete: 'Salon supprime',
+  channel_overwrite_create: 'Permissions salon ajoutees',
+  channel_overwrite_update: 'Permissions salon modifiees',
+  channel_overwrite_delete: 'Permissions salon retirees',
   kick: 'Kick',
   ban: 'Ban',
   unban: 'Deban',
   timeout: 'Timeout',
   timeout_remove: 'Retrait timeout',
   member_update: 'Membre modifie',
+  role_create: 'Role cree',
   role_update: 'Role modifie',
+  role_delete: 'Role supprime',
   voice_move: 'Deplacement vocal',
   voice_disconnect: 'Deconnexion vocale',
   bot_add: 'Ajout du bot',
+  invite_create: 'Invitation creee',
+  invite_update: 'Invitation modifiee',
+  invite_delete: 'Invitation supprimee',
+  webhook_create: 'Webhook cree',
+  webhook_update: 'Webhook modifie',
+  webhook_delete: 'Webhook supprime',
+  emoji_create: 'Emoji cree',
+  emoji_update: 'Emoji modifie',
+  emoji_delete: 'Emoji supprime',
   message_delete: 'Message supprime',
   message_bulk_delete: 'Suppression multiple',
   message_pin: 'Message epingle',
   message_unpin: 'Message desepingle',
+  stage_create: 'Salon scene cree',
+  stage_update: 'Salon scene modifie',
+  stage_delete: 'Salon scene supprime',
+  sticker_create: 'Sticker cree',
+  sticker_update: 'Sticker modifie',
+  sticker_delete: 'Sticker supprime',
+  event_create: 'Evenement cree',
+  event_update: 'Evenement modifie',
+  event_delete: 'Evenement supprime',
+  thread_create: 'Thread cree',
+  thread_update: 'Thread modifie',
+  thread_delete: 'Thread supprime',
+  automod_rule_create: 'Regle AutoMod creee',
+  automod_rule_update: 'Regle AutoMod modifiee',
+  automod_rule_delete: 'Regle AutoMod supprimee',
+  automod_block_message: 'Message bloque par AutoMod',
+  automod_flag_message: 'Message signale par AutoMod',
 };
 
 function getDiscordActionLabel(actionName) {
@@ -359,6 +430,18 @@ function formatChangeLine(change, roleMap, channelMap) {
     return `Surnom : ${oldValue || 'aucun'} -> ${newValue || 'aucun'}`;
   }
 
+  if (key === 'permissions') {
+    return 'Permissions du role modifiees';
+  }
+
+  if (key === 'allow' || key === 'deny') {
+    return 'Permissions du salon modifiees';
+  }
+
+  if (key === 'rate_limit_per_user') {
+    return `Slowmode : ${oldValue ?? 0}s -> ${newValue ?? 0}s`;
+  }
+
   const labelMap = { name: 'Nom', topic: 'Sujet', code: 'Code', max_age: 'Duree max', max_uses: 'Utilisations max' };
   const label = labelMap[key] || key || 'Champ';
   const before = Array.isArray(oldValue) ? oldValue.join(', ') : oldValue;
@@ -376,16 +459,38 @@ function buildAuditDetailLines(entry, target, executorName, context) {
   const channelName = context.channelMap.get(channelId)?.name || options.channel_name || null;
 
   if (executorName && executorName !== 'System') lines.push(`Par : ${executorName}`);
-  if (target?.label) lines.push(`Cible : ${target.label}`);
+  if (actionName === 'ban' && target?.label) lines.push(`Utilisateur banni : ${target.label}`);
+  else if (actionName === 'unban' && target?.label) lines.push(`Utilisateur debanni : ${target.label}`);
+  else if (actionName === 'kick' && target?.label) lines.push(`Utilisateur expulse : ${target.label}`);
+  else if (actionName === 'timeout' && target?.label) lines.push(`Utilisateur restreint : ${target.label}`);
+  else if (actionName === 'timeout_remove' && target?.label) lines.push(`Restriction retiree pour : ${target.label}`);
+  else if (actionName === 'channel_create' && target?.label) lines.push(`Salon cree : ${target.label}`);
+  else if (actionName === 'channel_update' && target?.label) lines.push(`Salon modifie : ${target.label}`);
+  else if (actionName === 'channel_delete' && target?.label) lines.push(`Salon supprime : ${target.label}`);
+  else if (actionName === 'role_create' && target?.label) lines.push(`Role cree : ${target.label}`);
+  else if (actionName === 'role_update' && target?.label) lines.push(`Role modifie : ${target.label}`);
+  else if (actionName === 'role_delete' && target?.label) lines.push(`Role supprime : ${target.label}`);
+  else if (actionName === 'thread_create' && target?.label) lines.push(`Thread cree : ${target.label}`);
+  else if (actionName === 'thread_update' && target?.label) lines.push(`Thread modifie : ${target.label}`);
+  else if (actionName === 'thread_delete' && target?.label) lines.push(`Thread supprime : ${target.label}`);
+  else if (target?.label) lines.push(`Cible : ${target.label}`);
+
   if (channelId || channelName) lines.push(`Salon : ${normalizeChannelLabel(channelName, channelId)}`);
   if (entry.reason) lines.push(`Raison : ${entry.reason}`);
   if (actionName === 'message_bulk_delete' && Number(options.count || 0) > 0) {
     lines.push(`Nombre de messages supprimes : ${options.count}`);
   }
+  if (entry.created_at || entry.timestamp) {
+    lines.push(`Horodatage : ${new Date(entry.created_at || entry.timestamp).toLocaleString('fr-FR')}`);
+  }
 
   for (const change of changes) {
     const line = formatChangeLine(change, context.roleMap, context.channelMap);
     if (line) lines.push(line);
+  }
+
+  if (!changes.length && (actionName === 'channel_delete' || actionName === 'role_delete' || actionName === 'ban' || actionName === 'kick')) {
+    lines.push('Aucun changement technique supplementaire n a ete remonte par Discord pour cette action.');
   }
 
   return compactLines(lines);
