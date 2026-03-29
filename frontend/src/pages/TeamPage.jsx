@@ -700,7 +700,6 @@ export default function TeamPage() {
     { id: 'team', label: 'Equipe', icon: Users },
     { id: 'collaborators', label: 'Collaborateurs', icon: UserCheck },
     { id: 'spaces', label: 'Espaces', icon: ArrowRight },
-    { id: 'codes', label: 'Codes d acces', icon: Shield },
     ...(isOwner ? [
       { id: 'backups', label: 'Sauvegardes', icon: Database },
       { id: 'audit', label: 'Activite', icon: ScrollText },
@@ -784,9 +783,19 @@ export default function TeamPage() {
         {activeTab === 'collaborators' && (
           <motion.div key="collaborators" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
             <CollaboratorsTab
+              user={user}
               isOwner={isOwner}
               nonOwnerCollabs={nonOwnerCollabs}
+              codeForm={codeForm}
+              setCodeForm={setCodeForm}
+              joinCode={joinCode}
+              setJoinCode={setJoinCode}
+              joinCodes={joinCodes}
               saving={saving}
+              onCreateCode={handleCreateCode}
+              onRevokeCode={handleRevokeCode}
+              onRedeemCode={handleRedeemCode}
+              onConnectDiscord={handleConnectDiscord}
               onSuspend={handleSuspend}
               onRemoveMember={handleRemoveMember}
             />
@@ -800,25 +809,6 @@ export default function TeamPage() {
               sharedGuilds={sharedGuilds}
               selectedGuildId={selectedGuildId}
               onSelectGuild={selectGuild}
-            />
-          </motion.div>
-        )}
-
-        {activeTab === 'codes' && (
-          <motion.div key="codes" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
-            <AccessCodesTab
-              user={user}
-              isOwner={isOwner}
-              saving={saving}
-              codeForm={codeForm}
-              setCodeForm={setCodeForm}
-              joinCode={joinCode}
-              setJoinCode={setJoinCode}
-              joinCodes={joinCodes}
-              onCreateCode={handleCreateCode}
-              onRevokeCode={handleRevokeCode}
-              onRedeemCode={handleRedeemCode}
-              onConnectDiscord={handleConnectDiscord}
             />
           </motion.div>
         )}
@@ -1549,25 +1539,45 @@ function CollaboratorDetailsPanel({ entry }) {
   )
 }
 
-function CollaboratorsTab({ isOwner, nonOwnerCollabs, saving, onSuspend, onRemoveMember }) {
+function CollaboratorsTab({
+  user,
+  isOwner,
+  nonOwnerCollabs,
+  codeForm,
+  setCodeForm,
+  joinCode,
+  setJoinCode,
+  joinCodes,
+  saving,
+  onCreateCode,
+  onRevokeCode,
+  onRedeemCode,
+  onConnectDiscord,
+  onSuspend,
+  onRemoveMember,
+}) {
   const [expandedId, setExpandedId] = useState(null)
 
   return (
     <div className="space-y-5">
+      <JoinTeamCard
+        user={user}
+        joinCode={joinCode}
+        setJoinCode={setJoinCode}
+        saving={saving}
+        onRedeem={onRedeemCode}
+        onConnectDiscord={onConnectDiscord}
+      />
+
       {isOwner && (
-        <div className="spotlight-card p-5">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl border border-violet-400/20 bg-violet-500/10 flex items-center justify-center shrink-0">
-              <Shield className="w-[18px] h-[18px] text-violet-300" />
-            </div>
-            <div>
-              <p className="font-display font-700 text-white text-sm">Invitation par code unique</p>
-              <p className="text-white/35 text-xs mt-1 leading-relaxed">
-                Les invitations directes sont retirees. Genere un code unique dans Codes d acces, puis partage-le a une seule personne.
-              </p>
-            </div>
-          </div>
-        </div>
+        <OwnerJoinCodeCard
+          saving={saving}
+          codeForm={codeForm}
+          setCodeForm={setCodeForm}
+          joinCodes={joinCodes}
+          onCreateCode={onCreateCode}
+          onRevokeCode={onRevokeCode}
+        />
       )}
 
       <div className="spotlight-card p-5 space-y-4">
