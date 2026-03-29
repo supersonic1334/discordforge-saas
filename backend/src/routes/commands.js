@@ -425,6 +425,98 @@ function generateRandomSeed() {
   return `${seed}-${Date.now().toString(36)}`;
 }
 
+function extractUrls(value) {
+  const matches = String(value || '').match(/https?:\/\/[^\s<>"']+/gi);
+  return [...new Set((matches || []).map((entry) => entry.trim()).filter(Boolean))];
+}
+
+function textContainsAny(text, keywords = []) {
+  const source = String(text || '').toLowerCase();
+  return keywords.some((keyword) => source.includes(String(keyword || '').toLowerCase()));
+}
+
+function promptRequestsMediaShare(value) {
+  return textContainsAny(value, [
+    'image',
+    'photo',
+    'gif',
+    'illustration',
+    'logo',
+    'banner',
+    'avatar',
+    'thumbnail',
+    'poster',
+    'wallpaper',
+    'meme',
+    'affiche cette image',
+    'afficher cette image',
+    'envoie cette image',
+    'envoyer cette image',
+    'poste cette image',
+    'montrer cette image',
+    'send this image',
+    'show this image',
+    'post this image',
+    'display this image',
+    'manda esta imagen',
+    'muestra esta imagen',
+    'envia esta imagen',
+  ]);
+}
+
+function promptRequestsOnlyMedia(value) {
+  return textContainsAny(value, [
+    'envoie cette image',
+    'envoyer cette image',
+    'affiche cette image',
+    'afficher cette image',
+    'poste cette image',
+    'send this image',
+    'show this image',
+    'display this image',
+    'manda esta imagen',
+    'muestra esta imagen',
+    'envia esta imagen',
+    'uniquement le lien',
+    'juste le lien',
+    'only the link',
+    'solo el enlace',
+  ]);
+}
+
+function responseContainsAnyUrl(response, urls) {
+  const text = String(response || '');
+  return urls.some((url) => text.includes(url));
+}
+
+function enforceDraftIntent(draft, userPrompt) {
+  if (!draft || typeof draft !== 'object') return draft;
+
+  const nextDraft = { ...draft };
+  const urls = extractUrls(userPrompt);
+
+  if (urls.length && promptRequestsMediaShare(userPrompt) && !responseContainsAnyUrl(nextDraft.response, urls)) {
+    const primaryUrl = urls[0];
+    const mustSendOnlyMedia = promptRequestsOnlyMedia(userPrompt);
+    const currentResponse = String(nextDraft.response || '').trim();
+
+    nextDraft.response = mustSendOnlyMedia
+      ? primaryUrl
+      : (currentResponse ? `${currentResponse}\n${primaryUrl}` : primaryUrl);
+
+    if (!String(nextDraft.description || '').trim()) {
+      nextDraft.description = 'Envoie le media demande';
+    }
+
+    if (mustSendOnlyMedia) {
+      nextDraft.embed_enabled = false;
+      nextDraft.embed_title = '';
+    }
+  }
+
+  return nextDraft;
+}
+
 const VARIETY_OPENERS = [
   'Start with an emoji and a creative one-liner.',
   'Begin with a punchy metaphor or analogy.',
@@ -511,6 +603,11 @@ STRICT RULES:
 16. If you are editing an existing command, return the FULL final version of the command after applying the requested changes. Do not preserve the previous response just because it existed.
 17. If the user asks to replace, rewrite, refactor, modernize, or completely change the command, overwrite the previous behavior with the new final behavior.
 18. Never return a shallow variation of the existing command when the user clearly asked for a stronger or different result.
+19. The trigger name is ONLY an identifier. Never invent behavior from the trigger name if the user prompt says something else.
+20. Follow the user prompt before any wordplay, theme, or guess based on the command name.
+21. If the user provides a URL, image, GIF, media link, or exact content to send, you must preserve that exact content in the final response.
+22. If the user asks to send an image or link, do not replace it with a themed joke, lore, or creative reinterpretation.
+23. If the trigger is named "flash" but the prompt asks to send an image URL, the command must send the image URL, not a flash-themed joke.
 
 JSON shape:
 \`\`\`command
@@ -679,7 +776,7 @@ router.post('/assistant', validate(commandAssistantSchema), async (req, res, nex
       { role: 'user', content: req.body.prompt + varietySuffix },
     ];
     const completion = await aiService.completeConversation(req.user.id, { systemPrompt, messages });
-    const draft = extractCommandDraft(completion.text);
+    const draft = enforceDraftIntent(extractCommandDraft(completion.text), req.body.prompt);
 
     if (!draft) {
       return res.status(502).json({ error: 'Assistant command draft invalid' });

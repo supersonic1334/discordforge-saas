@@ -399,6 +399,97 @@ function buildCommandTrigger(commandType, commandPrefix, commandName) {
     : `${commandPrefix}${commandName}`
 }
 
+function extractUrls(value) {
+  const matches = String(value || '').match(/https?:\/\/[^\s<>"']+/gi)
+  return [...new Set((matches || []).map((entry) => entry.trim()).filter(Boolean))]
+}
+
+function textContainsAny(text, keywords = []) {
+  const source = String(text || '').toLowerCase()
+  return keywords.some((keyword) => source.includes(String(keyword || '').toLowerCase()))
+}
+
+function promptRequestsMediaShare(value) {
+  return textContainsAny(value, [
+    'image',
+    'photo',
+    'gif',
+    'illustration',
+    'logo',
+    'banner',
+    'avatar',
+    'thumbnail',
+    'poster',
+    'wallpaper',
+    'meme',
+    'affiche cette image',
+    'afficher cette image',
+    'envoie cette image',
+    'envoyer cette image',
+    'poste cette image',
+    'montrer cette image',
+    'send this image',
+    'show this image',
+    'post this image',
+    'display this image',
+    'manda esta imagen',
+    'muestra esta imagen',
+    'envia esta imagen',
+  ])
+}
+
+function promptRequestsOnlyMedia(value) {
+  return textContainsAny(value, [
+    'envoie cette image',
+    'envoyer cette image',
+    'affiche cette image',
+    'afficher cette image',
+    'poste cette image',
+    'send this image',
+    'show this image',
+    'display this image',
+    'manda esta imagen',
+    'muestra esta imagen',
+    'envia esta imagen',
+    'uniquement le lien',
+    'juste le lien',
+    'only the link',
+    'solo el enlace',
+  ])
+}
+
+function responseContainsAnyUrl(response, urls) {
+  const text = String(response || '')
+  return urls.some((url) => text.includes(url))
+}
+
+function enforceDraftIntent(draft, userPrompt) {
+  if (!draft || typeof draft !== 'object') return draft
+
+  const nextDraft = { ...draft }
+  const urls = extractUrls(userPrompt)
+  if (urls.length && promptRequestsMediaShare(userPrompt) && !responseContainsAnyUrl(nextDraft.response, urls)) {
+    const primaryUrl = urls[0]
+    const mustSendOnlyMedia = promptRequestsOnlyMedia(userPrompt)
+    const currentResponse = String(nextDraft.response || '').trim()
+
+    nextDraft.response = mustSendOnlyMedia
+      ? primaryUrl
+      : (currentResponse ? `${currentResponse}\n${primaryUrl}` : primaryUrl)
+
+    if (!String(nextDraft.description || '').trim()) {
+      nextDraft.description = 'Envoie le media demande'
+    }
+
+    if (mustSendOnlyMedia) {
+      nextDraft.embed_enabled = false
+      nextDraft.embed_title = ''
+    }
+  }
+
+  return nextDraft
+}
+
 function buildRequestedCommandMeta(commandInput, currentCommand = null) {
   const rawInput = normalizeCommandInput(commandInput)
   const fallbackPrefix = currentCommand?.command_type === 'prefix'
@@ -598,6 +689,10 @@ Regles:
 - les descriptions doivent etre concises mais engageantes
 - Les reponses doivent etre riches, bien formatees, et professionnelles.
 - si tu modifies une commande existante, retourne sa version finale complete, pas juste une variation minimale de l'ancienne.
+- le nom du declencheur est seulement un identifiant, pas une consigne de theme
+- suis le prompt utilisateur avant toute interpretation du nom de commande
+- si le prompt contient un lien, une image, un GIF ou un media a envoyer, conserve exactement ce contenu dans la reponse finale
+- si le prompt demande d'envoyer une image, ne remplace jamais ca par une blague ou un texte inspire du nom du declencheur
 
 Format attendu:
 \`\`\`command
@@ -927,7 +1022,7 @@ export default function CommandsPage() {
     })
 
     const assistantMessage = aiResponse.data.message || ui.assistantReplyFallback
-    const draft = extractCommandDraft(assistantMessage)
+    const draft = enforceDraftIntent(extractCommandDraft(assistantMessage), userMessage.content)
     if (!draft) {
       throw new Error('Assistant command draft invalid')
     }
