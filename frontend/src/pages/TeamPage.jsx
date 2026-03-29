@@ -888,22 +888,49 @@ function WorkspaceSwitchCard({ ownGuilds, sharedGuilds, selectedGuildId, onSelec
     }
 
     return (
-      <div className="flex flex-wrap gap-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         {items.map((entry) => (
           <button
             key={entry.id}
             type="button"
             onClick={() => onSelectGuild(entry.id)}
-            className={`rounded-xl border px-3 py-2 text-left text-sm transition-all ${
+            className={`group rounded-2xl border px-3 py-3 text-left text-sm transition-all ${
               selectedGuildId === entry.id
-                ? 'border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan'
-                : 'border-white/[0.06] bg-white/[0.03] text-white/65 hover:border-white/12 hover:text-white'
+                ? 'border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan shadow-[0_14px_30px_rgba(34,211,238,0.10)]'
+                : 'border-white/[0.06] bg-white/[0.03] text-white/65 hover:border-white/12 hover:bg-white/[0.05] hover:text-white'
             }`}
           >
-            <span className="block font-display font-600">{entry.name}</span>
-            <span className="mt-1 block text-[11px] font-mono text-white/30">
-              {entry.is_owner ? 'Espace principal' : 'Espace partage'}
-            </span>
+            <div className="flex items-center gap-3">
+              <Avatar
+                src={entry.iconUrl || entry.icon_url || null}
+                label={entry.name}
+                size="w-11 h-11"
+                ring={selectedGuildId === entry.id ? 'ring-2 ring-neon-cyan/20' : ''}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-display font-600 text-white transition-colors group-hover:text-white">
+                    {entry.name}
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.14em] ${
+                    entry.is_owner
+                      ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+                      : 'border border-violet-400/20 bg-violet-400/10 text-violet-300'
+                  }`}>
+                    {entry.is_owner ? 'Principal' : 'Partage'}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-[11px] font-mono text-white/35">
+                  <span className="truncate">
+                    {entry.member_count ? `${entry.member_count} membres` : 'Serveur synchronise'}
+                  </span>
+                  <span className="text-white/18">•</span>
+                  <span className="truncate">
+                    {entry.is_owner ? 'Ton espace' : 'Espace partage'}
+                  </span>
+                </div>
+              </div>
+            </div>
           </button>
         ))}
       </div>
