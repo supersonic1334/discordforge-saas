@@ -218,6 +218,19 @@ export const scanAPI = {
 
 export const rassicanAPI = scanAPI
 
+// ── Playbooks ─────────────────────────────────────────────────────────────────
+export const playbooksAPI = {
+  definitions: (guildId) => api.get(`/guilds/${guildId}/playbooks/definitions`),
+  list:        (guildId) => api.get(`/guilds/${guildId}/playbooks`),
+  get:         (guildId, id) => api.get(`/guilds/${guildId}/playbooks/${id}`),
+  create:      (guildId, data) => api.post(`/guilds/${guildId}/playbooks`, data),
+  fromTemplate:(guildId, data) => api.post(`/guilds/${guildId}/playbooks/from-template`, data),
+  update:      (guildId, id, data) => api.patch(`/guilds/${guildId}/playbooks/${id}`, data),
+  toggle:      (guildId, id, enabled) => api.patch(`/guilds/${guildId}/playbooks/${id}/toggle`, { enabled }),
+  delete:      (guildId, id) => api.delete(`/guilds/${guildId}/playbooks/${id}`),
+  logs:        (guildId, id) => api.get(`/guilds/${guildId}/playbooks/${id}/logs`),
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 export const commandsAPI = {
   list:   (guildId)       => api.get(`/bot/guilds/${guildId}/commands`),
