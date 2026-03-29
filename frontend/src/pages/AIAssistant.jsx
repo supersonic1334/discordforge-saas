@@ -25,6 +25,8 @@ import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
 import { openDiscordLinkPopup } from '../utils/discordLinkPopup'
 
+const ASSISTANT_MESSAGE_LIMIT = 20
+
 const VOICE_UI = {
   fr: {
     stop: 'Arreter',
@@ -42,6 +44,50 @@ const VOICE_UI = {
 
 function getAssistantErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback
+}
+
+function createWelcomeMessage(content) {
+  return {
+    role: 'assistant',
+    content,
+    ts: Date.now(),
+    isWelcome: true,
+  }
+}
+
+function getAssistantStorageKey(userId, guildId) {
+  return `discordforger:ai-assistant:${String(userId || 'guest')}:${String(guildId || 'global')}`
+}
+
+function sanitizeMessagesForStorage(messages = []) {
+  return messages
+    .filter((message) => message?.role === 'user' || message?.role === 'assistant')
+    .slice(-ASSISTANT_MESSAGE_LIMIT)
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || ''),
+      ts: Number(message.ts || Date.now()),
+      isWelcome: Boolean(message.isWelcome),
+      actionExecuted: message.actionExecuted || null,
+      requiresDiscordLink: Boolean(message.requiresDiscordLink),
+      pendingAction: message.pendingAction || null,
+    }))
+}
+
+function readStoredConversation(storageKey, welcomeContent) {
+  if (typeof window === 'undefined') return [createWelcomeMessage(welcomeContent)]
+
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    if (!raw) return [createWelcomeMessage(welcomeContent)]
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return [createWelcomeMessage(welcomeContent)]
+    }
+    return parsed
+  } catch {
+    return [createWelcomeMessage(welcomeContent)]
+  }
 }
 
 function buildHistory(messages) {
@@ -215,17 +261,18 @@ export default function AIAssistant() {
   const voiceUi = VOICE_UI[String(locale || 'fr').toLowerCase().split('-')[0]] || VOICE_UI.fr
   const { selectedGuildId, guilds } = useGuildStore()
   const { user, fetchMe } = useAuthStore()
-  const [messages, setMessages] = useState(() => ([{
-    role: 'assistant',
-    content: t('assistant.welcome'),
-    ts: Date.now(),
-  }]))
+  const storageKey = useMemo(
+    () => getAssistantStorageKey(user?.id, selectedGuildId),
+    [user?.id, selectedGuildId]
+  )
+  const [messages, setMessages] = useState(() => [createWelcomeMessage(t('assistant.welcome'))])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [linkingDiscord, setLinkingDiscord] = useState(false)
   const [aiStatus, setAiStatus] = useState(null)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+  const restoredKeyRef = useRef('')
 
   const selectedGuild = useMemo(
     () => guilds.find((guild) => guild.id === selectedGuildId),
@@ -250,8 +297,25 @@ export default function AIAssistant() {
   }, [])
 
   useEffect(() => {
+    if (restoredKeyRef.current === storageKey) return
+    restoredKeyRef.current = storageKey
+    setMessages(readStoredConversation(storageKey, t('assistant.welcome')))
+  }, [storageKey, t])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !storageKey) return
+    window.localStorage.setItem(storageKey, JSON.stringify(sanitizeMessagesForStorage(messages)))
+  }, [messages, storageKey])
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  const conversationMessageCount = useMemo(
+    () => messages.filter((message) => !message.isWelcome && (message.role === 'user' || message.role === 'assistant')).length,
+    [messages]
+  )
+  const limitReached = conversationMessageCount >= ASSISTANT_MESSAGE_LIMIT
 
   const appendAssistantPayload = (payload) => {
     setMessages((prev) => [
@@ -269,7 +333,10 @@ export default function AIAssistant() {
   }
 
   const send = async (text) => {
-    if (loading) return
+    if (loading || limitReached) {
+      if (limitReached) toast.error('Conversation pleine. Lance une nouvelle conversation.')
+      return
+    }
 
     const resolvedText = typeof text === 'string' && text.trim()
       ? text.trim()
@@ -301,7 +368,7 @@ export default function AIAssistant() {
   }
 
   const continuePendingAction = async (pendingAction) => {
-    if (!pendingAction || linkingDiscord) return
+    if (!pendingAction || linkingDiscord || limitReached) return
 
     try {
       setLinkingDiscord(true)
@@ -333,8 +400,21 @@ export default function AIAssistant() {
   }
 
   const sendDictation = async () => {
+    if (limitReached) {
+      toast.error('Conversation pleine. Lance une nouvelle conversation.')
+      return
+    }
     const transcript = await speech.stop()
     await send(transcript)
+  }
+
+  const resetConversation = () => {
+    const nextMessages = [createWelcomeMessage(t('assistant.welcome'))]
+    setMessages(nextMessages)
+    setInput('')
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(storageKey)
+    }
   }
 
   const handleDownloadImage = (image) => {
@@ -404,6 +484,21 @@ export default function AIAssistant() {
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-4 scrollbar-none sm:p-6">
+        {limitReached && (
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>Conversation pleine. Lance une nouvelle conversation pour continuer.</span>
+              <button
+                type="button"
+                onClick={resetConversation}
+                className="feature-chip text-white/85 hover:text-white"
+              >
+                Nouvelle conversation
+              </button>
+            </div>
+          </div>
+        )}
+
         {messages.length <= 1 && (
           <div className="flex justify-end">
             <button
@@ -479,7 +574,7 @@ export default function AIAssistant() {
                 <motion.button
                   type="button"
                   onClick={stopDictation}
-                  disabled={speech.isRequestingPermission || loading}
+                  disabled={speech.isRequestingPermission || loading || limitReached}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.96 }}
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] text-white/88 transition-all disabled:opacity-55"
@@ -490,7 +585,7 @@ export default function AIAssistant() {
                 <motion.button
                   type="button"
                   onClick={sendDictation}
-                  disabled={speech.isRequestingPermission || loading}
+                  disabled={speech.isRequestingPermission || loading || limitReached}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.96 }}
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan text-white shadow-neon-violet transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
@@ -504,7 +599,7 @@ export default function AIAssistant() {
                 <motion.button
                   type="button"
                   onClick={() => speech.start()}
-                  disabled={speech.isRequestingPermission}
+                  disabled={speech.isRequestingPermission || limitReached}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.96 }}
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] text-white/85 transition-all hover:border-neon-violet/35 hover:bg-neon-violet/10 hover:text-neon-violet disabled:opacity-70"
@@ -515,7 +610,7 @@ export default function AIAssistant() {
                 <motion.button
                   type="button"
                   onClick={() => send()}
-                  disabled={!input.trim() || loading}
+                  disabled={!input.trim() || loading || limitReached}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.96 }}
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-neon-violet to-neon-cyan text-white shadow-neon-violet transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
