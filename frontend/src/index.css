@@ -705,7 +705,7 @@
 
   body[data-keyboard-open="true"] .auth-mobile-shell,
   body[data-keyboard-open="true"] .setup-mobile-shell {
-    align-items: stretch !important;
+    align-items: center !important;
     justify-content: flex-start !important;
     gap: 0.75rem !important;
     padding-top: max(env(safe-area-inset-top), 10px) !important;
@@ -713,6 +713,11 @@
 
   body[data-keyboard-open="true"] .auth-mobile-panel {
     padding-top: 0.35rem !important;
+    margin-inline: auto !important;
+  }
+
+  body[data-keyboard-open="true"] .setup-mobile-card {
+    margin-inline: auto !important;
   }
 
   body[data-keyboard-open="true"] .auth-mobile-hero,

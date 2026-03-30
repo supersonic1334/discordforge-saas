@@ -132,6 +132,17 @@ function AppRoot() {
       return document.querySelector('.app-screen-scroll, .app-main-scroll') || document.scrollingElement
     }
 
+    const restoreWindowHorizontalPosition = () => {
+      if (window.scrollX === 0) return
+      window.requestAnimationFrame(() => {
+        window.scrollTo({
+          left: 0,
+          top: window.scrollY,
+          behavior: 'auto',
+        })
+      })
+    }
+
     const scrollActiveFieldIntoView = (behavior = 'smooth') => {
       const activeElement = document.activeElement
       if (!isEditableElement(activeElement)) return
@@ -155,16 +166,19 @@ function AppRoot() {
         || scrollParent === document.documentElement
         || scrollParent === document.scrollingElement
       ) {
-        activeElement.scrollIntoView({
-          block: 'center',
-          inline: 'nearest',
+        const nextTop = Math.max(0, window.scrollY + rect.top - Math.max(24, visibleHeight * 0.24))
+        window.scrollTo({
+          top: nextTop,
+          left: 0,
           behavior,
         })
+        restoreWindowHorizontalPosition()
         return
       }
 
       const parentRect = scrollParent.getBoundingClientRect()
       const currentScrollTop = scrollParent.scrollTop
+      const currentScrollLeft = scrollParent.scrollLeft
       const fieldTop = rect.top - parentRect.top + currentScrollTop
       const fieldBottom = rect.bottom - parentRect.top + currentScrollTop
       const viewportPaddingTop = 20
@@ -190,8 +204,17 @@ function AppRoot() {
 
       scrollParent.scrollTo({
         top: nextScrollTop,
+        left: currentScrollLeft,
         behavior,
       })
+
+      if (scrollParent.scrollLeft !== currentScrollLeft) {
+        window.requestAnimationFrame(() => {
+          scrollParent.scrollLeft = currentScrollLeft
+        })
+      }
+
+      restoreWindowHorizontalPosition()
     }
 
     const scheduleFocusScroll = (behavior = 'smooth', delays = [56, 156, 320]) => {
