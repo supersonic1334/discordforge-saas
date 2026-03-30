@@ -1445,6 +1445,7 @@ const extraTranslations = {
 
 const MODULE_TRANSLATIONS = {
   fr: {
+    ULTIMATE_PROTECTION: { name: 'Bouclier total', description: 'Active en un clic les couches clefs contre spam, raids et abus staff.' },
     ANTI_SPAM: { name: 'Anti-spam', description: 'Detecte et sanctionne les membres qui envoient des messages trop vite.' },
     ANTI_LINK: { name: 'Anti-lien', description: 'Bloque les URL externes et les liens d invitation.' },
     ANTI_RAID: { name: 'Anti-raid', description: 'Detecte les arrivées massives et protege le serveur.' },
@@ -1467,6 +1468,7 @@ const MODULE_TRANSLATIONS = {
     CUSTOM_COMMANDS: { name: 'Commandes personnalisees', description: 'Cree des commandes texte personnalisees pour ton serveur.' },
   },
   en: {
+    ULTIMATE_PROTECTION: { name: 'Total Shield', description: 'Turns on the main layers against spam, raids, and staff abuse in one save.' },
     ANTI_SPAM: { name: 'Anti-Spam', description: 'Detect and punish members sending messages too quickly.' },
     ANTI_LINK: { name: 'Anti-Link', description: 'Block external URLs and invite links.' },
     ANTI_RAID: { name: 'Anti-Raid', description: 'Detect mass join events and lock down the server.' },
@@ -1489,6 +1491,7 @@ const MODULE_TRANSLATIONS = {
     CUSTOM_COMMANDS: { name: 'Custom Commands', description: 'Create custom text commands for your server.' },
   },
   es: {
+    ULTIMATE_PROTECTION: { name: 'Escudo total', description: 'Activa de una vez las capas clave contra spam, raids y abusos staff.' },
     ANTI_SPAM: { name: 'Anti-spam', description: 'Detecta y sanciona a los miembros que envian mensajes demasiado rapido.' },
     ANTI_LINK: { name: 'Anti-enlaces', description: 'Bloquea URL externas y enlaces de invitacion.' },
     ANTI_RAID: { name: 'Anti-raid', description: 'Detecta entradas masivas y protege el servidor.' },

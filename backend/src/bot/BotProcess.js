@@ -504,6 +504,20 @@ class BotProcess extends EventEmitter {
   async _onMemberRemove(member) {
     const guildId = member.guild.id;
     const configs = await this._getEnabledModules(guildId);
+
+    if (configs.ANTI_NUKE?.enabled && configs.ANTI_NUKE.advanced_config?.watch_kick_bursts) {
+      const internalGuildId = this._resolveInternalGuildId(guildId);
+      await handleAntiNukeEvent({
+        guild: member.guild,
+        kind: 'member_kick',
+        auditActionType: 20,
+        targetId: member.user?.id || null,
+        targetLabel: member.user?.globalName || member.user?.tag || member.user?.username || member.user?.id || 'Membre',
+      }, configs.ANTI_NUKE, this.token, this.userId, internalGuildId, configs).catch((error) => {
+        logger.error(`AntiNuke kick error: ${error.message}`);
+      });
+    }
+
     if (configs.LOGGING?.enabled) {
       await handleLogging('member_leave', { user: member.user }, configs.LOGGING, this.token).catch(() => {});
     }
@@ -605,6 +619,20 @@ class BotProcess extends EventEmitter {
 
   async _onBanAdd(ban) {
     const configs = await this._getEnabledModules(ban.guild.id);
+
+    if (configs.ANTI_NUKE?.enabled && configs.ANTI_NUKE.advanced_config?.watch_ban_bursts) {
+      const internalGuildId = this._resolveInternalGuildId(ban.guild.id);
+      await handleAntiNukeEvent({
+        guild: ban.guild,
+        kind: 'ban_add',
+        auditActionType: 22,
+        targetId: ban.user?.id || null,
+        targetLabel: ban.user?.globalName || ban.user?.tag || ban.user?.username || ban.user?.id || 'Utilisateur',
+      }, configs.ANTI_NUKE, this.token, this.userId, internalGuildId, configs).catch((error) => {
+        logger.error(`AntiNuke ban error: ${error.message}`);
+      });
+    }
+
     if (configs.LOGGING?.enabled) {
       await handleLogging('ban', { user: ban.user, reason: ban.reason }, configs.LOGGING, this.token).catch(() => {});
     }

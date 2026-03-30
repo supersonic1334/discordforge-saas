@@ -10,6 +10,7 @@ const TEXT_CHANNEL_TYPES = [0, 5, 11, 12, 15]
 
 const CATEGORY_ORDER = ['security', 'moderation', 'utility']
 const MODULE_ORDER = [
+  'ULTIMATE_PROTECTION',
   'ANTI_SPAM',
   'ANTI_LINK',
   'ANTI_INVITE',
@@ -48,6 +49,7 @@ const CATEGORY_STYLES = {
 }
 
 const MODULE_ICONS = {
+  ULTIMATE_PROTECTION: Shield,
   ANTI_SPAM: Shield,
   ANTI_LINK: Link2,
   ANTI_INVITE: Link2,
@@ -230,6 +232,17 @@ const UI = {
       quarantineNote: 'Place automatiquement les profils suspects dans un role isole sans bannir trop vite.',
       trustNote: 'Ajuste le score de confiance visible dans Scan pour mieux prioriser les fiches.',
       presetNote: 'Applique en un clic un profil coherent sur plusieurs modules sans toucher aux roles et salons deja choisis.',
+      trustedRoles: 'Roles de confiance',
+      ultimateProfile: 'Niveau du bouclier',
+      ultimateProfileSmart: 'Intelligent',
+      ultimateProfileStrict: 'Strict',
+      ultimateProfileFortress: 'Forteresse',
+      ultimateShieldChat: 'Bloquer spam, liens, invitations, mentions et insultes',
+      ultimateShieldRaid: 'Couper raids, comptes suspects et floods de salons',
+      ultimateShieldStaff: 'Bloquer ban all, kick all, delete all et nuke staff',
+      ultimateShieldQuarantine: 'Isoler automatiquement les profils a risque',
+      ultimateStripStaffRoles: 'Retirer les roles staff en cas de nuke',
+      ultimateNote: 'Active en un seul clic les couches clefs contre spam, liens, mentions, raids, scams et abus staff. Garde seulement le salon d alerte, les roles de confiance et le niveau de rigueur.',
     },
   },
   en: {
@@ -378,6 +391,17 @@ const UI = {
       quarantineNote: 'Moves risky profiles into an isolated role without banning too quickly.',
       trustNote: 'Tunes the confidence score shown in Scan so staff can prioritize better.',
       presetNote: 'Applies a full protection profile in one save while keeping your selected roles and channels.',
+      trustedRoles: 'Trusted roles',
+      ultimateProfile: 'Shield level',
+      ultimateProfileSmart: 'Smart',
+      ultimateProfileStrict: 'Strict',
+      ultimateProfileFortress: 'Fortress',
+      ultimateShieldChat: 'Block spam, links, invites, mentions, and insults',
+      ultimateShieldRaid: 'Stop raids, suspicious accounts, and channel floods',
+      ultimateShieldStaff: 'Stop ban all, kick all, delete all, and staff nukes',
+      ultimateShieldQuarantine: 'Auto-isolate risky profiles',
+      ultimateStripStaffRoles: 'Strip staff roles during a nuke',
+      ultimateNote: 'Turns on the main layers against spam, links, mentions, raids, scams, and staff abuse in one save. Keep only the alert channel, trusted roles, and intensity level to tune.',
     },
   },
   es: {
@@ -526,6 +550,17 @@ const UI = {
       quarantineNote: 'Mueve perfiles de riesgo a un rol aislado sin banear demasiado rapido.',
       trustNote: 'Ajusta la puntuacion de confianza visible en Scan para priorizar mejor.',
       presetNote: 'Aplica un perfil completo en un clic sin perder roles ni canales ya elegidos.',
+      trustedRoles: 'Roles de confianza',
+      ultimateProfile: 'Nivel del escudo',
+      ultimateProfileSmart: 'Inteligente',
+      ultimateProfileStrict: 'Estricto',
+      ultimateProfileFortress: 'Fortaleza',
+      ultimateShieldChat: 'Bloquear spam, enlaces, invitaciones, menciones e insultos',
+      ultimateShieldRaid: 'Cortar raids, cuentas sospechosas y floods de canales',
+      ultimateShieldStaff: 'Bloquear ban all, kick all, delete all y nukes staff',
+      ultimateShieldQuarantine: 'Aislar automaticamente perfiles de riesgo',
+      ultimateStripStaffRoles: 'Quitar roles staff durante un nuke',
+      ultimateNote: 'Activa en un solo guardado las capas clave contra spam, enlaces, menciones, raids, scams y abusos staff. Solo ajustas el canal de alerta, los roles de confianza y la intensidad.',
     },
   },
 }
@@ -630,8 +665,24 @@ function getFieldDefs(ui) {
   const moderationActions = buildActionOptions(ui, ['delete', 'timeout', 'kick', 'ban', 'blacklist'])
   const warningActions = buildActionOptions(ui, ['timeout', 'kick', 'ban'])
   const automodActions = buildActionOptions(ui, ['delete', 'warn', 'timeout', 'kick', 'ban', 'blacklist'])
+  const ultimateProfiles = [
+    { value: 'smart', label: ui.labels.ultimateProfileSmart },
+    { value: 'strict', label: ui.labels.ultimateProfileStrict },
+    { value: 'fortress', label: ui.labels.ultimateProfileFortress },
+  ]
 
   return {
+    ULTIMATE_PROTECTION: [
+      { path: 'simple_config.profile', type: 'select', label: ui.labels.ultimateProfile, options: ultimateProfiles },
+      { path: 'advanced_config.shield_chat', type: 'boolean', label: ui.labels.ultimateShieldChat },
+      { path: 'advanced_config.shield_raid', type: 'boolean', label: ui.labels.ultimateShieldRaid },
+      { path: 'advanced_config.shield_staff', type: 'boolean', label: ui.labels.ultimateShieldStaff },
+      { path: 'advanced_config.shield_quarantine', type: 'boolean', label: ui.labels.ultimateShieldQuarantine },
+      { path: 'simple_config.quarantine_role_id', type: 'role-select', label: ui.labels.quarantineRole, when: (form) => !!form['advanced_config.shield_quarantine'] },
+      { path: 'advanced_config.alert_channel_id', type: 'channel-select', label: ui.labels.alertChannel },
+      { path: 'advanced_config.trusted_roles', type: 'roles', label: ui.labels.trustedRoles },
+      { path: 'advanced_config.strip_staff_roles', type: 'boolean', label: ui.labels.ultimateStripStaffRoles, when: (form) => !!form['advanced_config.shield_staff'] },
+    ],
     ANTI_SPAM: [
       { path: 'simple_config.action', type: 'select', label: ui.labels.action, options: moderationActions },
       { path: 'simple_config.timeout_duration_ms', type: 'duration', label: ui.labels.timeoutDuration, when: (form) => form['simple_config.action'] === 'timeout', help: ui.labels.timeoutMinimum },
@@ -1137,6 +1188,7 @@ function ModuleField({ field, formState, setFormState, ui, roles, channels, guil
 }
 
 function getModuleNote(moduleType, formState, ui) {
+  if (moduleType === 'ULTIMATE_PROTECTION') return ui.labels.ultimateNote
   if (moduleType === 'ANTI_SPAM') return ui.labels.spamNote
   if (moduleType === 'ANTI_LINK') return ui.labels.linkNote
   if (moduleType === 'ANTI_INVITE') {

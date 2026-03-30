@@ -6,6 +6,25 @@
  * advanced_config = power-user settings
  */
 const MODULE_DEFINITIONS = {
+  ULTIMATE_PROTECTION: {
+    name: 'Ultimate Protection',
+    description: 'Apply a full security shield in one click across chat, raid, and staff abuse scenarios.',
+    category: 'security',
+    simple_config: {
+      profile: 'smart',
+      quarantine_role_id: null,
+    },
+    advanced_config: {
+      trusted_roles: [],
+      alert_channel_id: null,
+      shield_chat: true,
+      shield_raid: true,
+      shield_staff: true,
+      shield_quarantine: true,
+      strip_staff_roles: true,
+    },
+  },
+
   ANTI_SPAM: {
     name: 'Anti-Spam',
     description: 'Detect and punish members sending messages too quickly.',
@@ -95,6 +114,9 @@ const MODULE_DEFINITIONS = {
       whitelist_roles: [],
       whitelist_users: [],
       alert_channel_id: null,
+      watch_ban_bursts: false,
+      watch_kick_bursts: false,
+      strip_executor_roles: false,
     },
   },
 

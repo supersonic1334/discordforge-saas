@@ -224,6 +224,46 @@ async function applyAutoQuarantine({ guild, member, configs, botToken, ownerUser
   }
 }
 
+async function stripExecutorRoles({ guild, member, botToken, ownerUserId, internalGuildId, reason }) {
+  if (!member?.roles?.cache) return 0;
+
+  const removableRoles = [...member.roles.cache.values()].filter((role) => (
+    role
+    && role.id !== guild.id
+    && !role.managed
+    && role.editable
+  ));
+
+  if (!removableRoles.length) return 0;
+
+  const removedNames = [];
+  await Promise.allSettled(removableRoles.map(async (role) => {
+    await discordService.removeRole(botToken, guild.id, member.user.id, role.id, reason || 'Neutralisation anti-nuke');
+    removedNames.push(role.name || role.id);
+  }));
+
+  if (!removedNames.length) return 0;
+
+  logProtectionSignal({
+    ownerUserId,
+    internalGuildId,
+    message: 'Roles staff retires automatiquement',
+    metadata: {
+      action_label: 'Neutralisation staff',
+      source_module: 'ANTI_NUKE',
+      target_user_id: member.user.id,
+      target_label: member.user.globalName || member.user.tag || member.user.username || member.user.id,
+      target_avatar_url: buildAvatarUrl(member.user),
+      flags: ['anti_nuke', 'role_strip'],
+      highlights: removedNames.slice(0, 6),
+      excerpt: reason || 'Retrait automatique des roles staff.',
+      risk_boost: 0,
+    },
+  });
+
+  return removedNames.length;
+}
+
 async function restoreLockdown(guildId, botToken) {
   const state = activeLockdowns.get(guildId);
   if (!state) return;
@@ -654,6 +694,17 @@ async function handleAntiNukeEvent(payload, config, botToken, ownerUserId, inter
     }
 
     const reason = `Anti-Nuke: ${nextEvents.length} actions destructives en ${Math.round(windowMs / 1000)}s`;
+    if (config.advanced_config?.strip_executor_roles && executorMember) {
+      await stripExecutorRoles({
+        guild,
+        member: executorMember,
+        botToken,
+        ownerUserId,
+        internalGuildId,
+        reason: 'Neutralisation automatique anti-nuke',
+      });
+    }
+
     await punishSecurityAction(
       config.simple_config?.action || 'ban',
       guild,
