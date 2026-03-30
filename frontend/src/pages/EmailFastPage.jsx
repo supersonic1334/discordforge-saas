@@ -89,6 +89,12 @@ export default function EmailFastPage() {
     let qrVisible = false
     let currentTab = 'text'
     let toastTimeout = null
+    let selectedDuration = '1h'
+    let customDurationMinutes = 180
+    let pollIntervalMs = 6000
+    let messageFilter = 'all'
+    let mailboxExpired = false
+    let lastSyncAt = null
 
     const timeouts = new Set()
     const cleanupFns = []
@@ -118,6 +124,17 @@ export default function EmailFastPage() {
       timerLabel: root.querySelector('#timerLabel'),
       progressFill: root.querySelector('#progressFill'),
       extendButtons: Array.from(root.querySelectorAll('[data-extend-minutes]')),
+      durationButtons: Array.from(root.querySelectorAll('[data-duration-option]')),
+      customDurationInputs: Array.from(root.querySelectorAll('[data-custom-duration]')),
+      pollSelects: Array.from(root.querySelectorAll('[data-poll-select]')),
+      durationSummaries: Array.from(root.querySelectorAll('[data-duration-summary]')),
+      filterButtons: Array.from(root.querySelectorAll('[data-filter-mode]')),
+      btnApplySettings: root.querySelector('#btnApplySettings'),
+      btnExport: root.querySelector('#btnExport'),
+      statusDuration: root.querySelector('#statusDuration'),
+      statusSync: root.querySelector('#statusSync'),
+      statusUnread: root.querySelector('#statusUnread'),
+      statusLastSync: root.querySelector('#statusLastSync'),
       btnQR: root.querySelector('#btnQR'),
       qrPanel: root.querySelector('#qrPanel'),
       qrCanvas: root.querySelector('#qrCanvas'),
@@ -227,6 +244,155 @@ export default function EmailFastPage() {
       fill.style.background = password.length ? colors[score - 1] || '#ef4444' : 'transparent'
     }
 
+    function formatDurationLabel(totalMinutes) {
+      const minutes = Number(totalMinutes)
+      if (!Number.isFinite(minutes) || minutes <= 0) return '0 min'
+      if (minutes < 60) return `${minutes} min`
+      if (minutes % 1440 === 0) {
+        const days = minutes / 1440
+        return `${days} jour${days > 1 ? 's' : ''}`
+      }
+      if (minutes % 60 === 0) {
+        const hours = minutes / 60
+        return `${hours} heure${hours > 1 ? 's' : ''}`
+      }
+      const hours = Math.floor(minutes / 60)
+      const remainder = minutes % 60
+      return `${hours} h ${String(remainder).padStart(2, '0')}`
+    }
+
+    function getCurrentDurationConfig() {
+      if (selectedDuration === 'permanent') {
+        return {
+          key: selectedDuration,
+          label: 'Permanent',
+          summary: 'Permanent - aucune expiration locale',
+          isPermanent: true,
+          minutes: null,
+        }
+      }
+
+      if (selectedDuration === 'custom') {
+        const parsed = Number(customDurationMinutes)
+        if (!Number.isFinite(parsed) || parsed < 5 || parsed > 10080) {
+          return {
+            key: selectedDuration,
+            invalid: true,
+            label: 'Perso',
+            summary: 'Entre 5 minutes et 7 jours',
+            isPermanent: false,
+            minutes: 10,
+          }
+        }
+
+        return {
+          key: selectedDuration,
+          label: formatDurationLabel(parsed),
+          summary: `Perso - ${formatDurationLabel(parsed)}`,
+          isPermanent: false,
+          minutes: parsed,
+        }
+      }
+
+      const presets = {
+        '10m': 10,
+        '1h': 60,
+        '6h': 360,
+        '24h': 1440,
+      }
+      const minutes = presets[selectedDuration] || 60
+
+      return {
+        key: selectedDuration,
+        label: formatDurationLabel(minutes),
+        summary: `Preset - ${formatDurationLabel(minutes)}`,
+        isPermanent: false,
+        minutes,
+      }
+    }
+
+    function formatLastSync() {
+      if (!lastSyncAt) return 'En attente'
+      return new Date(lastSyncAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    }
+
+    function updateDurationControls() {
+      const config = getCurrentDurationConfig()
+
+      elements.durationButtons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.durationOption === selectedDuration)
+      })
+
+      elements.customDurationInputs.forEach((input) => {
+        input.value = String(customDurationMinutes)
+        const wrap = input.closest('[data-custom-wrap]')
+        if (wrap) {
+          wrap.style.display = selectedDuration === 'custom' ? 'block' : 'none'
+        }
+      })
+
+      elements.pollSelects.forEach((select) => {
+        select.value = String(pollIntervalMs)
+      })
+
+      elements.durationSummaries.forEach((summary) => {
+        summary.textContent = config.invalid ? 'Regle une duree valide' : config.summary
+      })
+
+      updateStatusPanel()
+    }
+
+    function setDuration(durationKey) {
+      selectedDuration = durationKey
+      updateDurationControls()
+    }
+
+    function setPollInterval(nextValue) {
+      pollIntervalMs = Number(nextValue) || 6000
+      updateDurationControls()
+    }
+
+    function setFilterMode(nextFilter) {
+      messageFilter = nextFilter
+      elements.filterButtons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.filterMode === nextFilter)
+      })
+      renderList()
+    }
+
+    function updateStatusPanel() {
+      const config = getCurrentDurationConfig()
+      const unreadMessages = messages.filter((message) => !message.read).length
+
+      if (elements.statusDuration) {
+        if (mailboxExpired) {
+          elements.statusDuration.textContent = 'Expiree'
+        } else {
+          elements.statusDuration.textContent = config.isPermanent ? 'Permanent' : config.label
+        }
+      }
+
+      if (elements.statusSync) {
+        elements.statusSync.textContent = `${Math.round(pollIntervalMs / 1000)} s`
+      }
+
+      if (elements.statusUnread) {
+        elements.statusUnread.textContent = String(unreadMessages)
+      }
+
+      if (elements.statusLastSync) {
+        elements.statusLastSync.textContent = formatLastSync()
+      }
+    }
+
+    function schedulePolling() {
+      window.clearInterval(pollTimer)
+      pollTimer = null
+
+      if (!token || mailboxExpired) return
+      pollTimer = window.setInterval(fetchMessages, pollIntervalMs)
+    }
+
     async function submitCreate() {
       const password = elements.createPass?.value || ''
       const confirmPassword = elements.createPassConfirm?.value || ''
@@ -242,6 +408,11 @@ export default function EmailFastPage() {
       if (password !== confirmPassword) {
         showAuthError('Les mots de passe ne correspondent pas')
         shakeField('createPassConfirm')
+        return
+      }
+
+      if (getCurrentDurationConfig().invalid) {
+        showAuthError('Choisis une duree valide entre 5 minutes et 7 jours')
         return
       }
 
@@ -334,8 +505,12 @@ export default function EmailFastPage() {
     }
 
     async function launchApp() {
-      showApp()
       await createMailbox()
+      if (account?.address) {
+        showApp()
+      } else {
+        showAuth()
+      }
     }
 
     function showApp() {
@@ -362,6 +537,15 @@ export default function EmailFastPage() {
       savedMailbox = {
         account: { ...account },
         token,
+        messages: messages.map((message) => ({ ...message })),
+        secsLeft,
+        totalSecs,
+        durationKey: selectedDuration,
+        durationMinutes: getCurrentDurationConfig().minutes,
+        customDurationMinutes,
+        pollIntervalMs,
+        mailboxExpired,
+        lastSyncAt,
       }
 
       window.clearInterval(pollTimer)
@@ -385,6 +569,14 @@ export default function EmailFastPage() {
 
       account = { ...savedMailbox.account }
       token = savedMailbox.token
+      messages = savedMailbox.messages?.map((message) => ({ ...message })) || []
+      secsLeft = savedMailbox.secsLeft ?? secsLeft
+      totalSecs = savedMailbox.totalSecs ?? totalSecs
+      selectedDuration = savedMailbox.durationKey || selectedDuration
+      customDurationMinutes = savedMailbox.customDurationMinutes || customDurationMinutes
+      pollIntervalMs = savedMailbox.pollIntervalMs || pollIntervalMs
+      mailboxExpired = Boolean(savedMailbox.mailboxExpired)
+      lastSyncAt = savedMailbox.lastSyncAt || null
 
       if (elements.accessPass) {
         elements.accessPass.value = ''
@@ -392,9 +584,14 @@ export default function EmailFastPage() {
 
       showApp()
       setEmail(account.address)
+      updateDurationControls()
+      updateTimer()
+      updateCount()
       renderList()
-      pollTimer = window.setInterval(fetchMessages, 6000)
-      startTimer()
+      schedulePolling()
+      if (!mailboxExpired) {
+        startTimer()
+      }
       showToast('🔓 Accès restauré')
     }
 
@@ -408,17 +605,35 @@ export default function EmailFastPage() {
       token = null
       account = null
       currentMailIndex = -1
-      secsLeft = 600
-      totalSecs = 600
+      mailboxExpired = false
+      lastSyncAt = null
+      const durationConfig = getCurrentDurationConfig()
+      if (durationConfig.invalid) {
+        showAuthError('Choisis une duree valide entre 5 minutes et 7 jours')
+        if (elements.btnCreate) {
+          elements.btnCreate.disabled = false
+          elements.btnCreate.textContent = 'Creer ma boite securisee'
+        }
+        return
+      }
+
+      if (durationConfig.isPermanent) {
+        secsLeft = 0
+        totalSecs = 0
+      } else {
+        secsLeft = durationConfig.minutes * 60
+        totalSecs = secsLeft
+      }
 
       closeModal()
       setEmail('Création...')
       updateCount()
       renderList()
+      updateStatusPanel()
       hideError()
 
       try {
-        const domainsResponse = await fetch('https://api.mail.tm/domains')
+        const domainsResponse = await fetch(`${API}/domains`)
         const domainsPayload = await domainsResponse.json()
         const domain = domainsPayload?.['hydra:member']?.[0]?.domain
 
@@ -430,7 +645,7 @@ export default function EmailFastPage() {
         const mailboxPassword = rnd(16)
         const address = `${username}@${domain}`
 
-        const createResponse = await fetch('https://api.mail.tm/accounts', {
+        const createResponse = await fetch(`${API}/accounts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address, password: mailboxPassword }),
@@ -448,7 +663,7 @@ export default function EmailFastPage() {
           password: mailboxPassword,
         }
 
-        const tokenResponse = await fetch('https://api.mail.tm/token', {
+        const tokenResponse = await fetch(`${API}/token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address, password: mailboxPassword }),
@@ -461,10 +676,11 @@ export default function EmailFastPage() {
         token = (await tokenResponse.json()).token
 
         setEmail(address)
+        updateDurationControls()
         updateTimer()
         void regenerateQR()
         startTimer()
-        pollTimer = window.setInterval(fetchMessages, 6000)
+        schedulePolling()
         showToast('✓ Boîte créée !')
         await fetchMessages()
       } catch (error) {
@@ -486,6 +702,13 @@ export default function EmailFastPage() {
 
     function startTimer() {
       window.clearInterval(timerInterval)
+
+      if (getCurrentDurationConfig().isPermanent) {
+        timerInterval = null
+        updateTimer()
+        return
+      }
+
       updateTimer()
 
       timerInterval = window.setInterval(() => {
@@ -493,10 +716,14 @@ export default function EmailFastPage() {
         updateTimer()
 
         if (secsLeft <= 0) {
+          mailboxExpired = true
+          secsLeft = 0
           window.clearInterval(pollTimer)
           window.clearInterval(timerInterval)
           pollTimer = null
           timerInterval = null
+          updateStatusPanel()
+          showError('La duree de la boite est terminee. Passe en permanent ou relance une nouvelle boite.')
 
           if (elements.timerLabel) {
             elements.timerLabel.textContent = '⚠ Expirée'
@@ -506,25 +733,52 @@ export default function EmailFastPage() {
     }
 
     function updateTimer() {
+      const durationConfig = getCurrentDurationConfig()
       const minutes = Math.max(0, Math.floor(secsLeft / 60))
       const seconds = Math.max(0, secsLeft % 60)
 
       if (elements.timerLabel) {
-        elements.timerLabel.textContent = `Expire dans ${minutes}:${String(seconds).padStart(2, '0')}`
+        if (mailboxExpired) {
+          elements.timerLabel.textContent = 'Expiree'
+        } else if (durationConfig.isPermanent) {
+          elements.timerLabel.textContent = 'Permanent - surveillance continue'
+        } else {
+          elements.timerLabel.textContent = `Expire dans ${minutes}:${String(seconds).padStart(2, '0')}`
+        }
       }
-
-      const percentage = totalSecs > 0 ? Math.max(0, (secsLeft / totalSecs) * 100) : 0
 
       if (elements.progressFill) {
-        elements.progressFill.style.width = `${percentage}%`
-        elements.progressFill.className = `progress-fill${percentage < 20 ? ' warning' : ''}`
+        if (mailboxExpired) {
+          elements.progressFill.style.width = '0%'
+          elements.progressFill.className = 'progress-fill warning'
+        } else if (durationConfig.isPermanent) {
+          elements.progressFill.style.width = '100%'
+          elements.progressFill.className = 'progress-fill permanent'
+        } else {
+          const percentage = totalSecs > 0 ? Math.max(0, (secsLeft / totalSecs) * 100) : 0
+          elements.progressFill.style.width = `${percentage}%`
+          elements.progressFill.className = `progress-fill${percentage < 20 ? ' warning' : ''}`
+        }
       }
+
+      updateStatusPanel()
     }
 
     function extendTime(minutes) {
+      if (getCurrentDurationConfig().isPermanent) {
+        showToast('Mode permanent deja actif')
+        return
+      }
+
+      mailboxExpired = false
       secsLeft += minutes * 60
       totalSecs = Math.max(totalSecs, secsLeft)
+      hideError()
       updateTimer()
+      schedulePolling()
+      if (!timerInterval) {
+        startTimer()
+      }
       showToast(`+${minutes} min ajoutées ✓`)
     }
 
@@ -559,10 +813,10 @@ export default function EmailFastPage() {
     }
 
     async function fetchMessages() {
-      if (!token) return
+      if (!token || mailboxExpired) return
 
       try {
-        const response = await fetch('https://api.mail.tm/messages', {
+        const response = await fetch(`${API}/messages`, {
           headers: { Authorization: `Bearer ${token}` },
         })
 
@@ -572,15 +826,17 @@ export default function EmailFastPage() {
         const rawMessages = payload?.['hydra:member'] || []
         const knownIds = new Set(messages.map((message) => message.id))
         const newMessages = rawMessages.filter((message) => !knownIds.has(message.id))
+        lastSyncAt = Date.now()
 
         if (!newMessages.length) {
           updateCount()
           renderList()
+          updateStatusPanel()
           return
         }
 
         for (const message of newMessages) {
-          const detailResponse = await fetch(`https://api.mail.tm/messages/${message.id}`, {
+          const detailResponse = await fetch(`${API}/messages/${message.id}`, {
             headers: { Authorization: `Bearer ${token}` },
           })
 
@@ -601,8 +857,10 @@ export default function EmailFastPage() {
           })
         }
 
+        lastSyncAt = Date.now()
         renderList()
         updateCount()
+        updateStatusPanel()
       } catch (error) {
         console.error(error)
       }
@@ -611,10 +869,15 @@ export default function EmailFastPage() {
     function renderList() {
       const query = (elements.searchInput?.value || '').trim().toLowerCase()
       const filteredMessages = messages.filter((message) => (
-        !query
-        || message.from.toLowerCase().includes(query)
-        || message.subject.toLowerCase().includes(query)
-        || message.bodyText.toLowerCase().includes(query)
+        (messageFilter !== 'unread' || !message.read)
+        && (messageFilter !== 'starred' || message.starred)
+        && (
+          !query
+          || message.from.toLowerCase().includes(query)
+          || message.subject.toLowerCase().includes(query)
+          || message.bodyText.toLowerCase().includes(query)
+          || stripHtmlTags(message.bodyHtml).toLowerCase().includes(query)
+        )
       ))
 
       if (!elements.mailList) return
@@ -646,6 +909,7 @@ export default function EmailFastPage() {
               ${ago(message.date)}
             </div>
             <div class="mail-subject" data-open-index="${realIndex}">${esc(message.subject)}</div>
+            <div class="mail-preview" data-open-index="${realIndex}">${esc((message.bodyText || stripHtmlTags(message.bodyHtml) || '(vide)').slice(0, 140))}</div>
           </div>
         `
       }).join('')
@@ -654,6 +918,7 @@ export default function EmailFastPage() {
     function updateCount() {
       if (!elements.inboxCount) return
       elements.inboxCount.textContent = String(messages.length)
+      updateStatusPanel()
     }
 
     function toggleStar(index) {
@@ -826,6 +1091,60 @@ export default function EmailFastPage() {
       elements.errorBanner.textContent = ''
     }
 
+    function applyRuntimeSettings() {
+      const durationConfig = getCurrentDurationConfig()
+
+      if (durationConfig.invalid) {
+        showError('Choisis une duree valide entre 5 minutes et 7 jours.')
+        return
+      }
+
+      mailboxExpired = false
+      hideError()
+
+      if (durationConfig.isPermanent) {
+        secsLeft = 0
+        totalSecs = 0
+        window.clearInterval(timerInterval)
+        timerInterval = null
+      } else {
+        secsLeft = durationConfig.minutes * 60
+        totalSecs = secsLeft
+      }
+
+      updateDurationControls()
+      updateTimer()
+      schedulePolling()
+
+      if (!durationConfig.isPermanent) {
+        startTimer()
+      }
+
+      showToast(durationConfig.isPermanent ? 'Mode permanent active' : `Duree reglee sur ${durationConfig.label}`)
+    }
+
+    function exportMailbox() {
+      if (!account?.address) return
+
+      const payload = {
+        address: account.address,
+        duration: getCurrentDurationConfig().label,
+        pollIntervalMs,
+        mailboxExpired,
+        lastSyncAt,
+        messages,
+      }
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `email-fast-${account.address.replace(/[@.]/g, '-')}.json`
+      link.click()
+      window.URL.revokeObjectURL(url)
+      showToast('Snapshot exporte')
+    }
+
     on(elements.createTabButton, 'click', () => switchAuthTab('create'))
     on(elements.accessTabButton, 'click', () => switchAuthTab('access'))
 
@@ -866,6 +1185,28 @@ export default function EmailFastPage() {
       on(button, 'click', () => extendTime(Number(button.dataset.extendMinutes || 0)))
     })
 
+    elements.durationButtons.forEach((button) => {
+      on(button, 'click', () => setDuration(button.dataset.durationOption || '1h'))
+    })
+
+    elements.customDurationInputs.forEach((input) => {
+      on(input, 'input', () => {
+        customDurationMinutes = Number(input.value || customDurationMinutes) || customDurationMinutes
+        updateDurationControls()
+      })
+    })
+
+    elements.pollSelects.forEach((select) => {
+      on(select, 'change', () => setPollInterval(select.value))
+    })
+
+    elements.filterButtons.forEach((button) => {
+      on(button, 'click', () => setFilterMode(button.dataset.filterMode || 'all'))
+    })
+
+    on(elements.btnApplySettings, 'click', applyRuntimeSettings)
+    on(elements.btnExport, 'click', exportMailbox)
+
     elements.viewTabs.forEach((button) => {
       on(button, 'click', () => switchTab(button.dataset.viewTab || 'text'))
     })
@@ -899,6 +1240,8 @@ export default function EmailFastPage() {
     cleanupFns.push(() => document.removeEventListener('keydown', handleEscapeKey))
 
     switchAuthTab('create')
+    updateDurationControls()
+    setFilterMode('all')
     updateCount()
     void qrCodeReady
 
@@ -918,6 +1261,24 @@ export default function EmailFastPage() {
           <div className="auth-logo-icon">✉️</div>
           <div className="auth-title">Email <span>Fast</span></div>
           <div className="auth-sub">// Boîte mail jetable sécurisée</div>
+        </div>
+
+        <div className="auth-showcase">
+          <div className="showcase-card">
+            <div className="showcase-kicker">Design sync</div>
+            <div className="showcase-value">DiscordForger</div>
+            <div className="showcase-copy">Glass cards, glow propre et motion plus premium.</div>
+          </div>
+          <div className="showcase-card">
+            <div className="showcase-kicker">Retentions</div>
+            <div className="showcase-value">10 min a permanent</div>
+            <div className="showcase-copy">Preset rapide ou duree perso jusqu a 7 jours.</div>
+          </div>
+          <div className="showcase-card">
+            <div className="showcase-kicker">Live tools</div>
+            <div className="showcase-value">QR + export + lock</div>
+            <div className="showcase-copy">Filtres inbox et snapshot JSON en un clic.</div>
+          </div>
         </div>
 
         <div className="auth-card">
@@ -947,6 +1308,32 @@ export default function EmailFastPage() {
             <div className="field-wrap">
               <input className="field-input" id="createPassConfirm" type="password" placeholder="Répète le mot de passe" />
               <button type="button" className="eye-btn" data-toggle-eye="createPassConfirm">👁</button>
+            </div>
+
+            <div className="setup-panel">
+              <div className="setup-head">
+                <span className="field-label">Retention de la boite</span>
+                <span className="setup-summary" data-duration-summary>Preset - 1 heure</span>
+              </div>
+              <div className="duration-grid">
+                <button type="button" className="duration-option" data-duration-option="10m">10 min</button>
+                <button type="button" className="duration-option active" data-duration-option="1h">1 heure</button>
+                <button type="button" className="duration-option" data-duration-option="6h">6 heures</button>
+                <button type="button" className="duration-option" data-duration-option="24h">24 heures</button>
+                <button type="button" className="duration-option" data-duration-option="permanent">Permanent</button>
+                <button type="button" className="duration-option" data-duration-option="custom">Perso</button>
+              </div>
+              <div className="duration-custom-wrap" data-custom-wrap style={{ display: 'none' }}>
+                <input className="field-input field-input-compact" data-custom-duration type="number" min="5" max="10080" defaultValue="180" placeholder="Minutes perso" />
+              </div>
+              <div className="poll-row">
+                <label className="field-label field-label-inline" htmlFor="pollIntervalCreate">Cadence live</label>
+                <select className="field-select" id="pollIntervalCreate" data-poll-select defaultValue="6000">
+                  <option value="6000">6 s - Ultra live</option>
+                  <option value="15000">15 s - Equilibre</option>
+                  <option value="30000">30 s - Calme</option>
+                </select>
+              </div>
             </div>
 
             <button type="button" className="btn-auth" id="btnCreate">
@@ -986,6 +1373,25 @@ export default function EmailFastPage() {
         </div>
 
         <div className="main">
+          <div className="status-grid">
+            <div className="status-card">
+              <div className="status-label">Duree</div>
+              <div className="status-value" id="statusDuration">1 heure</div>
+            </div>
+            <div className="status-card">
+              <div className="status-label">Sync</div>
+              <div className="status-value" id="statusSync">6 s</div>
+            </div>
+            <div className="status-card">
+              <div className="status-label">Non lus</div>
+              <div className="status-value" id="statusUnread">0</div>
+            </div>
+            <div className="status-card">
+              <div className="status-label">Derniere sync</div>
+              <div className="status-value status-value-small" id="statusLastSync">En attente</div>
+            </div>
+          </div>
+
           <div className="card">
             <div className="card-line" />
             <div className="card-body">
@@ -1034,6 +1440,9 @@ export default function EmailFastPage() {
                   </svg>
                   QR Code
                 </button>
+                <button type="button" className="tool-btn" id="btnExport">
+                  Export JSON
+                </button>
               </div>
 
               <div className="qr-panel" id="qrPanel">
@@ -1050,12 +1459,60 @@ export default function EmailFastPage() {
             </div>
           </div>
 
+          <div className="card runtime-card">
+            <div className="card-line" />
+            <div className="card-body">
+              <div className="sec-label">Pilotage live</div>
+              <div className="runtime-grid">
+                <div>
+                  <div className="runtime-head">
+                    <span className="runtime-title">Retention</span>
+                    <span className="runtime-summary" data-duration-summary>Preset - 1 heure</span>
+                  </div>
+                  <div className="duration-grid duration-grid-compact">
+                    <button type="button" className="duration-option" data-duration-option="10m">10 min</button>
+                    <button type="button" className="duration-option active" data-duration-option="1h">1 heure</button>
+                    <button type="button" className="duration-option" data-duration-option="6h">6 heures</button>
+                    <button type="button" className="duration-option" data-duration-option="24h">24 heures</button>
+                    <button type="button" className="duration-option" data-duration-option="permanent">Permanent</button>
+                    <button type="button" className="duration-option" data-duration-option="custom">Perso</button>
+                  </div>
+                  <div className="duration-custom-wrap" data-custom-wrap style={{ display: 'none' }}>
+                    <input className="field-input field-input-compact" data-custom-duration type="number" min="5" max="10080" defaultValue="180" placeholder="Minutes perso" />
+                  </div>
+                </div>
+
+                <div className="runtime-controls">
+                  <div className="poll-row">
+                    <label className="field-label field-label-inline" htmlFor="pollIntervalRuntime">Cadence live</label>
+                    <select className="field-select" id="pollIntervalRuntime" data-poll-select defaultValue="6000">
+                      <option value="6000">6 s - Ultra live</option>
+                      <option value="15000">15 s - Equilibre</option>
+                      <option value="30000">30 s - Calme</option>
+                    </select>
+                  </div>
+                  <div className="runtime-actions">
+                    <button type="button" className="tool-btn tool-btn-primary" id="btnApplySettings">Appliquer</button>
+                    <button type="button" className="tool-btn" data-extend-minutes="60">+1 heure</button>
+                    <button type="button" className="tool-btn" data-extend-minutes="180">+3 heures</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="inbox-header">
             <div className="inbox-title-row">
               <span className="inbox-label">Boîte de réception</span>
               <span className="badge" id="inboxCount">0</span>
             </div>
             <button type="button" className="btn-sm" id="btnRefresh">↻ Actualiser</button>
+          </div>
+
+          <div className="filter-row">
+            <button type="button" className="filter-chip active" data-filter-mode="all">Tous</button>
+            <button type="button" className="filter-chip" data-filter-mode="unread">Non lus</button>
+            <button type="button" className="filter-chip" data-filter-mode="starred">Favoris</button>
           </div>
 
           <div className="search-wrap">
