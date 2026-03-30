@@ -29,6 +29,18 @@ export const DEFAULT_DRAFT = {
 
 let qrCodeScriptPromise
 
+function getRandomIndex(max) {
+  if (!Number.isFinite(max) || max <= 0) return 0
+
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+    const array = new Uint32Array(1)
+    window.crypto.getRandomValues(array)
+    return array[0] % max
+  }
+
+  return Math.floor(Math.random() * max)
+}
+
 export function ensureQRCodeScript() {
   if (typeof window === 'undefined') return Promise.resolve(null)
   if (window.QRCode) return Promise.resolve(window.QRCode)
@@ -60,12 +72,31 @@ export function ensureQRCodeScript() {
 
 export function randomString(length) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
-    const array = new Uint32Array(length)
-    window.crypto.getRandomValues(array)
-    return Array.from(array, (value) => chars[value % chars.length]).join('')
+  return Array.from({ length }, () => chars[getRandomIndex(chars.length)]).join('')
+}
+
+export function generateSecureAccessKey(length = 18) {
+  const safeSymbols = '!@#$%*-_+='
+  const groups = [
+    'ABCDEFGHJKLMNPQRSTUVWXYZ',
+    'abcdefghijkmnopqrstuvwxyz',
+    '23456789',
+    safeSymbols,
+  ]
+  const allChars = groups.join('')
+  const size = Math.max(15, Number(length) || 18)
+  const buffer = groups.map((charset) => charset[getRandomIndex(charset.length)])
+
+  while (buffer.length < size) {
+    buffer.push(allChars[getRandomIndex(allChars.length)])
   }
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+
+  for (let index = buffer.length - 1; index > 0; index -= 1) {
+    const swapIndex = getRandomIndex(index + 1)
+    ;[buffer[index], buffer[swapIndex]] = [buffer[swapIndex], buffer[index]]
+  }
+
+  return buffer.join('')
 }
 
 export function stripHtml(value) {

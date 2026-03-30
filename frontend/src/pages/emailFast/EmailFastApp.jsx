@@ -28,7 +28,6 @@ import {
   DELETE_CONFIRMATION_WORD,
   DURATION_OPTIONS,
   FILTER_OPTIONS,
-  MAX_MAILBOXES,
   formatDateTime,
   formatMessageTime,
   formatRemaining,
@@ -46,6 +45,7 @@ function PasswordField({
   visible,
   onToggle,
   onKeyDown,
+  readOnly = false,
 }) {
   return (
     <label className="block space-y-2">
@@ -54,16 +54,20 @@ function PasswordField({
         <input
           type={visible ? 'text' : 'password'}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          readOnly={readOnly}
+          onChange={(event) => onChange?.(event.target.value)}
           onKeyDown={onKeyDown}
+          onFocus={(event) => {
+            if (readOnly) event.currentTarget.select()
+          }}
           placeholder={placeholder}
-          className={clsx('input-field pr-12', !visible && 'secret-field')}
+          className={clsx('input-field pr-12', !visible && 'secret-field', readOnly && 'cursor-default select-all')}
         />
         <button
           type="button"
           onClick={onToggle}
           className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-white/[0.05] p-2 text-white/45 transition-all hover:border-white/15 hover:text-white"
-          aria-label={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+          aria-label={visible ? 'Masquer la valeur' : 'Afficher la valeur'}
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
@@ -288,6 +292,7 @@ export default function EmailFastApp() {
   const [labelDraft, setLabelDraft] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deletePhrase, setDeletePhrase] = useState('')
+  const [showVaultKey, setShowVaultKey] = useState(false)
 
   const createDurationMeta = useMemo(
     () => getDurationConfig(state.createDraft.durationKey, state.createDraft.customDurationMinutes),
@@ -313,7 +318,6 @@ export default function EmailFastApp() {
     () => state.mailboxes.filter((mailbox) => mailbox.status === 'inactive').length,
     [state.mailboxes]
   )
-  const slotsLeft = MAX_MAILBOXES - state.mailboxes.length
   const strengthMeta = getPasswordStrengthMeta(state.createPassword)
   const previewText = state.selectedMessage
     ? stripHtml(state.selectedMessage.bodyText || state.selectedMessage.bodyHtml || '')
@@ -396,8 +400,8 @@ export default function EmailFastApp() {
             <div className="grid gap-3 sm:grid-cols-3">
               <StatTile
                 label="Adresses"
-                value={`${MAX_MAILBOXES} max`}
-                detail="Jusqu a cinq adresses actives."
+                value="Sans plafond"
+                detail="Ajoute autant d adresses que tu veux sur cet appareil."
                 tone="cyan"
               />
               <StatTile
@@ -407,9 +411,9 @@ export default function EmailFastApp() {
                 tone="violet"
               />
               <StatTile
-                label="Protection"
-                value="3 essais"
-                detail="Pause de 30 secondes apres plusieurs erreurs."
+                label="Acces"
+                value="Cle auto"
+                detail="Generee automatiquement puis copiable en un clic."
                 tone="amber"
               />
             </div>
@@ -437,14 +441,14 @@ export default function EmailFastApp() {
                 </p>
                 <p className="mt-2 text-sm leading-6 text-white/45">
                   {hasSavedSession
-                    ? 'Entre ton mot de passe pour retrouver tes adresses.'
-                    : 'Choisis ton mot de passe puis la premiere adresse se cree tout de suite.'}
+                    ? 'Colle ta cle d acces pour rouvrir tes adresses.'
+                    : 'Une cle forte est preparee pour toi. Copie-la, puis cree ta premiere adresse.'}
                 </p>
               </div>
 
               {!hasSavedSession && (
                 <div className="rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-1 text-[11px] font-mono text-neon-cyan">
-                  1/{MAX_MAILBOXES}
+                  Auto
                 </div>
               )}
             </div>
@@ -458,12 +462,13 @@ export default function EmailFastApp() {
             {!hasSavedSession && (
               <div className="mt-5 space-y-5">
                 <PasswordField
-                  label="Mot de passe"
-                  placeholder="Choisis un mot de passe"
+                  label="Cle d acces"
+                  placeholder="Cle auto-generee"
                   value={state.createPassword}
                   onChange={actions.setCreatePassword}
                   visible={state.showCreatePassword}
                   onToggle={() => actions.setShowCreatePassword((current) => !current)}
+                  readOnly
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault()
@@ -471,6 +476,25 @@ export default function EmailFastApp() {
                     }
                   }}
                 />
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={actions.copyAccessKey}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-white/15 hover:text-white"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copier la cle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={actions.regenerateCreatePassword}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Regenerer
+                  </button>
+                </div>
 
                 <div>
                   <div className="h-2 overflow-hidden rounded-full bg-white/[0.05]">
@@ -486,7 +510,7 @@ export default function EmailFastApp() {
                 </div>
 
                 <div className="rounded-[24px] border border-neon-cyan/15 bg-neon-cyan/10 px-4 py-4 text-sm leading-6 text-neon-cyan">
-                  Un seul mot de passe suffit pour ouvrir et retrouver toutes tes adresses.
+                  Cette cle ouvre et protege toutes tes adresses. Copie-la avant de quitter.
                 </div>
 
                 <DurationSettingsBlock
@@ -521,8 +545,8 @@ export default function EmailFastApp() {
                 </div>
 
                 <PasswordField
-                  label="Mot de passe"
-                  placeholder="Mot de passe"
+                  label="Cle d acces"
+                  placeholder="Colle ta cle d acces"
                   value={state.accessPassword}
                   onChange={actions.setAccessPassword}
                   visible={state.showAccessPassword}
@@ -558,18 +582,18 @@ export default function EmailFastApp() {
               <div className="mt-5 space-y-3">
                 <NoteRow
                   tone="cyan"
-                  title="Un seul mot de passe"
-                  body="Il ouvre toutes tes adresses."
+                  title="Cle unique"
+                  body="Une seule cle pour rouvrir toutes tes adresses."
                 />
                 <NoteRow
                   tone="emerald"
-                  title="Une duree par adresse"
-                  body="Chaque adresse garde son propre temps."
+                  title="Duree par adresse"
+                  body="Chaque adresse garde son propre temps et son propre statut."
                 />
                 <NoteRow
                   tone="violet"
-                  title="Retour automatique"
-                  body="Tes adresses reviennent quand tu reviens sur la page."
+                  title="Retour rapide"
+                  body="Tes adresses reviennent directement quand tu reviens sur la page."
                 />
               </div>
             </div>
@@ -648,7 +672,7 @@ export default function EmailFastApp() {
           <StatTile
             label="Adresses"
             value={state.mailboxes.length}
-            detail={`${slotsLeft} disponible(s).`}
+            detail="Sans plafond fixe sur cet appareil."
             tone="cyan"
           />
           <StatTile
@@ -701,7 +725,7 @@ export default function EmailFastApp() {
                 </p>
               </div>
               <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/45">
-                {state.mailboxes.length}/{MAX_MAILBOXES}
+                {state.mailboxes.length}
               </div>
             </div>
 
@@ -720,37 +744,35 @@ export default function EmailFastApp() {
             </div>
           </div>
 
-          {state.mailboxes.length < MAX_MAILBOXES && (
-            <div className="depth-panel rounded-[30px] p-5 sm:p-6">
+          <div className="depth-panel rounded-[30px] p-5 sm:p-6">
+            <div>
               <div>
-                <div>
-                  <p className="font-display text-lg font-700 text-white">Nouvelle adresse</p>
-                  <p className="mt-1 text-sm leading-6 text-white/45">
-                    Cree une autre adresse sans perdre les precedentes.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-4">
-                <DurationSettingsBlock
-                  title="Nouvelle adresse"
-                  caption="Choisis la duree de cette adresse."
-                  draft={state.createDraft}
-                  setDraft={actions.setCreateDraft}
-                />
-
-                <button
-                  type="button"
-                  onClick={actions.handleCreateAnotherMailbox}
-                  disabled={state.isCreating || !createDurationMeta.valid}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {state.isCreating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
-                  {state.isCreating ? 'Creation...' : 'Ajouter une adresse'}
-                </button>
+                <p className="font-display text-lg font-700 text-white">Nouvelle adresse</p>
+                <p className="mt-1 text-sm leading-6 text-white/45">
+                  Cree une autre adresse sans perdre les precedentes.
+                </p>
               </div>
             </div>
-          )}
+
+            <div className="mt-5 space-y-4">
+              <DurationSettingsBlock
+                title="Nouvelle adresse"
+                caption="Choisis la duree de cette adresse."
+                draft={state.createDraft}
+                setDraft={actions.setCreateDraft}
+              />
+
+              <button
+                type="button"
+                onClick={actions.handleCreateAnotherMailbox}
+                disabled={state.isCreating || !createDurationMeta.valid}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {state.isCreating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
+                {state.isCreating ? 'Creation...' : 'Ajouter une adresse'}
+              </button>
+            </div>
+          </div>
         </motion.aside>
 
         <motion.section className="order-1 space-y-5 xl:order-2" {...motionFade}>
@@ -908,6 +930,35 @@ export default function EmailFastApp() {
 
             {state.activeMailbox ? (
               <div className="mt-5 space-y-5">
+                <div className="ef-panel space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-display font-700 text-white">Cle d acces</p>
+                      <p className="mt-1 text-sm leading-6 text-white/45">
+                        Garde-la pour rouvrir toutes tes adresses plus tard.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={actions.copyAccessKey}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan transition-all hover:bg-neon-cyan/15"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copier
+                    </button>
+                  </div>
+
+                  <PasswordField
+                    label="Cle active"
+                    placeholder="Cle d acces"
+                    value={state.sessionPassword || ''}
+                    onChange={() => {}}
+                    visible={showVaultKey}
+                    onToggle={() => setShowVaultKey((current) => !current)}
+                    readOnly
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Nom visible</span>
                   <div className="flex gap-2">

@@ -4,13 +4,13 @@ import {
   API,
   AUTO_SYNC_INTERVAL_MS,
   DEFAULT_DRAFT,
-  MAX_MAILBOXES,
   clearStoredSessionPassword,
   clearStoredVault,
   copyText,
   decryptVault,
   encryptVault,
   ensureQRCodeScript,
+  generateSecureAccessKey,
   getDurationConfig,
   loadStoredSessionPassword,
   loadStoredVault,
@@ -83,11 +83,9 @@ async function requestMailboxToken(address, password) {
 export function useEmailFastManager() {
   const [screen, setScreen] = useState('auth')
   const [authMode, setAuthMode] = useState('create')
-  const [createPassword, setCreatePassword] = useState('')
-  const [createPasswordConfirm, setCreatePasswordConfirm] = useState('')
+  const [createPassword, setCreatePassword] = useState(() => generateSecureAccessKey())
   const [accessPassword, setAccessPassword] = useState('')
   const [showCreatePassword, setShowCreatePassword] = useState(false)
-  const [showCreatePasswordConfirm, setShowCreatePasswordConfirm] = useState(false)
   const [showAccessPassword, setShowAccessPassword] = useState(false)
   const [authError, setAuthError] = useState('')
   const [sessionPassword, setSessionPassword] = useState(null)
@@ -273,6 +271,11 @@ export function useEmailFastManager() {
   }, [mailboxes, activeMailboxId, hasStoredVault, screen])
 
   useEffect(() => {
+    if (hasStoredVault || mailboxes.length > 0) return
+    setCreatePassword((current) => current || generateSecureAccessKey())
+  }, [hasStoredVault, mailboxes.length])
+
+  useEffect(() => {
     if (!sessionPassword || !mailboxes.length) return undefined
 
     let cancelled = false
@@ -442,7 +445,7 @@ export function useEmailFastManager() {
         missingIds.map(async (messageId) => {
           try {
             const detailResponse = await fetch(`${API}/messages/${messageId}`, {
-              headers: { Authorization: `Bearer ${mailbox.token}` },
+              headers: { Authorization: `Bearer ${accessToken}` },
             })
 
             if (!detailResponse.ok) return null
@@ -520,14 +523,14 @@ export function useEmailFastManager() {
     }
   }
 
-  async function createMailboxFromDraft({ fromAuth = false } = {}) {
-    if (mailboxesRef.current.length >= MAX_MAILBOXES) {
-      const message = `Maximum ${MAX_MAILBOXES} adresses actives.`
-      if (fromAuth) setAuthError(message)
-      else toast.error(message)
-      return false
-    }
+  function wakeMailbox(mailboxId) {
+    if (!mailboxId) return
+    window.setTimeout(() => {
+      void fetchMailboxMessages(mailboxId, { silent: true })
+    }, 0)
+  }
 
+  async function createMailboxFromDraft({ fromAuth = false } = {}) {
     const draft = createDraft
     const duration = getDurationConfig(draft.durationKey, draft.customDurationMinutes)
     if (!duration.valid) {
@@ -590,12 +593,8 @@ export function useEmailFastManager() {
       setActiveMailboxId(nextMailbox.id)
       setScreen('app')
       setAuthMode('access')
-      setCreatePassword('')
-      setCreatePasswordConfirm('')
       setSyncError('')
-      window.setTimeout(() => {
-        void fetchMailboxMessages(nextMailbox.id, { silent: true })
-      }, 0)
+      wakeMailbox(nextMailbox.id)
       toast.success(mailboxesRef.current.length ? 'Nouvelle adresse ajoutee.' : 'Adresse creee.')
       return true
     } catch (error) {
@@ -613,12 +612,17 @@ export function useEmailFastManager() {
 
     if (mailboxesRef.current.length > 0 || hasStoredVault) {
       setAuthMode('access')
-      setAuthError('Entre ton mot de passe pour retrouver tes adresses.')
+      setAuthError('Entre ta cle d acces pour retrouver tes adresses.')
       return
     }
 
-    if (createPassword.length < 4) {
-      setAuthError('Mot de passe trop court. Minimum 4 caracteres.')
+    const nextAccessKey = String(createPassword || generateSecureAccessKey()).trim()
+    if (!createPassword.trim()) {
+      setCreatePassword(nextAccessKey)
+    }
+
+    if (nextAccessKey.length < 15) {
+      setAuthError('Cle trop courte. Regeneres-en une nouvelle.')
       return
     }
 
@@ -628,11 +632,11 @@ export function useEmailFastManager() {
       return
     }
 
-    setSessionPassword(createPassword)
+    setSessionPassword(nextAccessKey)
     const created = await createMailboxFromDraft({ fromAuth: true })
 
     if (created) {
-      saveStoredSessionPassword(createPassword)
+      saveStoredSessionPassword(nextAccessKey)
     } else {
       setSessionPassword(null)
     }
@@ -640,7 +644,7 @@ export function useEmailFastManager() {
 
   async function handleCreateAnotherMailbox() {
     if (!sessionPassword) {
-      toast.error('Entre d abord ton mot de passe.')
+      toast.error('Cle d acces indisponible pour cette session.')
       return
     }
 
@@ -666,7 +670,7 @@ export function useEmailFastManager() {
     }
 
     const payload = await decryptVault(password, storedVault)
-    const persistedMailboxes = Array.isArray(payload?.mailboxes) ? payload.mailboxes.slice(0, MAX_MAILBOXES) : []
+    const persistedMailboxes = Array.isArray(payload?.mailboxes) ? payload.mailboxes : []
 
     if (!persistedMailboxes.length) {
       throw new Error('Aucune adresse disponible.')
@@ -724,18 +728,13 @@ export function useEmailFastManager() {
     setScreen('app')
     setAuthMode('access')
     setAccessPassword('')
-    setCreatePassword('')
-    setCreatePasswordConfirm('')
+    setCreatePassword(password)
     setSelectedMessageId(null)
     setQrOpen(false)
     setSyncError('')
 
     const firstActiveMailbox = restoredMailboxes.find((mailbox) => mailbox.status === 'active')
-    if (firstActiveMailbox) {
-      window.setTimeout(() => {
-        void fetchMailboxMessages(firstActiveMailbox.id, { silent: true })
-      }, 0)
-    }
+    if (firstActiveMailbox) wakeMailbox(firstActiveMailbox.id)
 
     const inactiveCount = restoredMailboxes.filter((mailbox) => mailbox.status === 'inactive').length
     if (!silent) {
@@ -750,12 +749,18 @@ export function useEmailFastManager() {
   async function handleUnlock() {
     if (lockoutSecondsLeft > 0) return
     setAuthError('')
+    const enteredAccessKey = accessPassword.trim()
+
+    if (!enteredAccessKey) {
+      setAuthError('Entre ta cle d acces.')
+      return
+    }
 
     if (!mailboxesRef.current.length && hasStoredVault) {
       setIsRestoring(true)
 
       try {
-        await restoreStoredVault(accessPassword)
+        await restoreStoredVault(enteredAccessKey)
         setFailedAttempts(0)
         setLockoutUntil(null)
       } catch (error) {
@@ -767,7 +772,7 @@ export function useEmailFastManager() {
           setLockoutUntil(Date.now() + 30000)
           setAuthError('Trop de tentatives. Attends 30 secondes.')
         } else {
-          setAuthError(error.message || `Mot de passe incorrect. ${3 - nextFailedAttempts} essai(s) restant(s).`)
+          setAuthError(error.message || `Cle incorrecte. ${3 - nextFailedAttempts} essai(s) restant(s).`)
         }
       } finally {
         setIsRestoring(false)
@@ -781,7 +786,7 @@ export function useEmailFastManager() {
       return
     }
 
-    if (accessPassword !== sessionPassword) {
+    if (enteredAccessKey !== sessionPassword) {
       const nextFailedAttempts = failedAttempts + 1
       setFailedAttempts(nextFailedAttempts)
       setAccessPassword('')
@@ -790,7 +795,7 @@ export function useEmailFastManager() {
         setLockoutUntil(Date.now() + 30000)
         setAuthError('Trop de tentatives. Attends 30 secondes.')
       } else {
-        setAuthError(`Mot de passe incorrect. ${3 - nextFailedAttempts} essai(s) restant(s).`)
+        setAuthError(`Cle incorrecte. ${3 - nextFailedAttempts} essai(s) restant(s).`)
       }
       return
     }
@@ -799,7 +804,7 @@ export function useEmailFastManager() {
     setLockoutUntil(null)
     setScreen('app')
     setAccessPassword('')
-    saveStoredSessionPassword(accessPassword || sessionPassword || '')
+    saveStoredSessionPassword(enteredAccessKey || sessionPassword || '')
     toast.success('Acces restaure.')
   }
 
@@ -841,6 +846,7 @@ export function useEmailFastManager() {
     }))
 
     setSyncError('')
+    wakeMailbox(activeMailbox.id)
     toast.success(duration.isPermanent ? 'Adresse passee en permanent.' : `Duree reglee sur ${duration.label}.`)
   }
 
@@ -875,6 +881,7 @@ export function useEmailFastManager() {
     }))
 
     setSyncError('')
+    wakeMailbox(activeMailbox.id)
     toast.success(`+${nextMinutes - currentRemainingMinutes} min ajoutees.`)
   }
 
@@ -892,6 +899,7 @@ export function useEmailFastManager() {
       nextPollAt: Date.now(),
     }))
     setSyncError('')
+    wakeMailbox(activeMailbox.id)
     toast.success('Adresse passee en permanent.')
   }
 
@@ -904,6 +912,24 @@ export function useEmailFastManager() {
     if (!activeMailbox?.address) return
     await copyText(activeMailbox.address)
     toast.success('Adresse copiee.')
+  }
+
+  async function copyAccessKey() {
+    const accessKey = String(sessionPassword || createPassword || '').trim()
+    if (!accessKey) {
+      toast.error('Aucune cle disponible.')
+      return
+    }
+
+    await copyText(accessKey)
+    toast.success('Cle copiee.')
+  }
+
+  function regenerateCreatePassword() {
+    const nextAccessKey = generateSecureAccessKey(18)
+    setCreatePassword(nextAccessKey)
+    setShowCreatePassword(false)
+    toast.success('Nouvelle cle generee.')
   }
 
   async function copyMessageContent() {
@@ -969,7 +995,6 @@ export function useEmailFastManager() {
       setAuthMode('create')
       setAccessPassword('')
       setCreatePassword('')
-      setCreatePasswordConfirm('')
     }
 
     toast.success('Adresse retiree.')
@@ -1012,10 +1037,8 @@ export function useEmailFastManager() {
       screen,
       authMode,
       createPassword,
-      createPasswordConfirm,
       accessPassword,
       showCreatePassword,
-      showCreatePasswordConfirm,
       showAccessPassword,
       authError,
       sessionPassword,
@@ -1047,10 +1070,8 @@ export function useEmailFastManager() {
     actions: {
       setAuthMode,
       setCreatePassword,
-      setCreatePasswordConfirm,
       setAccessPassword,
       setShowCreatePassword,
-      setShowCreatePasswordConfirm,
       setShowAccessPassword,
       setCreateDraft,
       setRuntimeDraft,
@@ -1068,6 +1089,7 @@ export function useEmailFastManager() {
       makeActivePermanent,
       refreshActiveMailbox,
       copyActiveAddress,
+      copyAccessKey,
       copyMessageContent,
       openMessage,
       closeModal,
@@ -1075,6 +1097,7 @@ export function useEmailFastManager() {
       deleteMessage,
       removeMailbox,
       setMailboxLabel,
+      regenerateCreatePassword,
       exportActiveMailbox,
     },
   }
