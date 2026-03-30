@@ -2,16 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import {
   API,
+  AUTO_SYNC_INTERVAL_MS,
   DEFAULT_DRAFT,
   MAX_MAILBOXES,
+  clearStoredSessionPassword,
   clearStoredVault,
   copyText,
   decryptVault,
   encryptVault,
   ensureQRCodeScript,
   getDurationConfig,
+  loadStoredSessionPassword,
   loadStoredVault,
   randomString,
+  saveStoredSessionPassword,
   saveStoredVault,
   stripHtml,
 } from './model'
@@ -24,13 +28,13 @@ function buildMailbox(accountPayload, token, draft, index) {
     address: accountPayload.address,
     password: accountPayload.password,
     token,
-    label: `Boite ${index + 1}`,
+    label: `Adresse ${index + 1}`,
     messages: [],
     deletedIds: [],
     createdAt: Date.now(),
     durationKey: draft.durationKey,
     customDurationMinutes: draft.durationKey === 'custom' ? Number(draft.customDurationMinutes) : null,
-    pollIntervalMs: Number(draft.pollIntervalMs) || 6000,
+    pollIntervalMs: AUTO_SYNC_INTERVAL_MS,
     expiresAt: duration.isPermanent ? null : Date.now() + duration.totalMs,
     totalDurationMs: duration.isPermanent ? null : duration.totalMs,
     isExpired: false,
@@ -177,6 +181,7 @@ export function useEmailFastManager() {
   }, [activeMailboxId])
 
   useEffect(() => {
+    let cancelled = false
     const storedVault = loadStoredVault()
     if (!storedVault) return
 
@@ -186,6 +191,29 @@ export function useEmailFastManager() {
       updatedAt: storedVault.updatedAt || null,
     })
     setAuthMode('access')
+
+    const storedSessionPassword = loadStoredSessionPassword()
+    if (!storedSessionPassword) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setIsRestoring(true)
+    restoreStoredVault(storedSessionPassword, { silent: true })
+      .catch((error) => {
+        console.error(error)
+        clearStoredSessionPassword()
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsRestoring(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -233,7 +261,7 @@ export function useEmailFastManager() {
     if (!mailboxes.length) {
       if (screen === 'app') {
         setScreen('auth')
-        setAuthMode('create')
+        setAuthMode(hasStoredVault ? 'access' : 'create')
       }
       setActiveMailboxId(null)
       return
@@ -242,7 +270,7 @@ export function useEmailFastManager() {
     if (!activeMailboxId || !mailboxes.some((mailbox) => mailbox.id === activeMailboxId)) {
       setActiveMailboxId(mailboxes[0].id)
     }
-  }, [mailboxes, activeMailboxId, screen])
+  }, [mailboxes, activeMailboxId, hasStoredVault, screen])
 
   useEffect(() => {
     if (!sessionPassword || !mailboxes.length) return undefined
@@ -267,7 +295,7 @@ export function useEmailFastManager() {
       })
       .catch((error) => {
         console.error(error)
-        toast.error('Sauvegarde locale Email Fast impossible.')
+        toast.error('Sauvegarde Email Fast impossible.')
       })
 
     return () => {
@@ -294,10 +322,10 @@ export function useEmailFastManager() {
 
     if (expiredAddresses.length) {
       if (activeMailboxIdRef.current && expiredAddresses.includes(mailboxesRef.current.find((mailbox) => mailbox.id === activeMailboxIdRef.current)?.address)) {
-        setSyncError('La duree de cette boite est terminee. Passe en permanent ou relance une adresse.')
+        setSyncError('La duree de cette adresse est terminee. Passe-la en permanent ou cree-en une autre.')
       }
       expiredAddresses.forEach((address) => {
-        toast.error(`Boite expiree: ${address}`)
+        toast.error(`Adresse expiree: ${address}`)
       })
     }
   }, [timeTick])
@@ -332,7 +360,7 @@ export function useEmailFastManager() {
               ...entry,
               token: nextToken,
               status: entry.isExpired ? 'expired' : 'active',
-              nextPollAt: Date.now() + (entry.pollIntervalMs || 6000),
+              nextPollAt: Date.now() + (entry.pollIntervalMs || AUTO_SYNC_INTERVAL_MS),
             }
           : entry
       )))
@@ -357,8 +385,8 @@ export function useEmailFastManager() {
       )))
 
       if (activeMailboxIdRef.current === mailboxId) {
-        setSyncError('Boite inactive. Reessaie plus tard ou supprime-la si besoin.')
-        if (!silent) toast.error('Cette boite ne peut plus etre authentifiee.')
+        setSyncError('Adresse indisponible. Reessaie plus tard ou supprime-la si besoin.')
+        if (!silent) toast.error('Cette adresse ne peut plus etre authentifiee.')
       }
 
       return null
@@ -389,7 +417,7 @@ export function useEmailFastManager() {
       if (response.status === 401 || response.status === 403) {
         accessToken = await reauthenticateMailbox(mailboxId, { silent: true })
         if (!accessToken) {
-          throw new Error('Boite inactive.')
+          throw new Error('Adresse indisponible.')
         }
 
         response = await fetch(`${API}/messages`, {
@@ -398,7 +426,7 @@ export function useEmailFastManager() {
       }
 
       if (!response.ok) {
-        throw new Error('Lecture de la boite impossible.')
+        throw new Error('Lecture de l adresse impossible.')
       }
 
       const payload = await response.json()
@@ -445,7 +473,7 @@ export function useEmailFastManager() {
         .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
 
       const newMessagesCount = fetchedDetails.filter(Boolean).length
-      const nextPollAt = Date.now() + (mailbox.pollIntervalMs || 6000)
+      const nextPollAt = Date.now() + (mailbox.pollIntervalMs || AUTO_SYNC_INTERVAL_MS)
 
       setMailboxes((current) => current.map((entry) => (
         entry.id === mailboxId
@@ -480,7 +508,7 @@ export function useEmailFastManager() {
         entry.id === mailboxId
           ? {
               ...entry,
-              nextPollAt: Date.now() + (entry.pollIntervalMs || 6000),
+              nextPollAt: Date.now() + (entry.pollIntervalMs || AUTO_SYNC_INTERVAL_MS),
             }
           : entry
       )))
@@ -494,7 +522,7 @@ export function useEmailFastManager() {
 
   async function createMailboxFromDraft({ fromAuth = false } = {}) {
     if (mailboxesRef.current.length >= MAX_MAILBOXES) {
-      const message = `Maximum ${MAX_MAILBOXES} boites actives.`
+      const message = `Maximum ${MAX_MAILBOXES} adresses actives.`
       if (fromAuth) setAuthError(message)
       else toast.error(message)
       return false
@@ -541,7 +569,7 @@ export function useEmailFastManager() {
 
       if (!createResponse.ok) {
         const errorBody = await createResponse.json().catch(() => ({}))
-        throw new Error(errorBody?.['hydra:description'] || 'Creation de boite impossible.')
+        throw new Error(errorBody?.['hydra:description'] || 'Creation d adresse impossible.')
       }
 
       const createdAccount = await createResponse.json()
@@ -568,7 +596,7 @@ export function useEmailFastManager() {
       window.setTimeout(() => {
         void fetchMailboxMessages(nextMailbox.id, { silent: true })
       }, 0)
-      toast.success(mailboxesRef.current.length ? 'Nouvelle boite ajoutee.' : 'Boite securisee creee.')
+      toast.success(mailboxesRef.current.length ? 'Nouvelle adresse ajoutee.' : 'Adresse creee.')
       return true
     } catch (error) {
       console.error(error)
@@ -585,7 +613,7 @@ export function useEmailFastManager() {
 
     if (mailboxesRef.current.length > 0 || hasStoredVault) {
       setAuthMode('access')
-      setAuthError('Deverrouille le coffre pour reprendre les boites existantes.')
+      setAuthError('Entre ton mot de passe pour retrouver tes adresses.')
       return
     }
 
@@ -601,12 +629,18 @@ export function useEmailFastManager() {
     }
 
     setSessionPassword(createPassword)
-    await createMailboxFromDraft({ fromAuth: true })
+    const created = await createMailboxFromDraft({ fromAuth: true })
+
+    if (created) {
+      saveStoredSessionPassword(createPassword)
+    } else {
+      setSessionPassword(null)
+    }
   }
 
   async function handleCreateAnotherMailbox() {
     if (!sessionPassword) {
-      toast.error('Definis d abord un mot de passe de session.')
+      toast.error('Entre d abord ton mot de passe.')
       return
     }
 
@@ -615,26 +649,27 @@ export function useEmailFastManager() {
 
   function handleLock() {
     if (!mailboxesRef.current.length) return
+    clearStoredSessionPassword()
     setScreen('auth')
     setAuthMode('access')
     setAccessPassword('')
     setSelectedMessageId(null)
     setQrOpen(false)
     setSyncError('')
-    toast.success('Session verrouillee.')
+    toast.success('Acces verrouille.')
   }
 
-  async function restoreStoredVault(password) {
+  async function restoreStoredVault(password, { silent = false } = {}) {
     const storedVault = loadStoredVault()
     if (!storedVault) {
-      throw new Error('Aucun coffre Email Fast trouve.')
+      throw new Error('Aucune adresse enregistree.')
     }
 
     const payload = await decryptVault(password, storedVault)
     const persistedMailboxes = Array.isArray(payload?.mailboxes) ? payload.mailboxes.slice(0, MAX_MAILBOXES) : []
 
     if (!persistedMailboxes.length) {
-      throw new Error('Le coffre Email Fast est vide.')
+      throw new Error('Aucune adresse disponible.')
     }
 
     const restoredMailboxes = await Promise.all(
@@ -661,7 +696,7 @@ export function useEmailFastManager() {
           customDurationMinutes: mailbox.durationKey === 'custom'
             ? Number(mailbox.customDurationMinutes || 180)
             : null,
-          pollIntervalMs: Number(mailbox.pollIntervalMs) || 6000,
+          pollIntervalMs: Number(mailbox.pollIntervalMs) || AUTO_SYNC_INTERVAL_MS,
           expiresAt,
           totalDurationMs: mailbox.totalDurationMs || null,
           isExpired,
@@ -673,6 +708,7 @@ export function useEmailFastManager() {
     )
 
     setSessionPassword(password)
+    saveStoredSessionPassword(password)
     setCreateDraft(payload?.createDraft || DEFAULT_DRAFT)
     setMailboxes(restoredMailboxes)
     setActiveMailboxId(
@@ -702,11 +738,13 @@ export function useEmailFastManager() {
     }
 
     const inactiveCount = restoredMailboxes.filter((mailbox) => mailbox.status === 'inactive').length
-    toast.success(
-      inactiveCount
-        ? `${restoredMailboxes.length} boites rechargees, ${inactiveCount} inactive(s).`
-        : `${restoredMailboxes.length} boites rechargees.`
-    )
+    if (!silent) {
+      toast.success(
+        inactiveCount
+          ? `${restoredMailboxes.length} adresse(s) retrouvee(s), ${inactiveCount} indisponible(s).`
+          : `${restoredMailboxes.length} adresse(s) retrouvee(s).`
+      )
+    }
   }
 
   async function handleUnlock() {
@@ -739,7 +777,7 @@ export function useEmailFastManager() {
     }
 
     if (!mailboxesRef.current.length) {
-      setAuthError('Aucune boite a restaurer.')
+      setAuthError('Aucune adresse a ouvrir.')
       return
     }
 
@@ -761,6 +799,7 @@ export function useEmailFastManager() {
     setLockoutUntil(null)
     setScreen('app')
     setAccessPassword('')
+    saveStoredSessionPassword(accessPassword || sessionPassword || '')
     toast.success('Acces restaure.')
   }
 
@@ -793,7 +832,7 @@ export function useEmailFastManager() {
       ...mailbox,
       durationKey: runtimeDraft.durationKey,
       customDurationMinutes: runtimeDraft.durationKey === 'custom' ? Number(runtimeDraft.customDurationMinutes) : null,
-      pollIntervalMs: Number(runtimeDraft.pollIntervalMs) || 6000,
+      pollIntervalMs: AUTO_SYNC_INTERVAL_MS,
       expiresAt: duration.isPermanent ? null : Date.now() + duration.totalMs,
       totalDurationMs: duration.isPermanent ? null : duration.totalMs,
       isExpired: false,
@@ -802,12 +841,12 @@ export function useEmailFastManager() {
     }))
 
     setSyncError('')
-    toast.success(duration.isPermanent ? 'Boite passee en permanent.' : `Duree reglee sur ${duration.label}.`)
+    toast.success(duration.isPermanent ? 'Adresse passee en permanent.' : `Duree reglee sur ${duration.label}.`)
   }
 
   function extendActiveMailbox(minutesToAdd) {
     if (!activeMailbox || activeMailbox.durationKey === 'permanent') {
-      toast.error('Cette boite est deja permanente.')
+      toast.error('Cette adresse est deja permanente.')
       return
     }
 
@@ -853,7 +892,7 @@ export function useEmailFastManager() {
       nextPollAt: Date.now(),
     }))
     setSyncError('')
-    toast.success('Boite passee en permanent.')
+    toast.success('Adresse passee en permanent.')
   }
 
   async function refreshActiveMailbox() {
@@ -921,6 +960,7 @@ export function useEmailFastManager() {
     }
 
     if (!nextMailboxes.length) {
+      clearStoredSessionPassword()
       clearStoredVault()
       setHasStoredVault(false)
       setStoredVaultMeta(null)
@@ -932,7 +972,7 @@ export function useEmailFastManager() {
       setCreatePasswordConfirm('')
     }
 
-    toast.success('Boite retiree.')
+    toast.success('Adresse retiree.')
   }
 
   function setMailboxLabel(mailboxId, label) {

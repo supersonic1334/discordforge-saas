@@ -2,7 +2,9 @@ export const API = 'https://api.mail.tm'
 export const QR_CODE_SCRIPT_URL = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
 export const MAX_MAILBOXES = 5
 export const EMAIL_FAST_VAULT_KEY = 'discordforger-email-fast-vault'
+export const EMAIL_FAST_SESSION_KEY = 'discordforger-email-fast-session'
 export const DELETE_CONFIRMATION_WORD = 'SUPPRIMER'
+export const AUTO_SYNC_INTERVAL_MS = 6000
 
 export const DURATION_OPTIONS = [
   { id: '10m', label: '10 min', note: 'Sprint', minutes: 10 },
@@ -11,12 +13,6 @@ export const DURATION_OPTIONS = [
   { id: '24h', label: '24 heures', note: 'Journee', minutes: 1440 },
   { id: 'permanent', label: 'Permanent', note: 'Sans limite', minutes: null },
   { id: 'custom', label: 'Perso', note: '5 min a 7 jours', minutes: 'custom' },
-]
-
-export const POLL_OPTIONS = [
-  { id: 'fast', label: '6 s', value: 6000, note: 'Instant' },
-  { id: 'balanced', label: '15 s', value: 15000, note: 'Standard' },
-  { id: 'steady', label: '30 s', value: 30000, note: 'Calme' },
 ]
 
 export const FILTER_OPTIONS = [
@@ -28,7 +24,7 @@ export const FILTER_OPTIONS = [
 export const DEFAULT_DRAFT = {
   durationKey: '1h',
   customDurationMinutes: '180',
-  pollIntervalMs: 6000,
+  pollIntervalMs: AUTO_SYNC_INTERVAL_MS,
 }
 
 let qrCodeScriptPromise
@@ -303,6 +299,26 @@ export function clearStoredVault() {
   window.localStorage.removeItem(EMAIL_FAST_VAULT_KEY)
 }
 
+export function loadStoredSessionPassword() {
+  if (typeof window === 'undefined') return ''
+
+  try {
+    return window.sessionStorage.getItem(EMAIL_FAST_SESSION_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function saveStoredSessionPassword(password) {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.setItem(EMAIL_FAST_SESSION_KEY, String(password || ''))
+}
+
+export function clearStoredSessionPassword() {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.removeItem(EMAIL_FAST_SESSION_KEY)
+}
+
 export async function encryptVault(password, payload) {
   const saltBytes = window.crypto.getRandomValues(new Uint8Array(16))
   const ivBytes = window.crypto.getRandomValues(new Uint8Array(12))
@@ -326,7 +342,7 @@ export async function encryptVault(password, payload) {
 
 export async function decryptVault(password, vault) {
   if (!vault?.salt || !vault?.iv || !vault?.data) {
-    throw new Error('Coffre Email Fast invalide.')
+    throw new Error('Donnees Email Fast invalides.')
   }
 
   try {
@@ -342,6 +358,6 @@ export async function decryptVault(password, vault) {
 
     return JSON.parse(new TextDecoder().decode(plainBuffer))
   } catch {
-    throw new Error('Mot de passe incorrect ou coffre illisible.')
+    throw new Error('Mot de passe incorrect.')
   }
 }

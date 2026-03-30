@@ -99,18 +99,12 @@
   background: rgb(176, 78, 255);
 }
 
-.ef-cadence-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.ef-cadence-grid > :last-child:nth-child(odd) {
-  grid-column: 1 / -1;
-}
-
-.ef-cadence-card,
 .ef-choice-card {
+  display: flex;
+  min-height: 96px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
   border-radius: 20px;
   border: 1px solid rgba(255,255,255,0.08);
   background:
@@ -125,14 +119,12 @@
     box-shadow 180ms ease;
 }
 
-.ef-cadence-card:hover,
 .ef-choice-card:hover {
   transform: translateY(-2px);
   border-color: rgba(255,255,255,0.14);
   background-color: rgba(255,255,255,0.05);
 }
 
-.ef-cadence-card-active,
 .ef-choice-card-active {
   border-color: rgba(0,229,255,0.28);
   background:
@@ -414,14 +406,6 @@
 }
 
 @media (max-width: 640px) {
-  .ef-cadence-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .ef-cadence-grid > :last-child:nth-child(odd) {
-    grid-column: auto;
-  }
-
   .ef-stat-card,
   .ef-side-note,
   .ef-panel,
