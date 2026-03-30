@@ -110,9 +110,18 @@
     color: rgba(255,255,255,0.94);
     -webkit-text-fill-color: rgba(255,255,255,0.94);
     caret-color: #ffffff;
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: rgba(16, 22, 35, 0.92);
     background-clip: padding-box;
-    transform: translateZ(0);
-    backface-visibility: hidden;
+  }
+  .input-field,
+  .select-field,
+  .select-compact,
+  textarea.input-field,
+  input.input-field {
+    -webkit-appearance: none;
+    appearance: none;
   }
   .input-field::placeholder,
   .select-field::placeholder,
@@ -378,13 +387,14 @@
   .dashboard-content-shell {
     touch-action: pan-y pinch-zoom;
     overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
   }
   .app-main-scroll {
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: none;
     overscroll-behavior-x: none;
     min-height: 0;
-    touch-action: pan-y pinch-zoom;
+    touch-action: pan-y;
     scroll-padding-top: 24px;
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
     padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 8px);
@@ -394,10 +404,10 @@
     min-height: var(--app-height);
     overflow-y: auto;
     overflow-x: hidden;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: none;
     overscroll-behavior-x: none;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-y pinch-zoom;
+    touch-action: pan-y;
     scroll-padding-top: 24px;
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
     padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 16px);
@@ -654,6 +664,37 @@
   .depth-panel,
   .feature-metric {
     border-radius: 22px;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  body[data-keyboard-open="true"] .input-field,
+  body[data-keyboard-open="true"] .select-field,
+  body[data-keyboard-open="true"] .select-compact,
+  body[data-keyboard-open="true"] textarea.input-field,
+  body[data-keyboard-open="true"] input.input-field {
+    background-color: rgba(16, 22, 35, 0.96) !important;
+    -webkit-text-fill-color: rgba(255,255,255,0.94) !important;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.04) !important;
+    transform: none !important;
+    backface-visibility: visible !important;
+  }
+
+  body[data-keyboard-open="true"] [class*="backdrop-blur"],
+  body[data-keyboard-open="true"] .glass-card,
+  body[data-keyboard-open="true"] .feature-hero,
+  body[data-keyboard-open="true"] .spotlight-card,
+  body[data-keyboard-open="true"] .depth-panel,
+  body[data-keyboard-open="true"] .sidebar-shell {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  body[data-keyboard-open="true"] .gradient-border::before {
+    animation: none !important;
+    opacity: 0.7;
   }
 }
 

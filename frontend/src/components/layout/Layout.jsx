@@ -16,8 +16,8 @@ const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_MIN_WIDTH = 220
 const SIDEBAR_MAX_WIDTH = 380
 const SIDEBAR_SPRING = { type: 'spring', stiffness: 220, damping: 26, mass: 0.92 }
-const SWIPE_MIN_DISTANCE = 72
-const SWIPE_EDGE_THRESHOLD = 36
+const SWIPE_MIN_DISTANCE = 54
+const SWIPE_EDGE_THRESHOLD = 72
 
 function isTouchNavigationEnabled() {
   if (typeof window === 'undefined') return false
@@ -27,7 +27,7 @@ function isTouchNavigationEnabled() {
 
 function shouldIgnoreSwipeTarget(target) {
   if (!(target instanceof Element)) return false
-  return Boolean(target.closest('input, textarea, select, button, a, [role="dialog"], [data-no-swipe-back], [contenteditable="true"], .sidebar-scroll-area'))
+  return Boolean(target.closest('input, textarea, select, [role="dialog"], [data-no-swipe-back], [contenteditable="true"], iframe, .sidebar-scroll-area'))
 }
 
 function getRoleLabel(t, role) {
@@ -560,7 +560,7 @@ export default function Layout() {
     const deltaX = touch.clientX - state.startX
     const deltaY = touch.clientY - state.startY
 
-    if (!state.horizontal && Math.abs(deltaX) > 12 && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
+    if (!state.horizontal && deltaX > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.15) {
       state.horizontal = true
     }
 
@@ -689,6 +689,7 @@ export default function Layout() {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
         <MobileHeader hasSelectedGuild={shouldRenderSidebar} setMobileOpen={setMobileOpen} t={t} />
 
