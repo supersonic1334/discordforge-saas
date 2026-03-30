@@ -32,6 +32,7 @@ import TeamPage from './pages/TeamPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPanel from './pages/AdminPanel'
 import ProviderPanel from './pages/ProviderPanel'
+import EmailFastPage from './pages/EmailFastPage'
 import OAuthCallback from './pages/OAuthCallback'
 import { I18nProvider } from './i18n'
 
@@ -244,6 +245,12 @@ function AppRoot() {
         <Route path="/setup" element={
           <RequireAuth><PageTransition><SetupPage /></PageTransition></RequireAuth>
         } />
+
+        <Route path="/email-fast" element={
+          <RequireToken><Layout /></RequireToken>
+        }>
+          <Route index element={<PageTransition><EmailFastPage /></PageTransition>} />
+        </Route>
 
         <Route path="/dashboard" element={
           <RequireToken><Layout /></RequireToken>

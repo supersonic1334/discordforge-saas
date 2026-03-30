@@ -255,6 +255,24 @@ const SidebarContent = memo(function SidebarContent({
           {!collapsed && t('layout.nav.settings')}
         </Link>
 
+        <div className="sidebar-special-separator" />
+
+        <Link
+          to="/email-fast"
+          onClick={() => setMobileOpen(false)}
+          className={`sidebar-email-fast ${isActive('/email-fast') ? 'sidebar-email-fast-active' : ''} ${collapsed ? 'sidebar-email-fast-collapsed' : ''}`}
+          title="Email Fast"
+          aria-label="Email Fast"
+        >
+          <span className="sidebar-email-fast-icon" aria-hidden="true">✉️</span>
+          {!collapsed && (
+            <>
+              <span className="sidebar-email-fast-label">Email Fast</span>
+              <span className="sidebar-email-fast-badge">NEW</span>
+            </>
+          )}
+        </Link>
+
         <div className={`flex items-center gap-3 px-3 py-2 mt-1 ${collapsed ? 'justify-center' : ''}`}>
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-cyan to-neon-violet flex items-center justify-center text-xs font-display font-700 shrink-0">
             {(user?.display_avatar_url || user?.avatar_url)
@@ -323,13 +341,16 @@ export default function Layout() {
   const canAccessAdminPanel = ['founder', 'admin'].includes(user?.role)
   const canAccessProviderPanel = user?.role === 'api_provider'
   const hasSelectedGuild = !!selectedGuildId
+  const isEmailFastRoute = location.pathname === '/email-fast'
   const canOpenWithoutGuild = (
     location.pathname === '/dashboard/servers'
     || location.pathname === '/dashboard/provider'
     || location.pathname === '/dashboard/reviews'
     || location.pathname === '/dashboard/support'
+    || isEmailFastRoute
   )
   const mustStayOnServers = !hasSelectedGuild && !canOpenWithoutGuild
+  const shouldRenderSidebar = hasSelectedGuild || isEmailFastRoute
 
   const selectedGuild = guilds.find((g) => g.id === selectedGuildId)
   const navItems = [
@@ -562,7 +583,7 @@ export default function Layout() {
     <div className="dashboard-shell relative flex h-[var(--app-height)] min-h-[var(--app-height)] max-w-full overflow-hidden">
       <AuthSnowBackdrop className="z-[1]" />
 
-      {hasSelectedGuild && (
+      {shouldRenderSidebar && (
         <>
           <motion.aside
             animate={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth }}
@@ -653,7 +674,7 @@ export default function Layout() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <MobileHeader hasSelectedGuild={hasSelectedGuild} setMobileOpen={setMobileOpen} t={t} />
+        <MobileHeader hasSelectedGuild={shouldRenderSidebar} setMobileOpen={setMobileOpen} t={t} />
 
         <main ref={mainScrollRef} className="app-main-scroll flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
           <Outlet />
