@@ -412,6 +412,15 @@
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
     padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 16px);
   }
+  .auth-page-shell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .auth-page-frame {
+    min-height: 100%;
+    justify-content: center;
+  }
   .page-transition-shell {
     min-height: 100%;
     width: 100%;
@@ -672,6 +681,78 @@
   }
 }
 
+@media (max-height: 980px) {
+  .auth-page-shell {
+    padding-top: max(env(safe-area-inset-top), 10px) !important;
+    padding-bottom: max(env(safe-area-inset-bottom), 10px) !important;
+  }
+
+  .auth-page-frame {
+    gap: 0.85rem !important;
+  }
+
+  .auth-mobile-panel {
+    padding-top: 0 !important;
+  }
+
+  .auth-mobile-hero {
+    margin-bottom: 0.9rem !important;
+  }
+
+  .auth-mobile-logo-shell {
+    margin-bottom: 0.7rem !important;
+    max-width: min(320px, 56vw) !important;
+  }
+
+  .auth-mobile-logo {
+    max-height: 148px;
+  }
+
+  .auth-card-surface {
+    padding: 1rem !important;
+  }
+
+  .auth-form-stack {
+    row-gap: 0.75rem !important;
+  }
+
+  .auth-oauth-section {
+    padding-top: 0 !important;
+  }
+
+  .auth-mobile-features {
+    margin-top: 0.85rem !important;
+  }
+
+  .auth-feature-detail {
+    display: none !important;
+  }
+}
+
+@media (max-height: 840px) {
+  .auth-mobile-logo-shell {
+    max-width: min(250px, 48vw) !important;
+  }
+
+  .auth-mobile-logo {
+    max-height: 112px;
+  }
+
+  .auth-mobile-hero p {
+    display: none !important;
+  }
+
+  .auth-mobile-features {
+    margin-top: 0.7rem !important;
+  }
+}
+
+@media (max-height: 760px) {
+  .auth-mobile-features {
+    display: none !important;
+  }
+}
+
 @media (hover: none) and (pointer: coarse) {
   body[data-keyboard-open="true"] .app-screen-scroll,
   body[data-keyboard-open="true"] .app-main-scroll {
@@ -740,6 +821,10 @@
   body[data-keyboard-open="true"] .auth-mobile-panel {
     padding-top: 0.35rem !important;
     margin-inline: auto !important;
+  }
+
+  body[data-keyboard-open="false"] .auth-page-shell {
+    overflow-y: hidden !important;
   }
 
   body[data-keyboard-open="true"] .setup-mobile-card {

@@ -406,15 +406,15 @@ export default function AuthPage() {
     } : null,
   ].filter(Boolean)
 
-  return (
+    return (
     <div
-      className="app-screen-scroll bg-surface-0 relative p-4 md:px-6 md:py-8"
+      className="auth-page-shell app-screen-scroll bg-surface-0 relative p-4 md:px-6 md:py-8"
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >
       <AuthSnowBackdrop pointerX={pointerX} pointerY={pointerY} />
 
-      <div className="auth-mobile-shell relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:gap-10">
+      <div className="auth-page-frame auth-mobile-shell relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:gap-10">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
@@ -428,7 +428,7 @@ export default function AuthPage() {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 transition={{ duration: 0.7, ease: 'easeOut' }}
                 whileHover={{ y: -5, scale: 1.01 }}
-                className="relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,85vw)]"
+                className="auth-mobile-logo-shell relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,85vw)]"
               >
               <motion.div
                 animate={{
@@ -450,7 +450,7 @@ export default function AuthPage() {
                     ],
                   }}
                   transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
-                  className="relative z-10 w-full h-auto object-contain"
+                  className="auth-mobile-logo relative z-10 w-full h-auto object-contain"
                   loading="eager"
                 />
               </motion.div>
@@ -499,7 +499,7 @@ export default function AuthPage() {
             whileHover={{ y: -6, scale: 1.006 }}
             className="auth-mobile-card gradient-border"
           >
-            <div className="bg-surface-1 rounded-2xl p-5 sm:p-8">
+            <div className="auth-card-surface bg-surface-1 rounded-2xl p-5 sm:p-8">
               {/* Tab switcher */}
               <div className="flex bg-white/[0.04] rounded-xl p-1 mb-5 sm:mb-6 border border-white/[0.06]">
                 {[
@@ -521,7 +521,7 @@ export default function AuthPage() {
               </div>
 
               {/* Auth form */}
-              <motion.form layout ref={formRef} onSubmit={submit} className="space-y-4" autoComplete="on">
+              <motion.form layout ref={formRef} onSubmit={submit} className="auth-form-stack space-y-4" autoComplete="on">
                 <motion.div
                   layout
                   initial={false}
@@ -620,7 +620,7 @@ export default function AuthPage() {
                 </motion.button>
 
                 {oauthButtons.length > 0 && (
-                  <div className="space-y-3 pt-1">
+                  <div className="auth-oauth-section space-y-3 pt-1">
                     <div className="flex items-center gap-3">
                       <div className="h-px flex-1 bg-white/[0.08]" />
                       <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">
@@ -700,7 +700,7 @@ export default function AuthPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.2 }}
-                    className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3"
+                    className="auth-feature-detail rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3"
                   >
                     <div className="flex items-center gap-2 mb-1.5">
                       <activeFeatureCard.icon className={`w-4 h-4 ${activeFeatureCard.iconClass}`} />
