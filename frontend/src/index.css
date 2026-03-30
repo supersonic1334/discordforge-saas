@@ -108,6 +108,23 @@
     transform: translateZ(0);
     backface-visibility: hidden;
   }
+  .input-field::placeholder,
+  .select-field::placeholder,
+  .select-compact::placeholder,
+  textarea.input-field::placeholder {
+    color: rgba(154,163,178,0.74) !important;
+    -webkit-text-fill-color: rgba(154,163,178,0.74) !important;
+    opacity: 1;
+    font-weight: 500;
+  }
+  .input-field::-webkit-input-placeholder,
+  .select-field::-webkit-input-placeholder,
+  .select-compact::-webkit-input-placeholder,
+  textarea.input-field::-webkit-input-placeholder {
+    color: rgba(154,163,178,0.74) !important;
+    -webkit-text-fill-color: rgba(154,163,178,0.74) !important;
+    opacity: 1;
+  }
   .input-field:focus {
     @apply border-neon-cyan/50 bg-white/[0.06];
     box-shadow:

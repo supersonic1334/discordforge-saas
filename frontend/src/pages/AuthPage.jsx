@@ -553,7 +553,7 @@ export default function AuthPage() {
                   <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.email')}</label>
                   <input
                     type="email"
-                    className="input-field placeholder:text-[#9aa3b2]"
+                    className="input-field"
                     placeholder={t('auth.emailPlaceholder')}
                     value={form.email}
                     onChange={(event) => set('email', event.target.value)}
