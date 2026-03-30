@@ -760,14 +760,6 @@
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px) !important;
   }
 
-  body[data-keyboard-open="true"] .page-transition-shell,
-  body[data-keyboard-open="true"] .dashboard-content-shell {
-    transform: none !important;
-    filter: none !important;
-    will-change: auto !important;
-    overflow-x: hidden !important;
-  }
-
   body[data-keyboard-open="true"] .input-field,
   body[data-keyboard-open="true"] .select-field,
   body[data-keyboard-open="true"] .select-compact,
@@ -793,16 +785,6 @@
     isolation: isolate;
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
-  }
-
-  body[data-keyboard-open="true"] [class*="backdrop-blur"],
-  body[data-keyboard-open="true"] .glass-card,
-  body[data-keyboard-open="true"] .feature-hero,
-  body[data-keyboard-open="true"] .spotlight-card,
-  body[data-keyboard-open="true"] .depth-panel,
-  body[data-keyboard-open="true"] .sidebar-shell {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
   }
 
   body[data-keyboard-open="true"] .gradient-border::before {
@@ -1274,38 +1256,6 @@ html {
   .app-main-scroll,
   .app-screen-scroll {
     padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px);
-  }
-
-  body[data-keyboard-open="true"] .feature-hero,
-  body[data-keyboard-open="true"] .section-hero,
-  body[data-keyboard-open="true"] .page-transition-shell {
-    transform: none !important;
-    filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    animation: none !important;
-    opacity: 1 !important;
-  }
-
-  body[data-keyboard-open="true"] .spotlight-card,
-  body[data-keyboard-open="true"] .depth-panel,
-  body[data-keyboard-open="true"] .depth-panel-static,
-  body[data-keyboard-open="true"] .ef-panel,
-  body[data-keyboard-open="true"] .ef-mailbox-card,
-  body[data-keyboard-open="true"] .ef-message-card,
-  body[data-keyboard-open="true"] .ef-preview-shell,
-  body[data-keyboard-open="true"] .ef-modal-shell {
-    transform: none !important;
-    filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    animation: none !important;
-  }
-
-  body[data-keyboard-open="true"] .dashboard-shell-grid,
-  body[data-keyboard-open="true"] .dashboard-shell-glow,
-  body[data-keyboard-open="true"] .email-fast-app::before {
-    opacity: 0 !important;
   }
 }
 
