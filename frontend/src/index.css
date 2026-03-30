@@ -7,30 +7,36 @@
 @layer base {
   :root {
     --app-height: 100dvh;
+    --app-stable-height: 100dvh;
     --app-width: 100vw;
+    --app-keyboard-offset: 0px;
   }
 
   html,
   body,
   #root {
     @apply bg-surface-0 text-white;
-    height: var(--app-height);
+    height: 100%;
+    min-height: var(--app-height);
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
     overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
   }
   body {
     font-family: 'DM Sans', sans-serif;
-    height: var(--app-height);
-    min-height: var(--app-height);
+    min-height: var(--app-stable-height);
+    overflow: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    touch-action: pan-y pinch-zoom;
   }
   #root {
-    height: var(--app-height);
+    height: 100%;
     min-height: var(--app-height);
+    overflow: hidden;
   }
   *,
   *::before,
@@ -378,6 +384,23 @@
     overscroll-behavior-y: contain;
     overscroll-behavior-x: none;
     min-height: 0;
+    touch-action: pan-y pinch-zoom;
+    scroll-padding-top: 24px;
+    scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 8px);
+  }
+  .app-screen-scroll {
+    height: var(--app-height);
+    min-height: var(--app-height);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    overscroll-behavior-x: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y pinch-zoom;
+    scroll-padding-top: 24px;
+    scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 16px);
   }
   .sidebar-shell:hover {
     box-shadow:
@@ -887,6 +910,7 @@ select,
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
+  scroll-margin-block: 120px;
 }
 
 /* ── Shimmer loading ───────────────────────────────────────────────────────── */
@@ -985,6 +1009,12 @@ html {
 }
 
 @media (hover: none) and (pointer: coarse) {
+  html,
+  body,
+  #root {
+    overscroll-behavior: none;
+  }
+
   .input-field,
   .select-field,
   .select-compact,
@@ -1024,6 +1054,11 @@ html {
   .select-field,
   .select-compact {
     color-scheme: dark;
+  }
+
+  .app-main-scroll,
+  .app-screen-scroll {
+    padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px);
   }
 }
 

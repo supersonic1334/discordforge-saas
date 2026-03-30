@@ -98,17 +98,73 @@ function DashboardHome() {
 function AppRoot() {
   const { token, fetchMe, logout } = useAuthStore()
   const viewportRafRef = useRef(null)
+  const viewportStableHeightRef = useRef(0)
+  const focusScrollTimerRef = useRef(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
 
+    const isEditableElement = (element) => (
+      element instanceof HTMLElement
+      && (
+        element.matches('input, textarea, select')
+        || element.getAttribute('contenteditable') === 'true'
+      )
+    )
+
+    const scrollActiveFieldIntoView = (behavior = 'smooth') => {
+      const activeElement = document.activeElement
+      if (!isEditableElement(activeElement)) return
+
+      const visibleHeight = Math.round(window.visualViewport?.height || window.innerHeight || 0)
+      const rect = activeElement.getBoundingClientRect()
+      const topSafeZone = 20
+      const bottomSafeZone = 28
+
+      if (rect.top >= topSafeZone && rect.bottom <= visibleHeight - bottomSafeZone) {
+        return
+      }
+
+      activeElement.scrollIntoView({
+        block: 'center',
+        inline: 'nearest',
+        behavior,
+      })
+    }
+
+    const scheduleFocusScroll = (behavior = 'smooth', delay = 80) => {
+      if (focusScrollTimerRef.current) {
+        window.clearTimeout(focusScrollTimerRef.current)
+      }
+
+      focusScrollTimerRef.current = window.setTimeout(() => {
+        window.requestAnimationFrame(() => {
+          scrollActiveFieldIntoView(behavior)
+        })
+      }, delay)
+    }
+
     const applyViewportSize = () => {
       viewportRafRef.current = null
-      const nextHeight = Math.round(window.visualViewport?.height || window.innerHeight || 0)
-      const nextWidth = Math.round(window.visualViewport?.width || window.innerWidth || 0)
+      const visualViewport = window.visualViewport
+      const nextHeight = Math.round(visualViewport?.height || window.innerHeight || 0)
+      const nextWidth = Math.round(visualViewport?.width || window.innerWidth || 0)
+      const viewportOffsetTop = Math.round(visualViewport?.offsetTop || 0)
+
+      viewportStableHeightRef.current = Math.max(
+        viewportStableHeightRef.current || 0,
+        Math.round(window.innerHeight || 0),
+        nextHeight + viewportOffsetTop
+      )
+
+      const stableHeight = Math.max(viewportStableHeightRef.current, nextHeight)
+      const keyboardOffset = Math.max(0, stableHeight - nextHeight - viewportOffsetTop)
 
       document.documentElement.style.setProperty('--app-height', `${nextHeight}px`)
       document.documentElement.style.setProperty('--app-width', `${nextWidth}px`)
+      document.documentElement.style.setProperty('--app-stable-height', `${stableHeight}px`)
+      document.documentElement.style.setProperty('--app-keyboard-offset', `${keyboardOffset}px`)
+      document.body.dataset.keyboardOpen = keyboardOffset > 0 ? 'true' : 'false'
     }
 
     const scheduleViewportSize = () => {
@@ -118,18 +174,43 @@ function AppRoot() {
       viewportRafRef.current = window.requestAnimationFrame(applyViewportSize)
     }
 
+    const handleViewportResize = () => {
+      scheduleViewportSize()
+      scheduleFocusScroll('auto', 36)
+    }
+
+    const handleOrientationChange = () => {
+      viewportStableHeightRef.current = 0
+      scheduleViewportSize()
+      scheduleFocusScroll('auto', 120)
+    }
+
+    const handleFocusIn = (event) => {
+      if (isEditableElement(event.target)) {
+        scheduleFocusScroll('smooth', 120)
+      }
+    }
+
     scheduleViewportSize()
-    window.addEventListener('resize', scheduleViewportSize)
-    window.addEventListener('orientationchange', scheduleViewportSize)
-    window.visualViewport?.addEventListener('resize', scheduleViewportSize)
+    window.addEventListener('resize', handleViewportResize, { passive: true })
+    window.addEventListener('orientationchange', handleOrientationChange)
+    window.visualViewport?.addEventListener('resize', handleViewportResize)
+    window.visualViewport?.addEventListener('scroll', handleViewportResize)
+    document.addEventListener('focusin', handleFocusIn)
 
     return () => {
       if (viewportRafRef.current) {
         window.cancelAnimationFrame(viewportRafRef.current)
       }
-      window.removeEventListener('resize', scheduleViewportSize)
-      window.removeEventListener('orientationchange', scheduleViewportSize)
-      window.visualViewport?.removeEventListener('resize', scheduleViewportSize)
+      if (focusScrollTimerRef.current) {
+        window.clearTimeout(focusScrollTimerRef.current)
+      }
+      delete document.body.dataset.keyboardOpen
+      window.removeEventListener('resize', handleViewportResize)
+      window.removeEventListener('orientationchange', handleOrientationChange)
+      window.visualViewport?.removeEventListener('resize', handleViewportResize)
+      window.visualViewport?.removeEventListener('scroll', handleViewportResize)
+      document.removeEventListener('focusin', handleFocusIn)
     }
   }, [])
 
