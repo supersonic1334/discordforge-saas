@@ -860,7 +860,7 @@ export function useEmailFastManager() {
       ? Math.ceil(Math.max(0, activeMailbox.expiresAt - Date.now()) / 60000)
       : 0
 
-    const nextMinutes = Math.min(10080, Math.max(5, currentRemainingMinutes + Number(minutesToAdd || 0)))
+    const nextMinutes = Math.min(10080, Math.max(1, currentRemainingMinutes + Number(minutesToAdd || 0)))
     const duration = getDurationConfig('custom', nextMinutes)
 
     setRuntimeDraft((current) => ({

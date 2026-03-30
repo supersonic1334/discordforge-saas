@@ -7,12 +7,12 @@ export const DELETE_CONFIRMATION_WORD = 'SUPPRIMER'
 export const AUTO_SYNC_INTERVAL_MS = 6000
 
 export const DURATION_OPTIONS = [
-  { id: '10m', label: '10 min', note: 'Sprint', minutes: 10 },
+  { id: '1m', label: '1 min', note: 'Flash', minutes: 1 },
+  { id: '10m', label: '10 min', note: 'Rapide', minutes: 10 },
   { id: '1h', label: '1 heure', note: 'Classique', minutes: 60 },
-  { id: '6h', label: '6 heures', note: 'Longue', minutes: 360 },
   { id: '24h', label: '24 heures', note: 'Journee', minutes: 1440 },
   { id: 'permanent', label: 'Permanent', note: 'Sans limite', minutes: null },
-  { id: 'custom', label: 'Perso', note: '5 min a 7 jours', minutes: 'custom' },
+  { id: 'custom', label: 'Perso', note: '1 min a 7 jours', minutes: 'custom' },
 ]
 
 export const FILTER_OPTIONS = [
@@ -22,8 +22,8 @@ export const FILTER_OPTIONS = [
 ]
 
 export const DEFAULT_DRAFT = {
-  durationKey: '1h',
-  customDurationMinutes: '180',
+  durationKey: '10m',
+  customDurationMinutes: '60',
   pollIntervalMs: AUTO_SYNC_INTERVAL_MS,
 }
 
@@ -151,16 +151,16 @@ export function getDurationConfig(durationKey, customInput) {
 
   if (durationKey === 'custom') {
     const parsed = Number(customInput)
-    if (!Number.isFinite(parsed) || parsed < 5 || parsed > 10080) {
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 10080) {
       return {
         key: durationKey,
         label: 'Perso',
-        summary: 'Entre 5 minutes et 7 jours',
+        summary: 'Entre 1 minute et 7 jours',
         isPermanent: false,
         minutes: null,
         totalMs: null,
         valid: false,
-        error: 'Choisis une duree perso entre 5 minutes et 7 jours.',
+        error: 'Choisis une duree perso entre 1 minute et 7 jours.',
       }
     }
 
@@ -334,7 +334,11 @@ export function loadStoredSessionPassword() {
   if (typeof window === 'undefined') return ''
 
   try {
-    return window.sessionStorage.getItem(EMAIL_FAST_SESSION_KEY) || ''
+    return (
+      window.localStorage.getItem(EMAIL_FAST_SESSION_KEY) ||
+      window.sessionStorage.getItem(EMAIL_FAST_SESSION_KEY) ||
+      ''
+    )
   } catch {
     return ''
   }
@@ -342,11 +346,14 @@ export function loadStoredSessionPassword() {
 
 export function saveStoredSessionPassword(password) {
   if (typeof window === 'undefined') return
-  window.sessionStorage.setItem(EMAIL_FAST_SESSION_KEY, String(password || ''))
+  const value = String(password || '')
+  window.localStorage.setItem(EMAIL_FAST_SESSION_KEY, value)
+  window.sessionStorage.setItem(EMAIL_FAST_SESSION_KEY, value)
 }
 
 export function clearStoredSessionPassword() {
   if (typeof window === 'undefined') return
+  window.localStorage.removeItem(EMAIL_FAST_SESSION_KEY)
   window.sessionStorage.removeItem(EMAIL_FAST_SESSION_KEY)
 }
 
