@@ -668,6 +668,12 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+  body[data-keyboard-open="true"] .app-screen-scroll,
+  body[data-keyboard-open="true"] .app-main-scroll {
+    scroll-padding-top: 10px !important;
+    scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px) !important;
+  }
+
   body[data-keyboard-open="true"] .input-field,
   body[data-keyboard-open="true"] .select-field,
   body[data-keyboard-open="true"] .select-compact,
@@ -695,6 +701,30 @@
   body[data-keyboard-open="true"] .gradient-border::before {
     animation: none !important;
     opacity: 0.7;
+  }
+
+  body[data-keyboard-open="true"] .auth-mobile-shell,
+  body[data-keyboard-open="true"] .setup-mobile-shell {
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    gap: 0.75rem !important;
+    padding-top: max(env(safe-area-inset-top), 10px) !important;
+  }
+
+  body[data-keyboard-open="true"] .auth-mobile-panel {
+    padding-top: 0.35rem !important;
+  }
+
+  body[data-keyboard-open="true"] .auth-mobile-hero,
+  body[data-keyboard-open="true"] .auth-mobile-features,
+  body[data-keyboard-open="true"] .setup-mobile-guide {
+    display: none !important;
+  }
+
+  body[data-keyboard-open="true"] .auth-mobile-card,
+  body[data-keyboard-open="true"] .setup-mobile-card {
+    margin-top: 0 !important;
+    transform: none !important;
   }
 }
 

@@ -85,10 +85,10 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="app-screen-scroll bg-surface-0 flex items-center justify-center relative p-4">
+    <div className="app-screen-scroll setup-mobile-shell bg-surface-0 flex items-center justify-center relative p-4">
       <AuthSnowBackdrop className="z-0" />
 
-      <div className="relative z-10 w-full max-w-2xl">
+      <div className="setup-mobile-card relative z-10 w-full max-w-2xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/20 border border-neon-violet/30 mb-4 shadow-neon-violet">
@@ -98,7 +98,7 @@ export default function SetupPage() {
             <p className="text-white/40 text-sm">{t('setup.subtitle')}</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          <div className="setup-mobile-guide grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             {steps.map(({ title, desc }, index) => (
               <div key={`${index}-${title}`} className="glass-card p-3.5 sm:p-4 flex items-start gap-3 min-w-0">
                 <span className="font-mono text-xs text-neon-cyan/60 mt-0.5 shrink-0">{String(index + 1).padStart(2, '0')}</span>

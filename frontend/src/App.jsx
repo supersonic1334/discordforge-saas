@@ -99,7 +99,7 @@ function AppRoot() {
   const { token, fetchMe, logout } = useAuthStore()
   const viewportRafRef = useRef(null)
   const viewportStableHeightRef = useRef(0)
-  const focusScrollTimerRef = useRef(null)
+  const focusScrollTimersRef = useRef([])
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -112,36 +112,96 @@ function AppRoot() {
       )
     )
 
+    const clearFocusScrollTimers = () => {
+      focusScrollTimersRef.current.forEach((timerId) => window.clearTimeout(timerId))
+      focusScrollTimersRef.current = []
+    }
+
+    const getScrollableParent = (element) => {
+      let current = element?.parentElement
+
+      while (current && current !== document.body) {
+        const style = window.getComputedStyle(current)
+        const canScrollY = /(auto|scroll|overlay)/.test(style.overflowY)
+        if (canScrollY && current.scrollHeight > current.clientHeight + 4) {
+          return current
+        }
+        current = current.parentElement
+      }
+
+      return document.querySelector('.app-screen-scroll, .app-main-scroll') || document.scrollingElement
+    }
+
     const scrollActiveFieldIntoView = (behavior = 'smooth') => {
       const activeElement = document.activeElement
       if (!isEditableElement(activeElement)) return
 
-      const visibleHeight = Math.round(window.visualViewport?.height || window.innerHeight || 0)
+      const visualViewport = window.visualViewport
+      const visibleHeight = Math.round(visualViewport?.height || window.innerHeight || 0)
+      const visibleTop = Math.round(visualViewport?.offsetTop || 0)
+      const keyboardOpen = document.body.dataset.keyboardOpen === 'true'
       const rect = activeElement.getBoundingClientRect()
-      const topSafeZone = 20
-      const bottomSafeZone = 28
+      const topSafeZone = visibleTop + 18
+      const bottomSafeZone = visibleTop + visibleHeight - (keyboardOpen ? 118 : 34)
 
-      if (rect.top >= topSafeZone && rect.bottom <= visibleHeight - bottomSafeZone) {
+      if (rect.top >= topSafeZone && rect.bottom <= bottomSafeZone) {
         return
       }
 
-      activeElement.scrollIntoView({
-        block: 'center',
-        inline: 'nearest',
+      const scrollParent = getScrollableParent(activeElement)
+      if (
+        !scrollParent
+        || scrollParent === document.body
+        || scrollParent === document.documentElement
+        || scrollParent === document.scrollingElement
+      ) {
+        activeElement.scrollIntoView({
+          block: 'center',
+          inline: 'nearest',
+          behavior,
+        })
+        return
+      }
+
+      const parentRect = scrollParent.getBoundingClientRect()
+      const currentScrollTop = scrollParent.scrollTop
+      const fieldTop = rect.top - parentRect.top + currentScrollTop
+      const fieldBottom = rect.bottom - parentRect.top + currentScrollTop
+      const viewportPaddingTop = 20
+      const viewportPaddingBottom = keyboardOpen ? 128 : 42
+      const visibleParentTop = currentScrollTop + viewportPaddingTop
+      const visibleParentBottom = currentScrollTop + Math.max(120, visibleHeight - viewportPaddingBottom)
+
+      let nextScrollTop = currentScrollTop
+      if (fieldTop < visibleParentTop) {
+        nextScrollTop = Math.max(0, fieldTop - 28)
+      } else if (fieldBottom > visibleParentBottom) {
+        nextScrollTop = Math.max(0, fieldBottom - Math.max(120, visibleHeight * 0.42))
+      }
+
+      if (Math.abs(nextScrollTop - currentScrollTop) < 4) {
+        activeElement.scrollIntoView({
+          block: 'center',
+          inline: 'nearest',
+          behavior,
+        })
+        return
+      }
+
+      scrollParent.scrollTo({
+        top: nextScrollTop,
         behavior,
       })
     }
 
-    const scheduleFocusScroll = (behavior = 'smooth', delay = 80) => {
-      if (focusScrollTimerRef.current) {
-        window.clearTimeout(focusScrollTimerRef.current)
-      }
+    const scheduleFocusScroll = (behavior = 'smooth', delays = [56, 156, 320]) => {
+      clearFocusScrollTimers()
 
-      focusScrollTimerRef.current = window.setTimeout(() => {
+      focusScrollTimersRef.current = delays.map((delay) => window.setTimeout(() => {
         window.requestAnimationFrame(() => {
           scrollActiveFieldIntoView(behavior)
         })
-      }, delay)
+      }, delay))
     }
 
     const applyViewportSize = () => {
@@ -176,18 +236,18 @@ function AppRoot() {
 
     const handleViewportResize = () => {
       scheduleViewportSize()
-      scheduleFocusScroll('auto', 36)
+      scheduleFocusScroll('auto', [24, 120, 260, 420])
     }
 
     const handleOrientationChange = () => {
       viewportStableHeightRef.current = 0
       scheduleViewportSize()
-      scheduleFocusScroll('auto', 120)
+      scheduleFocusScroll('auto', [120, 260, 520])
     }
 
     const handleFocusIn = (event) => {
       if (isEditableElement(event.target)) {
-        scheduleFocusScroll('smooth', 120)
+        scheduleFocusScroll('smooth', [40, 160, 320, 520])
       }
     }
 
@@ -202,9 +262,7 @@ function AppRoot() {
       if (viewportRafRef.current) {
         window.cancelAnimationFrame(viewportRafRef.current)
       }
-      if (focusScrollTimerRef.current) {
-        window.clearTimeout(focusScrollTimerRef.current)
-      }
+      clearFocusScrollTimers()
       delete document.body.dataset.keyboardOpen
       window.removeEventListener('resize', handleViewportResize)
       window.removeEventListener('orientationchange', handleOrientationChange)

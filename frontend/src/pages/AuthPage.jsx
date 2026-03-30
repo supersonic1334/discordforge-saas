@@ -414,15 +414,15 @@ export default function AuthPage() {
     >
       <AuthSnowBackdrop pointerX={pointerX} pointerY={pointerY} />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:gap-10">
+      <div className="auth-mobile-shell relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:gap-10">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full max-w-[min(28rem,100%)] pt-4 sm:pt-6 md:pt-10"
+          className="auth-mobile-panel w-full max-w-[min(28rem,100%)] pt-4 sm:pt-6 md:pt-10"
         >
           {/* Logo section */}
-            <div className="text-center mb-6 sm:mb-8">
+            <div className="auth-mobile-hero text-center mb-6 sm:mb-8">
               <motion.div
                 initial={{ opacity: 0, scale: 0.92, y: 18 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -497,7 +497,7 @@ export default function AuthPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ y: -6, scale: 1.006 }}
-            className="gradient-border"
+            className="auth-mobile-card gradient-border"
           >
             <div className="bg-surface-1 rounded-2xl p-5 sm:p-8">
               {/* Tab switcher */}
@@ -652,7 +652,7 @@ export default function AuthPage() {
               </motion.form>
 
               {/* Feature cards */}
-              <div className="mt-5 sm:mt-6 space-y-3">
+              <div className="auth-mobile-features mt-5 sm:mt-6 space-y-3">
                 <div className="grid grid-cols-3 gap-2">
                   {featureCards.map((feature) => {
                     const active = feature.key === activeFeature
