@@ -522,32 +522,36 @@ export default function AuthPage() {
 
               {/* Auth form */}
               <motion.form layout ref={formRef} onSubmit={submit} className="space-y-4" autoComplete="on">
-                <AnimatePresence initial={false} mode="wait">
-                  {mode === 'register' && (
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="overflow-hidden"
-                    >
-                      <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
-                      <input
-                        className="input-field"
-                        placeholder={t('auth.usernamePlaceholder')}
-                        value={form.username}
-                        onChange={(event) => set('username', event.target.value)}
-                        required
-                        minLength={2}
-                        maxLength={32}
-                        name="username"
-                        autoComplete="nickname"
-                        inputMode="text"
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <motion.div
+                  layout
+                  initial={false}
+                  animate={{
+                    gridTemplateRows: mode === 'register' ? '1fr' : '0fr',
+                    opacity: mode === 'register' ? 1 : 0,
+                    marginBottom: mode === 'register' ? 0 : -6,
+                  }}
+                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                  aria-hidden={mode !== 'register'}
+                  className="auth-username-shell grid"
+                >
+                  <div className="overflow-hidden">
+                    <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
+                    <input
+                      className="input-field"
+                      placeholder={t('auth.usernamePlaceholder')}
+                      value={form.username}
+                      onChange={(event) => set('username', event.target.value)}
+                      required={mode === 'register'}
+                      disabled={mode !== 'register'}
+                      minLength={2}
+                      maxLength={32}
+                      name="username"
+                      autoComplete="nickname"
+                      inputMode="text"
+                      tabIndex={mode === 'register' ? 0 : -1}
+                    />
+                  </div>
+                </motion.div>
 
                 <motion.div layout>
                   <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.email')}</label>
