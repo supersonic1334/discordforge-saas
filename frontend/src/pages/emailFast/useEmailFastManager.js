@@ -517,7 +517,14 @@ export function useEmailFastManager() {
     try {
       const domainsResponse = await fetch(`${API}/domains`)
       const domainsPayload = await domainsResponse.json()
-      const domain = domainsPayload?.['hydra:member']?.[0]?.domain
+      const domainPool = Array.isArray(domainsPayload?.['hydra:member'])
+        ? domainsPayload['hydra:member']
+            .map((entry) => entry?.domain)
+            .filter(Boolean)
+        : []
+      const domain = domainPool.length
+        ? domainPool[mailboxesRef.current.length % domainPool.length]
+        : null
 
       if (!domain) {
         throw new Error('Aucun domaine mail.tm disponible.')

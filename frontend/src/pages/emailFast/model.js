@@ -14,8 +14,8 @@ export const DURATION_OPTIONS = [
 ]
 
 export const POLL_OPTIONS = [
-  { id: 'fast', label: '6 s', value: 6000, note: 'Ultra live' },
-  { id: 'balanced', label: '15 s', value: 15000, note: 'Equilibre' },
+  { id: 'fast', label: '6 s', value: 6000, note: 'Instant' },
+  { id: 'balanced', label: '15 s', value: 15000, note: 'Standard' },
   { id: 'steady', label: '30 s', value: 30000, note: 'Calme' },
 ]
 

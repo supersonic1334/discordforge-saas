@@ -95,6 +95,20 @@ function NoteRow({ tone = 'cyan', title, body }) {
   )
 }
 
+function getMailboxHealth(mailbox) {
+  const statusLabel = mailbox.isExpired ? 'Expiree' : mailbox.status === 'inactive' ? 'Inactive' : 'Active'
+  const isValid = mailbox.status === 'active' && !mailbox.isExpired
+
+  return {
+    isValid,
+    statusLabel,
+    validityLabel: isValid ? 'Valide' : 'Invalide',
+    validityTone: isValid
+      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+      : 'border-red-400/20 bg-red-400/10 text-red-300',
+  }
+}
+
 function CadenceSelector({ value, onChange }) {
   return (
     <div className="ef-cadence-grid">
@@ -110,16 +124,17 @@ function CadenceSelector({ value, onChange }) {
           >
             <div className="flex items-center justify-between gap-3">
               <span className="font-display text-sm font-700 text-white">{option.note}</span>
-              {active ? (
-                <CheckCircle2 className="h-4 w-4 text-neon-cyan" />
-              ) : (
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-mono text-white/45">
-                  {option.label}
-                </span>
-              )}
+              <span className={clsx(
+                'rounded-full border px-2 py-1 text-[10px] font-mono',
+                active
+                  ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan'
+                  : 'border-white/10 bg-white/[0.04] text-white/45'
+              )}>
+                {option.label}
+              </span>
             </div>
-            <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-white/35">
-              Poll toutes les {option.label}
+            <p className="mt-2 text-sm text-white/45">
+              Synchro toutes les {option.label}
             </p>
           </button>
         )
@@ -146,7 +161,7 @@ function DurationSettingsBlock({ title, caption, draft, setDraft }) {
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2">
         {DURATION_OPTIONS.map((option) => {
           const active = draft.durationKey === option.id
 
@@ -200,6 +215,7 @@ function MailboxCard({ mailbox, active, onSelect, onRemove }) {
   const unread = mailbox.messages.filter((message) => !message.read).length
   const isPermanent = mailbox.durationKey === 'permanent' || !mailbox.expiresAt
   const isInactive = mailbox.status === 'inactive'
+  const health = getMailboxHealth(mailbox)
   const remainingMs = mailbox.expiresAt && !mailbox.isExpired ? Math.max(0, mailbox.expiresAt - Date.now()) : 0
   const progress = mailbox.expiresAt && mailbox.totalDurationMs
     ? Math.max(8, Math.min(100, (remainingMs / mailbox.totalDurationMs) * 100))
@@ -211,7 +227,6 @@ function MailboxCard({ mailbox, active, onSelect, onRemove }) {
       : isPermanent
         ? 'Permanent'
         : formatRemaining(remainingMs)
-  const statusLabel = mailbox.isExpired ? 'Expiree' : isInactive ? 'Inactive' : 'Active'
 
   return (
     <motion.button
@@ -259,17 +274,13 @@ function MailboxCard({ mailbox, active, onSelect, onRemove }) {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className={clsx(
               'inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.16em]',
-              mailbox.isExpired
-                ? 'border-red-400/25 bg-red-400/10 text-red-300'
-                : isInactive
-                  ? 'border-amber-400/25 bg-amber-400/10 text-amber-300'
-                  : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+              health.validityTone
             )}>
               <span className={clsx(
                 'h-2 w-2 rounded-full',
                 mailbox.isExpired ? 'bg-red-300' : isInactive ? 'bg-amber-300' : 'bg-emerald-300 ef-live-dot'
               )} />
-              {statusLabel}
+              {health.validityLabel}
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.16em] text-white/50">
               {isPermanent ? <InfinityIcon className="h-3.5 w-3.5" /> : <Activity className="h-3.5 w-3.5" />}
@@ -338,13 +349,7 @@ export default function EmailFastApp() {
   const previewText = state.selectedMessage
     ? stripHtml(state.selectedMessage.bodyText || state.selectedMessage.bodyHtml || '')
     : ''
-  const activeStatusLabel = state.activeMailbox
-    ? state.activeMailbox.isExpired
-      ? 'Expiree'
-      : state.activeMailbox.status === 'inactive'
-        ? 'Inactive'
-        : 'Active'
-    : 'Aucune'
+  const activeMailboxHealth = state.activeMailbox ? getMailboxHealth(state.activeMailbox) : null
 
   useEffect(() => {
     setLabelDraft(state.activeMailbox?.label || '')
@@ -412,11 +417,10 @@ export default function EmailFastApp() {
             <div className="max-w-3xl">
               <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/70">Email Fast</p>
               <h1 className="mt-4 font-display text-3xl font-800 text-white sm:text-4xl">
-                Des boites temporaires qui ressemblent enfin au reste du dashboard.
+                Boites mail temporaires
               </h1>
               <p className="mt-3 text-sm leading-7 text-white/52 sm:text-[15px]">
-                Cree une vraie adresse mail.tm, garde jusqu a cinq boites dans un coffre persistant et
-                retrouve-les apres reload avec un seul mot de passe.
+                Cree, sauvegarde et retrouve tes adresses sur cet appareil avec un seul mot de passe.
               </p>
             </div>
 
@@ -424,19 +428,19 @@ export default function EmailFastApp() {
               <StatTile
                 label="Capacite"
                 value={`${MAX_MAILBOXES} boites`}
-                detail="Pile multi-adresses prete a rester en ligne."
+                detail="Jusqu a cinq adresses dans le meme coffre."
                 tone="cyan"
               />
               <StatTile
                 label="Retentions"
                 value="10 min -> permanent"
-                detail="Preset rapide ou duree perso pour chaque boite."
+                detail="Choix rapide ou duree perso."
                 tone="violet"
               />
               <StatTile
                 label="Protection"
                 value="3 essais"
-                detail="Pause securite de 30 secondes apres plusieurs erreurs."
+                detail="Pause de 30 secondes apres plusieurs erreurs."
                 tone="amber"
               />
             </div>
@@ -577,49 +581,26 @@ export default function EmailFastApp() {
 
           <motion.aside className="space-y-5" {...motionFade}>
             <div className="depth-panel rounded-[30px] p-5 sm:p-6">
-              <p className="font-display text-lg font-700 text-white">Demarrage clair</p>
+              <p className="font-display text-lg font-700 text-white">Ce que garde le coffre</p>
               <p className="mt-2 text-sm leading-6 text-white/45">
-                Le flux est volontairement simple: un mot de passe, une premiere boite, puis le coffre garde le reste.
+                Tout reste range au meme endroit pour te laisser reprendre tes boites plus tard.
               </p>
 
               <div className="mt-5 space-y-3">
                 <NoteRow
                   tone="cyan"
-                  title="1. Mot de passe unique"
-                  body="Il sert a chiffrer le coffre local et a deverrouiller les boites sauvegardees."
+                  title="Un seul mot de passe"
+                  body="Il protege tout le coffre local."
                 />
                 <NoteRow
                   tone="emerald"
-                  title="2. Retention par boite"
-                  body="Chaque adresse garde sa propre duree et sa propre cadence de synchro."
+                  title="Une duree par boite"
+                  body="Chaque adresse garde son propre temps de vie."
                 />
                 <NoteRow
                   tone="violet"
-                  title="3. Restauration apres refresh"
-                  body="Les boites reviennent depuis le coffre et tentent une reauthentification mail.tm."
-                />
-              </div>
-            </div>
-
-            <div className="depth-panel rounded-[30px] p-5 sm:p-6">
-              <p className="font-display text-lg font-700 text-white">Protection du coffre</p>
-              <p className="mt-2 text-sm leading-6 text-white/45">
-                Le verrouillage s applique a toutes les boites. Si tu rates plusieurs fois, l acces est coupe
-                temporairement pour eviter les suppressions ou ouvertures accidentelles.
-              </p>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <StatTile
-                  label="Coffre"
-                  value={`${state.mailboxes.length}/${MAX_MAILBOXES}`}
-                  detail="Nombre de boites deja presentes dans la flotte."
-                  tone="cyan"
-                />
-                <StatTile
-                  label="Permanent"
-                  value={permanentCount}
-                  detail="Boites sans expiration locale."
-                  tone="emerald"
+                  title="Restauration apres refresh"
+                  body="Les adresses reviennent automatiquement depuis le coffre."
                 />
               </div>
             </div>
@@ -635,10 +616,9 @@ export default function EmailFastApp() {
         <div className="relative z-[1] flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
             <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/70">Email Fast</p>
-            <h1 className="mt-4 font-display text-3xl font-800 text-white sm:text-4xl">Flotte email en direct</h1>
+            <h1 className="mt-4 font-display text-3xl font-800 text-white sm:text-4xl">Mes boites mail</h1>
             <p className="mt-3 text-sm leading-7 text-white/52 sm:text-[15px]">
-              Passe d une boite a l autre sans casser la synchro, ajuste la retention de chaque adresse et garde
-              toute la pile restauree depuis le coffre.
+              Cree, retrouve et change d adresse en un geste. Chaque boite garde ses mails, sa duree et son statut.
             </p>
 
             {state.activeMailbox ? (
@@ -658,7 +638,7 @@ export default function EmailFastApp() {
                   </div>
                   <div>
                     <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-white/32">Statut</p>
-                    <p className="mt-2 text-sm text-white">{activeStatusLabel}</p>
+                    <p className="mt-2 text-sm text-white">{activeMailboxHealth?.validityLabel || 'Invalide'}</p>
                   </div>
                 </div>
               </div>
@@ -699,38 +679,56 @@ export default function EmailFastApp() {
           <StatTile
             label="Boites"
             value={state.mailboxes.length}
-            detail={`${slotsLeft} slot(s) libre(s) dans la flotte.`}
+            detail={`${slotsLeft} emplacement(s) libre(s).`}
             tone="cyan"
           />
           <StatTile
             label="Non lus"
             value={allUnread}
-            detail="Somme des messages non lus sur toutes les inbox."
+            detail="Sur l ensemble des boites."
             tone="violet"
           />
           <StatTile
             label="Permanent"
             value={permanentCount}
-            detail="Boites sans limite de retention locale."
+            detail="Sans limite de retention."
             tone="emerald"
           />
           <StatTile
             label="Inactives"
             value={inactiveCount}
-            detail="Adresses qui ne peuvent plus se reauthentifier pour le moment."
+            detail="A reessayer ou supprimer."
             tone="amber"
           />
         </div>
       </motion.section>
 
+      <div className="ef-switcher-strip" data-allow-select>
+        {state.mailboxes.map((mailbox) => {
+          const health = getMailboxHealth(mailbox)
+          return (
+            <button
+              key={mailbox.id}
+              type="button"
+              onClick={() => actions.switchMailbox(mailbox.id)}
+              className={clsx('ef-switcher-chip', mailbox.id === state.activeMailboxId && 'ef-switcher-chip-active')}
+            >
+              <span className={clsx('h-2 w-2 rounded-full', health.isValid ? 'bg-emerald-300 ef-live-dot' : 'bg-red-300')} />
+              <span className="truncate">{mailbox.label}</span>
+              <span className="text-white/35">{health.validityLabel}</span>
+            </button>
+          )
+        })}
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-        <motion.aside className="space-y-5" {...motionFade}>
+        <motion.aside className="order-3 space-y-5 xl:order-1" {...motionFade}>
           <div className="depth-panel rounded-[30px] p-5 sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-display text-lg font-700 text-white">Toutes mes adresses</p>
                 <p className="mt-1 text-sm leading-6 text-white/45">
-                  Clique une boite pour afficher sa reception en direct sans couper les autres.
+                  Choisis une adresse pour ouvrir sa boite instantanement.
                 </p>
               </div>
               <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/45">
@@ -759,7 +757,7 @@ export default function EmailFastApp() {
                 <div>
                   <p className="font-display text-lg font-700 text-white">Ajouter une boite</p>
                   <p className="mt-1 text-sm leading-6 text-white/45">
-                    Empile une nouvelle adresse sans toucher aux boites deja ouvertes.
+                    Cree une nouvelle adresse sans toucher aux boites deja ouvertes.
                   </p>
                 </div>
                 <div className="rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-1 text-[11px] font-mono text-neon-cyan">
@@ -769,8 +767,8 @@ export default function EmailFastApp() {
 
               <div className="mt-5 space-y-4">
                 <DurationSettingsBlock
-                  title="Profil de la nouvelle boite"
-                  caption="Chaque adresse ajoutee garde ses propres reglages de retention et de synchro."
+                  title="Nouvelle boite"
+                  caption="Choisis la duree et la cadence de cette adresse."
                   draft={state.createDraft}
                   setDraft={actions.setCreateDraft}
                 />
@@ -789,14 +787,14 @@ export default function EmailFastApp() {
           )}
         </motion.aside>
 
-        <motion.section className="space-y-5" {...motionFade}>
+        <motion.section className="order-1 space-y-5 xl:order-2" {...motionFade}>
           <div className="depth-panel rounded-[32px] p-5 sm:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="font-display text-lg font-700 text-white">Boite de reception</p>
                 <p className="mt-1 text-sm leading-6 text-white/45">
                   {state.activeMailbox
-                    ? `Flux en direct pour ${state.activeMailbox.label}.`
+                    ? `Reception de ${state.activeMailbox.label}.`
                     : 'Selectionne une boite dans la colonne de gauche.'}
                 </p>
               </div>
@@ -926,13 +924,13 @@ export default function EmailFastApp() {
           </div>
         </motion.section>
 
-        <motion.aside className="space-y-5" {...motionFade}>
+        <motion.aside className="order-2 space-y-5 xl:order-3" {...motionFade}>
           <div className="depth-panel rounded-[30px] p-5 sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-display text-lg font-700 text-white">Pilotage de la boite</p>
+                <p className="font-display text-lg font-700 text-white">Reglages de la boite</p>
                 <p className="mt-1 text-sm leading-6 text-white/45">
-                  Regle la boite active sans casser le coffre ni les autres flux.
+                  Ajuste la boite ouverte sans toucher aux autres.
                 </p>
               </div>
               {activeDurationMeta && (
@@ -978,8 +976,8 @@ export default function EmailFastApp() {
 
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Statut</p>
-                      <p className="mt-2 font-display text-lg font-700 text-white">{activeStatusLabel}</p>
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Validite</p>
+                      <p className="mt-2 font-display text-lg font-700 text-white">{activeMailboxHealth?.validityLabel || 'Invalide'}</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                       <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Messages</p>
@@ -1016,8 +1014,8 @@ export default function EmailFastApp() {
                 </div>
 
                 <DurationSettingsBlock
-                  title="Runtime actif"
-                  caption="Tu peux rallonger, rendre permanent ou calmer la synchro a tout moment."
+                  title="Reglages"
+                  caption="Change la duree ou la cadence quand tu veux."
                   draft={state.runtimeDraft}
                   setDraft={actions.setRuntimeDraft}
                 />
