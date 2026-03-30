@@ -17,6 +17,7 @@ const SIDEBAR_MIN_WIDTH = 220
 const SIDEBAR_MAX_WIDTH = 380
 const SIDEBAR_SPRING = { type: 'spring', stiffness: 220, damping: 26, mass: 0.92 }
 const SWIPE_MIN_DISTANCE = 72
+const SWIPE_EDGE_THRESHOLD = 36
 
 function isTouchNavigationEnabled() {
   if (typeof window === 'undefined') return false
@@ -327,6 +328,7 @@ export default function Layout() {
     tracking: false,
     ignore: false,
     horizontal: false,
+    edgeStart: false,
     startX: 0,
     startY: 0,
   })
@@ -522,14 +524,27 @@ export default function Layout() {
   }
 
   const handleTouchStart = (event) => {
-    if (!isTouchNavigationEnabled() || mobileOpen) return
+    if (!isTouchNavigationEnabled() || mobileOpen || !shouldRenderSidebar) return
     const touch = event.touches?.[0]
     if (!touch) return
+
+    if (touch.clientX > SWIPE_EDGE_THRESHOLD) {
+      swipeStateRef.current = {
+        tracking: false,
+        ignore: false,
+        horizontal: false,
+        edgeStart: false,
+        startX: 0,
+        startY: 0,
+      }
+      return
+    }
 
     swipeStateRef.current = {
       tracking: true,
       ignore: shouldIgnoreSwipeTarget(event.target),
       horizontal: false,
+      edgeStart: true,
       startX: touch.clientX,
       startY: touch.clientY,
     }
@@ -561,11 +576,12 @@ export default function Layout() {
       tracking: false,
       ignore: false,
       horizontal: false,
+      edgeStart: false,
       startX: 0,
       startY: 0,
     }
 
-    if (!state.tracking || state.ignore) return
+    if (!state.tracking || state.ignore || !state.edgeStart) return
 
     const touch = event.changedTouches?.[0]
     if (!touch) return
@@ -574,7 +590,7 @@ export default function Layout() {
 
     if (Math.abs(deltaX) < SWIPE_MIN_DISTANCE || Math.abs(deltaX) <= Math.abs(deltaY) * 1.3) return
 
-    if (deltaX < 0 && hasSelectedGuild) {
+    if (deltaX > 0 && shouldRenderSidebar) {
       setMobileOpen(true)
     }
   }

@@ -956,7 +956,7 @@ export default function SupportPage() {
                 <textarea
                   value={reply}
                   onChange={(event) => setReply(event.target.value)}
-                  className="input-field min-h-[120px] resize-none border-0 bg-transparent shadow-none"
+                  className="input-field min-h-[120px] resize-none"
                   placeholder={text.replyPlaceholder}
                 />
               </div>
