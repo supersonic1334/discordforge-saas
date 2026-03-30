@@ -1,6 +1,8 @@
 export const API = 'https://api.mail.tm'
 export const QR_CODE_SCRIPT_URL = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
 export const MAX_MAILBOXES = 5
+export const EMAIL_FAST_VAULT_KEY = 'discordforger-email-fast-vault'
+export const DELETE_CONFIRMATION_WORD = 'SUPPRIMER'
 
 export const DURATION_OPTIONS = [
   { id: '10m', label: '10 min', note: 'Sprint', minutes: 10 },
@@ -233,4 +235,113 @@ export function getPasswordStrengthMeta(password) {
   }
 
   return { ...steps[Math.max(0, score - 1)], score }
+}
+
+function bytesToBase64(bytes) {
+  const chunkSize = 32768
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
+  }
+  return window.btoa(binary)
+}
+
+function base64ToBytes(value) {
+  const binary = window.atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes
+}
+
+async function deriveVaultKey(password, saltBytes) {
+  const material = await window.crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  )
+
+  return window.crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: saltBytes,
+      iterations: 210000,
+      hash: 'SHA-256',
+    },
+    material,
+    {
+      name: 'AES-GCM',
+      length: 256,
+    },
+    false,
+    ['encrypt', 'decrypt']
+  )
+}
+
+export function loadStoredVault() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(EMAIL_FAST_VAULT_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+export function saveStoredVault(vault) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(EMAIL_FAST_VAULT_KEY, JSON.stringify(vault))
+}
+
+export function clearStoredVault() {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(EMAIL_FAST_VAULT_KEY)
+}
+
+export async function encryptVault(password, payload) {
+  const saltBytes = window.crypto.getRandomValues(new Uint8Array(16))
+  const ivBytes = window.crypto.getRandomValues(new Uint8Array(12))
+  const key = await deriveVaultKey(password, saltBytes)
+  const encodedPayload = new TextEncoder().encode(JSON.stringify(payload))
+  const cipherBuffer = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: ivBytes },
+    key,
+    encodedPayload
+  )
+
+  return {
+    version: 1,
+    updatedAt: Date.now(),
+    mailboxCount: Array.isArray(payload?.mailboxes) ? payload.mailboxes.length : 0,
+    salt: bytesToBase64(saltBytes),
+    iv: bytesToBase64(ivBytes),
+    data: bytesToBase64(new Uint8Array(cipherBuffer)),
+  }
+}
+
+export async function decryptVault(password, vault) {
+  if (!vault?.salt || !vault?.iv || !vault?.data) {
+    throw new Error('Coffre Email Fast invalide.')
+  }
+
+  try {
+    const saltBytes = base64ToBytes(vault.salt)
+    const ivBytes = base64ToBytes(vault.iv)
+    const cipherBytes = base64ToBytes(vault.data)
+    const key = await deriveVaultKey(password, saltBytes)
+    const plainBuffer = await window.crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: ivBytes },
+      key,
+      cipherBytes
+    )
+
+    return JSON.parse(new TextDecoder().decode(plainBuffer))
+  } catch {
+    throw new Error('Mot de passe incorrect ou coffre illisible.')
+  }
 }

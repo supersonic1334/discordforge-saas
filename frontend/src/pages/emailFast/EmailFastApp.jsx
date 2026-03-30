@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { useEmailFastManager } from './useEmailFastManager'
 import {
+  DELETE_CONFIRMATION_WORD,
   DURATION_OPTIONS,
   FILTER_OPTIONS,
   MAX_MAILBOXES,
@@ -173,8 +174,11 @@ function DurationSettingsBlock({ title, caption, draft, setDraft }) {
 function MailboxCard({ mailbox, active, onSelect, onRemove }) {
   const unread = mailbox.messages.filter((message) => !message.read).length
   const isPermanent = mailbox.durationKey === 'permanent' || !mailbox.expiresAt
+  const isInactive = mailbox.status === 'inactive'
   const remainingLabel = mailbox.isExpired
     ? 'Expiree'
+    : isInactive
+      ? 'Inactive'
     : isPermanent
       ? 'Permanent'
       : formatRemaining(Math.max(0, mailbox.expiresAt - Date.now()))
@@ -226,6 +230,8 @@ function MailboxCard({ mailbox, active, onSelect, onRemove }) {
               'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.16em]',
               mailbox.isExpired
                 ? 'border-red-400/25 bg-red-400/10 text-red-300'
+                : isInactive
+                  ? 'border-amber-400/25 bg-amber-400/10 text-amber-300'
                 : isPermanent
                   ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
                   : 'border-white/10 bg-white/[0.04] text-white/55'
@@ -253,6 +259,8 @@ export default function EmailFastApp() {
   const { state, actions } = useEmailFastManager()
   const qrRef = useRef(null)
   const [labelDraft, setLabelDraft] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deletePhrase, setDeletePhrase] = useState('')
 
   const createDurationMeta = useMemo(
     () => getDurationConfig(state.createDraft.durationKey, state.createDraft.customDurationMinutes),
@@ -318,6 +326,22 @@ export default function EmailFastApp() {
     actions.setMailboxLabel(state.activeMailbox.id, nextLabel)
   }
 
+  function openDeleteModal(mailbox) {
+    setDeleteTarget(mailbox)
+    setDeletePhrase('')
+  }
+
+  function closeDeleteModal() {
+    setDeleteTarget(null)
+    setDeletePhrase('')
+  }
+
+  function confirmDeleteMailbox() {
+    if (!deleteTarget || deletePhrase !== DELETE_CONFIRMATION_WORD) return
+    actions.removeMailbox(deleteTarget.id)
+    closeDeleteModal()
+  }
+
   const motionFade = {
     initial: { opacity: 0, y: 18 },
     animate: { opacity: 1, y: 0 },
@@ -325,7 +349,8 @@ export default function EmailFastApp() {
   }
 
   if (state.screen === 'auth') {
-    const hasSavedSession = state.mailboxes.length > 0
+    const hasSavedSession = state.hasStoredVault || state.mailboxes.length > 0
+    const storedMailboxCount = state.mailboxes.length || state.storedVaultMeta?.mailboxCount || 0
 
     return (
       <div className="email-fast-app px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-5">
@@ -374,12 +399,12 @@ export default function EmailFastApp() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-display font-700 text-white">
-                  {hasSavedSession ? 'Reprendre la session' : 'Initialiser la session'}
+                  {hasSavedSession ? 'Reprendre le coffre' : 'Initialiser le coffre'}
                 </p>
                 <p className="mt-1 text-sm text-white/45">
                   {hasSavedSession
-                    ? 'Tes boites sont gardees en memoire. Debloque la session pour reprendre.'
-                    : 'Choisis le mot de passe maitre puis regle la premiere boite.'}
+                    ? 'Tes boites sont enregistrees localement. Debloque le coffre pour les rallumer.'
+                    : 'Entre ton mot de passe une seule fois puis cree directement la premiere boite.'}
                 </p>
               </div>
 
@@ -390,42 +415,13 @@ export default function EmailFastApp() {
               )}
             </div>
 
-            {!hasSavedSession && (
-              <div className="mt-5 flex rounded-2xl border border-white/10 bg-white/[0.04] p-1">
-                <button
-                  type="button"
-                  onClick={() => actions.setAuthMode('create')}
-                  className={clsx(
-                    'flex-1 rounded-xl px-4 py-2.5 text-sm font-display font-700 transition-all',
-                    state.authMode === 'create'
-                      ? 'bg-white/[0.08] text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
-                      : 'text-white/45 hover:text-white'
-                  )}
-                >
-                  Nouvelle flotte
-                </button>
-                <button
-                  type="button"
-                  onClick={() => actions.setAuthMode('access')}
-                  className={clsx(
-                    'flex-1 rounded-xl px-4 py-2.5 text-sm font-display font-700 transition-all',
-                    state.authMode === 'access'
-                      ? 'bg-white/[0.08] text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
-                      : 'text-white/45 hover:text-white'
-                  )}
-                >
-                  Acceder
-                </button>
-              </div>
-            )}
-
             {state.authError && (
               <div className="mt-5 rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">
                 {state.authError}
               </div>
             )}
 
-            {(!hasSavedSession && state.authMode === 'create') && (
+            {!hasSavedSession && (
               <div className="mt-5 space-y-5">
                 <PasswordField
                   label="Mot de passe maitre"
@@ -455,20 +451,9 @@ export default function EmailFastApp() {
                   </div>
                 </div>
 
-                <PasswordField
-                  label="Confirmation"
-                  placeholder="Repete le mot de passe"
-                  value={state.createPasswordConfirm}
-                  onChange={actions.setCreatePasswordConfirm}
-                  visible={state.showCreatePasswordConfirm}
-                  onToggle={() => actions.setShowCreatePasswordConfirm((current) => !current)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      actions.handleCreateSubmit()
-                    }
-                  }}
-                />
+                <div className="rounded-2xl border border-neon-cyan/15 bg-neon-cyan/10 px-4 py-3 text-sm text-neon-cyan">
+                  Une seule saisie suffit: le mot de passe protege ensuite toutes les boites du coffre.
+                </div>
 
                 <DurationSettingsBlock
                   title="Reglage de la premiere boite"
@@ -484,18 +469,16 @@ export default function EmailFastApp() {
                   className="btn-primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-mono disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {state.isCreating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
-                  {state.isCreating ? 'Creation en cours' : 'Creer la premiere boite'}
+                  {state.isCreating ? 'Creation en cours' : 'Creer et ouvrir la premiere boite'}
                 </button>
               </div>
             )}
 
-            {(hasSavedSession || state.authMode === 'access') && (
+            {hasSavedSession && (
               <div className="mt-5 space-y-5">
-                {hasSavedSession && (
-                  <div className="rounded-2xl border border-neon-cyan/15 bg-neon-cyan/10 px-4 py-3 text-sm text-neon-cyan">
-                    {state.mailboxes.length} boite(s) en attente, {allUnread} email(s) non lus.
-                  </div>
-                )}
+                <div className="rounded-2xl border border-neon-cyan/15 bg-neon-cyan/10 px-4 py-3 text-sm text-neon-cyan">
+                  Coffre detecte: {storedMailboxCount} boite(s) sauvegardee(s) sur cet appareil.
+                </div>
 
                 <PasswordField
                   label="Mot de passe"
@@ -515,10 +498,11 @@ export default function EmailFastApp() {
                 <button
                   type="button"
                   onClick={actions.handleUnlock}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-4 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15"
+                  disabled={state.isRestoring}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-4 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <KeyRound className="h-4 w-4" />
-                  Debloquer la flotte
+                  {state.isRestoring ? <RefreshCw className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                  {state.isRestoring ? 'Restauration...' : 'Debloquer le coffre'}
                 </button>
               </div>
             )}
@@ -652,7 +636,7 @@ export default function EmailFastApp() {
           <div className="glass-card p-5 sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-display text-lg font-700 text-white">Fleet</p>
+                <p className="font-display text-lg font-700 text-white">Toutes mes adresses</p>
                 <p className="mt-1 text-sm text-white/45">Clique une boite pour afficher sa reception en direct.</p>
               </div>
               <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/45">
@@ -668,7 +652,7 @@ export default function EmailFastApp() {
                     mailbox={mailbox}
                     active={mailbox.id === state.activeMailboxId}
                     onSelect={() => actions.switchMailbox(mailbox.id)}
-                    onRemove={() => actions.removeMailbox(mailbox.id)}
+                    onRemove={() => openDeleteModal(mailbox)}
                   />
                 ))}
               </AnimatePresence>
@@ -1120,6 +1104,82 @@ export default function EmailFastApp() {
           </div>
         </motion.aside>
       </div>
+
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="ef-modal-backdrop"
+            onClick={closeDeleteModal}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.98 }}
+              transition={{ duration: 0.18 }}
+              className="ef-modal-shell glass-card p-5 sm:p-6"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-red-400/20 bg-red-400/10 text-red-300">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-display text-xl font-700 text-white">Suppression protegee</p>
+                  <p className="mt-2 text-sm leading-6 text-white/48">
+                    Cette boite sera retiree du coffre, meme si elle est permanente. Pour confirmer, ecris
+                    <span className="mx-1 rounded-md border border-white/10 bg-white/[0.05] px-2 py-1 font-mono text-xs text-white">
+                      {DELETE_CONFIRMATION_WORD}
+                    </span>
+                    exactement.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="font-display text-base font-700 text-white">{deleteTarget.label}</p>
+                <p className="mt-1 break-all font-mono text-xs text-white/42">{deleteTarget.address}</p>
+              </div>
+
+              <div className="mt-5 space-y-2">
+                <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Confirmation</span>
+                <input
+                  value={deletePhrase}
+                  onChange={(event) => setDeletePhrase(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      confirmDeleteMailbox()
+                    }
+                  }}
+                  className="input-field"
+                  placeholder={DELETE_CONFIRMATION_WORD}
+                />
+              </div>
+
+              <div className="mt-5 flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
+                  className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-white/15 hover:text-white"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteMailbox}
+                  disabled={deletePhrase !== DELETE_CONFIRMATION_WORD}
+                  className="rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-mono text-red-300 transition-all hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Continuer a supprimer
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

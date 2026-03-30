@@ -4,10 +4,15 @@ import {
   API,
   DEFAULT_DRAFT,
   MAX_MAILBOXES,
+  clearStoredVault,
   copyText,
+  decryptVault,
+  encryptVault,
   ensureQRCodeScript,
   getDurationConfig,
+  loadStoredVault,
   randomString,
+  saveStoredVault,
   stripHtml,
 } from './model'
 
@@ -29,9 +34,46 @@ function buildMailbox(accountPayload, token, draft, index) {
     expiresAt: duration.isPermanent ? null : Date.now() + duration.totalMs,
     totalDurationMs: duration.isPermanent ? null : duration.totalMs,
     isExpired: false,
+    status: 'active',
     lastSyncAt: null,
     nextPollAt: Date.now(),
   }
+}
+
+function sanitizeMailboxForVault(mailbox) {
+  return {
+    id: mailbox.id,
+    accountId: mailbox.accountId,
+    address: mailbox.address,
+    password: mailbox.password,
+    label: mailbox.label,
+    messages: mailbox.messages || [],
+    deletedIds: mailbox.deletedIds || [],
+    createdAt: mailbox.createdAt,
+    durationKey: mailbox.durationKey,
+    customDurationMinutes: mailbox.customDurationMinutes,
+    pollIntervalMs: mailbox.pollIntervalMs,
+    expiresAt: mailbox.expiresAt,
+    totalDurationMs: mailbox.totalDurationMs,
+    isExpired: mailbox.isExpired,
+    status: mailbox.status || 'active',
+    lastSyncAt: mailbox.lastSyncAt,
+  }
+}
+
+async function requestMailboxToken(address, password) {
+  const response = await fetch(`${API}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address, password }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Authentification mail.tm impossible.')
+  }
+
+  const payload = await response.json()
+  return payload.token
 }
 
 export function useEmailFastManager() {
@@ -47,6 +89,8 @@ export function useEmailFastManager() {
   const [sessionPassword, setSessionPassword] = useState(null)
   const [failedAttempts, setFailedAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState(null)
+  const [hasStoredVault, setHasStoredVault] = useState(false)
+  const [storedVaultMeta, setStoredVaultMeta] = useState(null)
   const [mailboxes, setMailboxes] = useState([])
   const [activeMailboxId, setActiveMailboxId] = useState(null)
   const [createDraft, setCreateDraft] = useState(DEFAULT_DRAFT)
@@ -59,6 +103,7 @@ export function useEmailFastManager() {
   const [syncError, setSyncError] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isRestoring, setIsRestoring] = useState(false)
   const [timeTick, setTimeTick] = useState(() => Date.now())
   const [qrReady, setQrReady] = useState(false)
 
@@ -132,6 +177,18 @@ export function useEmailFastManager() {
   }, [activeMailboxId])
 
   useEffect(() => {
+    const storedVault = loadStoredVault()
+    if (!storedVault) return
+
+    setHasStoredVault(true)
+    setStoredVaultMeta({
+      mailboxCount: Number(storedVault.mailboxCount || 0),
+      updatedAt: storedVault.updatedAt || null,
+    })
+    setAuthMode('access')
+  }, [])
+
+  useEffect(() => {
     const previousTitle = document.title
     document.title = 'Email Fast - DiscordForger'
 
@@ -188,6 +245,37 @@ export function useEmailFastManager() {
   }, [mailboxes, activeMailboxId, screen])
 
   useEffect(() => {
+    if (!sessionPassword || !mailboxes.length) return undefined
+
+    let cancelled = false
+
+    const payload = {
+      activeMailboxId,
+      createDraft,
+      mailboxes: mailboxes.map(sanitizeMailboxForVault),
+    }
+
+    encryptVault(sessionPassword, payload)
+      .then((vault) => {
+        if (cancelled) return
+        saveStoredVault(vault)
+        setHasStoredVault(true)
+        setStoredVaultMeta({
+          mailboxCount: Number(vault.mailboxCount || mailboxes.length),
+          updatedAt: vault.updatedAt || Date.now(),
+        })
+      })
+      .catch((error) => {
+        console.error(error)
+        toast.error('Sauvegarde locale Email Fast impossible.')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeMailboxId, createDraft, mailboxes, sessionPassword])
+
+  useEffect(() => {
     const expiredAddresses = []
 
     setMailboxes((current) => current.map((mailbox) => {
@@ -199,6 +287,7 @@ export function useEmailFastManager() {
       return {
         ...mailbox,
         isExpired: true,
+        status: 'expired',
         nextPollAt: null,
       }
     }))
@@ -221,7 +310,7 @@ export function useEmailFastManager() {
       const now = Date.now()
 
       snapshot.forEach((mailbox) => {
-        if (!mailbox.token || mailbox.isExpired) return
+        if (mailbox.isExpired) return
         if ((mailbox.nextPollAt || 0) > now) return
         void fetchMailboxMessages(mailbox.id, { silent: true })
       })
@@ -230,9 +319,55 @@ export function useEmailFastManager() {
     return () => window.clearInterval(intervalId)
   }, [screen, mailboxes.length])
 
+  async function reauthenticateMailbox(mailboxId, { silent = false } = {}) {
+    const mailbox = mailboxesRef.current.find((entry) => entry.id === mailboxId)
+    if (!mailbox || mailbox.isExpired) return null
+
+    try {
+      const nextToken = await requestMailboxToken(mailbox.address, mailbox.password)
+
+      setMailboxes((current) => current.map((entry) => (
+        entry.id === mailboxId
+          ? {
+              ...entry,
+              token: nextToken,
+              status: entry.isExpired ? 'expired' : 'active',
+              nextPollAt: Date.now() + (entry.pollIntervalMs || 6000),
+            }
+          : entry
+      )))
+
+      if (activeMailboxIdRef.current === mailboxId) {
+        setSyncError('')
+      }
+
+      return nextToken
+    } catch (error) {
+      console.error(error)
+
+      setMailboxes((current) => current.map((entry) => (
+        entry.id === mailboxId
+          ? {
+              ...entry,
+              token: null,
+              status: entry.isExpired ? 'expired' : 'inactive',
+              nextPollAt: Date.now() + 60000,
+            }
+          : entry
+      )))
+
+      if (activeMailboxIdRef.current === mailboxId) {
+        setSyncError('Boite inactive. Reessaie plus tard ou supprime-la si besoin.')
+        if (!silent) toast.error('Cette boite ne peut plus etre authentifiee.')
+      }
+
+      return null
+    }
+  }
+
   async function fetchMailboxMessages(mailboxId, { silent = false } = {}) {
     const mailbox = mailboxesRef.current.find((entry) => entry.id === mailboxId)
-    if (!mailbox || !mailbox.token || mailbox.isExpired || inFlightRef.current.has(mailboxId)) return
+    if (!mailbox || mailbox.isExpired || inFlightRef.current.has(mailboxId)) return
 
     inFlightRef.current.add(mailboxId)
     if (!silent && activeMailboxIdRef.current === mailboxId) {
@@ -240,9 +375,27 @@ export function useEmailFastManager() {
     }
 
     try {
-      const response = await fetch(`${API}/messages`, {
-        headers: { Authorization: `Bearer ${mailbox.token}` },
+      let accessToken = mailbox.token
+
+      if (!accessToken) {
+        accessToken = await reauthenticateMailbox(mailboxId, { silent: true })
+        if (!accessToken) return
+      }
+
+      let response = await fetch(`${API}/messages`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
       })
+
+      if (response.status === 401 || response.status === 403) {
+        accessToken = await reauthenticateMailbox(mailboxId, { silent: true })
+        if (!accessToken) {
+          throw new Error('Boite inactive.')
+        }
+
+        response = await fetch(`${API}/messages`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+      }
 
       if (!response.ok) {
         throw new Error('Lecture de la boite impossible.')
@@ -298,8 +451,10 @@ export function useEmailFastManager() {
         entry.id === mailboxId
           ? {
               ...entry,
+              token: accessToken,
               messages: mergedMessages,
               lastSyncAt: Date.now(),
+              status: entry.isExpired ? 'expired' : 'active',
               nextPollAt,
             }
           : entry
@@ -384,24 +539,14 @@ export function useEmailFastManager() {
 
       const createdAccount = await createResponse.json()
 
-      const tokenResponse = await fetch(`${API}/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, password: mailboxPassword }),
-      })
-
-      if (!tokenResponse.ok) {
-        throw new Error('Authentification mail.tm impossible.')
-      }
-
-      const tokenPayload = await tokenResponse.json()
+      const mailboxToken = await requestMailboxToken(address, mailboxPassword)
       const nextMailbox = buildMailbox(
         {
           id: createdAccount.id,
           address,
           password: mailboxPassword,
         },
-        tokenPayload.token,
+        mailboxToken,
         draft,
         mailboxesRef.current.length
       )
@@ -410,6 +555,8 @@ export function useEmailFastManager() {
       setActiveMailboxId(nextMailbox.id)
       setScreen('app')
       setAuthMode('access')
+      setCreatePassword('')
+      setCreatePasswordConfirm('')
       setSyncError('')
       window.setTimeout(() => {
         void fetchMailboxMessages(nextMailbox.id, { silent: true })
@@ -429,19 +576,14 @@ export function useEmailFastManager() {
   async function handleCreateSubmit() {
     setAuthError('')
 
-    if (mailboxesRef.current.length > 0) {
+    if (mailboxesRef.current.length > 0 || hasStoredVault) {
       setAuthMode('access')
-      setAuthError('Deverrouille la session pour ajouter une nouvelle boite.')
+      setAuthError('Deverrouille le coffre pour reprendre les boites existantes.')
       return
     }
 
     if (createPassword.length < 4) {
       setAuthError('Mot de passe trop court. Minimum 4 caracteres.')
-      return
-    }
-
-    if (createPassword !== createPasswordConfirm) {
-      setAuthError('Les mots de passe ne correspondent pas.')
       return
     }
 
@@ -475,9 +617,119 @@ export function useEmailFastManager() {
     toast.success('Session verrouillee.')
   }
 
-  function handleUnlock() {
+  async function restoreStoredVault(password) {
+    const storedVault = loadStoredVault()
+    if (!storedVault) {
+      throw new Error('Aucun coffre Email Fast trouve.')
+    }
+
+    const payload = await decryptVault(password, storedVault)
+    const persistedMailboxes = Array.isArray(payload?.mailboxes) ? payload.mailboxes.slice(0, MAX_MAILBOXES) : []
+
+    if (!persistedMailboxes.length) {
+      throw new Error('Le coffre Email Fast est vide.')
+    }
+
+    const restoredMailboxes = await Promise.all(
+      persistedMailboxes.map(async (mailbox) => {
+        const expiresAt = mailbox.expiresAt || null
+        const isExpired = Boolean(expiresAt && expiresAt <= Date.now())
+        let token = null
+        let status = isExpired ? 'expired' : 'inactive'
+
+        if (!isExpired) {
+          try {
+            token = await requestMailboxToken(mailbox.address, mailbox.password)
+            status = 'active'
+          } catch {
+            status = 'inactive'
+          }
+        }
+
+        return {
+          ...mailbox,
+          token,
+          messages: Array.isArray(mailbox.messages) ? mailbox.messages : [],
+          deletedIds: Array.isArray(mailbox.deletedIds) ? mailbox.deletedIds : [],
+          customDurationMinutes: mailbox.durationKey === 'custom'
+            ? Number(mailbox.customDurationMinutes || 180)
+            : null,
+          pollIntervalMs: Number(mailbox.pollIntervalMs) || 6000,
+          expiresAt,
+          totalDurationMs: mailbox.totalDurationMs || null,
+          isExpired,
+          status,
+          nextPollAt: isExpired ? null : token ? Date.now() : Date.now() + 60000,
+          lastSyncAt: mailbox.lastSyncAt || null,
+        }
+      })
+    )
+
+    setSessionPassword(password)
+    setCreateDraft(payload?.createDraft || DEFAULT_DRAFT)
+    setMailboxes(restoredMailboxes)
+    setActiveMailboxId(
+      restoredMailboxes.some((mailbox) => mailbox.id === payload?.activeMailboxId)
+        ? payload.activeMailboxId
+        : restoredMailboxes[0]?.id || null
+    )
+    setHasStoredVault(true)
+    setStoredVaultMeta({
+      mailboxCount: Number(storedVault.mailboxCount || restoredMailboxes.length),
+      updatedAt: storedVault.updatedAt || Date.now(),
+    })
+    setScreen('app')
+    setAuthMode('access')
+    setAccessPassword('')
+    setCreatePassword('')
+    setCreatePasswordConfirm('')
+    setSelectedMessageId(null)
+    setQrOpen(false)
+    setSyncError('')
+
+    const firstActiveMailbox = restoredMailboxes.find((mailbox) => mailbox.status === 'active')
+    if (firstActiveMailbox) {
+      window.setTimeout(() => {
+        void fetchMailboxMessages(firstActiveMailbox.id, { silent: true })
+      }, 0)
+    }
+
+    const inactiveCount = restoredMailboxes.filter((mailbox) => mailbox.status === 'inactive').length
+    toast.success(
+      inactiveCount
+        ? `${restoredMailboxes.length} boites rechargees, ${inactiveCount} inactive(s).`
+        : `${restoredMailboxes.length} boites rechargees.`
+    )
+  }
+
+  async function handleUnlock() {
     if (lockoutSecondsLeft > 0) return
     setAuthError('')
+
+    if (!mailboxesRef.current.length && hasStoredVault) {
+      setIsRestoring(true)
+
+      try {
+        await restoreStoredVault(accessPassword)
+        setFailedAttempts(0)
+        setLockoutUntil(null)
+      } catch (error) {
+        const nextFailedAttempts = failedAttempts + 1
+        setFailedAttempts(nextFailedAttempts)
+        setAccessPassword('')
+
+        if (nextFailedAttempts >= 3) {
+          setLockoutUntil(Date.now() + 30000)
+          setAuthError('Trop de tentatives. Attends 30 secondes.')
+        } else {
+          setAuthError(error.message || `Mot de passe incorrect. ${3 - nextFailedAttempts} essai(s) restant(s).`)
+        }
+      } finally {
+        setIsRestoring(false)
+      }
+
+      return
+    }
 
     if (!mailboxesRef.current.length) {
       setAuthError('Aucune boite a restaurer.')
@@ -538,6 +790,7 @@ export function useEmailFastManager() {
       expiresAt: duration.isPermanent ? null : Date.now() + duration.totalMs,
       totalDurationMs: duration.isPermanent ? null : duration.totalMs,
       isExpired: false,
+      status: 'active',
       nextPollAt: Date.now(),
     }))
 
@@ -571,6 +824,7 @@ export function useEmailFastManager() {
       expiresAt: Date.now() + duration.totalMs,
       totalDurationMs: duration.totalMs,
       isExpired: false,
+      status: 'active',
       nextPollAt: Date.now(),
     }))
 
@@ -588,6 +842,7 @@ export function useEmailFastManager() {
       expiresAt: null,
       totalDurationMs: null,
       isExpired: false,
+      status: 'active',
       nextPollAt: Date.now(),
     }))
     setSyncError('')
@@ -650,12 +905,26 @@ export function useEmailFastManager() {
   }
 
   function removeMailbox(mailboxId) {
-    setMailboxes((current) => current.filter((mailbox) => mailbox.id !== mailboxId))
+    const nextMailboxes = mailboxesRef.current.filter((mailbox) => mailbox.id !== mailboxId)
+    setMailboxes(nextMailboxes)
+
     if (activeMailboxIdRef.current === mailboxId) {
-      const next = mailboxesRef.current.filter((mailbox) => mailbox.id !== mailboxId)[0]
-      setActiveMailboxId(next?.id || null)
+      setActiveMailboxId(nextMailboxes[0]?.id || null)
       setSelectedMessageId(null)
     }
+
+    if (!nextMailboxes.length) {
+      clearStoredVault()
+      setHasStoredVault(false)
+      setStoredVaultMeta(null)
+      setSessionPassword(null)
+      setScreen('auth')
+      setAuthMode('create')
+      setAccessPassword('')
+      setCreatePassword('')
+      setCreatePasswordConfirm('')
+    }
+
     toast.success('Boite retiree.')
   }
 
@@ -705,6 +974,8 @@ export function useEmailFastManager() {
       sessionPassword,
       failedAttempts,
       lockoutSecondsLeft,
+      hasStoredVault,
+      storedVaultMeta,
       createDraft,
       runtimeDraft,
       mailboxes,
@@ -721,6 +992,7 @@ export function useEmailFastManager() {
       syncError,
       isCreating,
       isRefreshing,
+      isRestoring,
       qrReady,
       remainingMs,
       progressPercent,
