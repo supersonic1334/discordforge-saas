@@ -77,6 +77,7 @@ function PageTransition({ children }) {
   return (
     <motion.div
       key={location.pathname}
+      className="page-transition-shell"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
@@ -103,6 +104,7 @@ function AppRoot() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
+    const isTouchInputMode = 'ontouchstart' in window || (navigator?.maxTouchPoints || 0) > 0
 
     const isEditableElement = (element) => (
       element instanceof HTMLElement
@@ -118,6 +120,12 @@ function AppRoot() {
     }
 
     const getScrollableParent = (element) => {
+      const appScrollRoot = document.querySelector('.app-screen-scroll, .app-main-scroll')
+
+      if (isTouchInputMode && appScrollRoot) {
+        return appScrollRoot
+      }
+
       let current = element?.parentElement
 
       while (current && current !== document.body) {
@@ -170,7 +178,7 @@ function AppRoot() {
         window.scrollTo({
           top: nextTop,
           left: 0,
-          behavior,
+          behavior: isTouchInputMode ? 'auto' : behavior,
         })
         restoreWindowHorizontalPosition()
         return
@@ -194,23 +202,26 @@ function AppRoot() {
       }
 
       if (Math.abs(nextScrollTop - currentScrollTop) < 4) {
-        activeElement.scrollIntoView({
-          block: 'center',
-          inline: 'nearest',
-          behavior,
-        })
+        if (!isTouchInputMode) {
+          activeElement.scrollIntoView({
+            block: 'center',
+            inline: 'nearest',
+            behavior,
+          })
+        }
+        restoreWindowHorizontalPosition()
         return
       }
 
       scrollParent.scrollTo({
         top: nextScrollTop,
-        left: currentScrollLeft,
-        behavior,
+        left: isTouchInputMode ? 0 : currentScrollLeft,
+        behavior: isTouchInputMode ? 'auto' : behavior,
       })
 
-      if (scrollParent.scrollLeft !== currentScrollLeft) {
+      if (scrollParent.scrollLeft !== (isTouchInputMode ? 0 : currentScrollLeft)) {
         window.requestAnimationFrame(() => {
-          scrollParent.scrollLeft = currentScrollLeft
+          scrollParent.scrollLeft = 0
         })
       }
 
@@ -270,7 +281,7 @@ function AppRoot() {
 
     const handleFocusIn = (event) => {
       if (isEditableElement(event.target)) {
-        scheduleFocusScroll('smooth', [40, 160, 320, 520])
+        scheduleFocusScroll(isTouchInputMode ? 'auto' : 'smooth', [40, 160, 320, 520])
       }
     }
 

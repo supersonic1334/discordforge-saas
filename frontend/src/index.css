@@ -412,6 +412,11 @@
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
     padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 16px);
   }
+  .page-transition-shell {
+    min-height: 100%;
+    width: 100%;
+    max-width: 100%;
+  }
   .sidebar-shell:hover {
     box-shadow:
       24px 0 68px rgba(0,0,0,0.32),
@@ -674,6 +679,14 @@
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px) !important;
   }
 
+  body[data-keyboard-open="true"] .page-transition-shell,
+  body[data-keyboard-open="true"] .dashboard-content-shell {
+    transform: none !important;
+    filter: none !important;
+    will-change: auto !important;
+    overflow-x: hidden !important;
+  }
+
   body[data-keyboard-open="true"] .input-field,
   body[data-keyboard-open="true"] .select-field,
   body[data-keyboard-open="true"] .select-compact,
@@ -686,6 +699,19 @@
       inset 0 1px 0 rgba(255,255,255,0.04) !important;
     transform: none !important;
     backface-visibility: visible !important;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+
+  body[data-keyboard-open="true"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  body[data-keyboard-open="true"] textarea,
+  body[data-keyboard-open="true"] select,
+  body[data-keyboard-open="true"] [contenteditable="true"] {
+    position: relative;
+    z-index: 2;
+    isolation: isolate;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
   }
 
   body[data-keyboard-open="true"] [class*="backdrop-blur"],
@@ -1166,8 +1192,14 @@ html {
   }
 
   body[data-keyboard-open="true"] .feature-hero,
-  body[data-keyboard-open="true"] .section-hero {
-    display: none !important;
+  body[data-keyboard-open="true"] .section-hero,
+  body[data-keyboard-open="true"] .page-transition-shell {
+    transform: none !important;
+    filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    animation: none !important;
+    opacity: 1 !important;
   }
 
   body[data-keyboard-open="true"] .spotlight-card,
