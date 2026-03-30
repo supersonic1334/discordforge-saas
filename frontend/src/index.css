@@ -1091,6 +1091,22 @@ html {
     overscroll-behavior: none;
   }
 
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: rgba(13, 18, 29, 0.94) !important;
+    color: rgba(255,255,255,0.96) !important;
+    -webkit-text-fill-color: rgba(255,255,255,0.96) !important;
+    caret-color: #ffffff !important;
+    background-image: none !important;
+    background-clip: padding-box !important;
+    text-shadow: none !important;
+    mix-blend-mode: normal !important;
+  }
+
   .input-field,
   .select-field,
   .select-compact,
@@ -1127,6 +1143,18 @@ html {
     appearance: none;
   }
 
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):focus,
+  textarea:focus,
+  select:focus,
+  [contenteditable="true"]:focus {
+    background-color: rgba(16, 23, 36, 0.98) !important;
+    -webkit-text-fill-color: rgba(255,255,255,0.98) !important;
+    box-shadow:
+      0 0 0 3px rgba(0,229,255,0.1),
+      inset 0 0 0 1px rgba(94,234,255,0.22),
+      0 16px 32px rgba(0,0,0,0.18) !important;
+  }
+
   .select-field,
   .select-compact {
     color-scheme: dark;
@@ -1135,6 +1163,32 @@ html {
   .app-main-scroll,
   .app-screen-scroll {
     padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px);
+  }
+
+  body[data-keyboard-open="true"] .feature-hero,
+  body[data-keyboard-open="true"] .section-hero {
+    display: none !important;
+  }
+
+  body[data-keyboard-open="true"] .spotlight-card,
+  body[data-keyboard-open="true"] .depth-panel,
+  body[data-keyboard-open="true"] .depth-panel-static,
+  body[data-keyboard-open="true"] .ef-panel,
+  body[data-keyboard-open="true"] .ef-mailbox-card,
+  body[data-keyboard-open="true"] .ef-message-card,
+  body[data-keyboard-open="true"] .ef-preview-shell,
+  body[data-keyboard-open="true"] .ef-modal-shell {
+    transform: none !important;
+    filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    animation: none !important;
+  }
+
+  body[data-keyboard-open="true"] .dashboard-shell-grid,
+  body[data-keyboard-open="true"] .dashboard-shell-glow,
+  body[data-keyboard-open="true"] .email-fast-app::before {
+    opacity: 0 !important;
   }
 }
 
