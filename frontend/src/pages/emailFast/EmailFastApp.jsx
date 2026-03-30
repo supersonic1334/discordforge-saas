@@ -1,0 +1,1125 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import clsx from 'clsx'
+import { AnimatePresence, motion } from 'framer-motion'
+import {
+  Activity,
+  BellRing,
+  CheckCircle2,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  Gauge,
+  Inbox,
+  Infinity as InfinityIcon,
+  KeyRound,
+  Lock,
+  Mail,
+  MailPlus,
+  QrCode,
+  RefreshCw,
+  Search,
+  Shield,
+  ShieldAlert,
+  Sparkles,
+  Star,
+  Trash2,
+  UserPlus,
+} from 'lucide-react'
+import { useEmailFastManager } from './useEmailFastManager'
+import {
+  DURATION_OPTIONS,
+  FILTER_OPTIONS,
+  MAX_MAILBOXES,
+  POLL_OPTIONS,
+  formatDateTime,
+  formatMessageTime,
+  formatRemaining,
+  getDurationConfig,
+  getPasswordStrengthMeta,
+  stripHtml,
+} from './model'
+import './EmailFastApp.css'
+
+function HeaderPill({ icon: Icon, label }) {
+  return (
+    <span className="feature-chip">
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </span>
+  )
+}
+
+function MetricTile({ label, value, detail }) {
+  return (
+    <div className="feature-metric">
+      <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">{label}</p>
+      <p className="mt-2 font-display text-2xl font-800 text-white">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-white/45">{detail}</p>
+    </div>
+  )
+}
+
+function PasswordField({
+  label,
+  placeholder,
+  value,
+  onChange,
+  visible,
+  onToggle,
+  onKeyDown,
+}) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{label}</span>
+      <div className="relative">
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          className={clsx('input-field pr-12', !visible && 'secret-field')}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-white/[0.04] p-2 text-white/45 transition-all hover:border-white/15 hover:text-white"
+          aria-label={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+        >
+          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+    </label>
+  )
+}
+
+function DurationSettingsBlock({ title, caption, draft, setDraft }) {
+  const durationMeta = useMemo(
+    () => getDurationConfig(draft.durationKey, draft.customDurationMinutes),
+    [draft.customDurationMinutes, draft.durationKey]
+  )
+
+  return (
+    <div className="ef-panel space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-display font-700 text-white">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-white/42">{caption}</p>
+        </div>
+        <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/50">
+          {durationMeta.valid ? durationMeta.label : 'A regler'}
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        {DURATION_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => setDraft((current) => ({ ...current, durationKey: option.id }))}
+            className={clsx(
+              'rounded-2xl border px-4 py-3 text-left transition-all duration-200',
+              draft.durationKey === option.id
+                ? 'border-neon-cyan/35 bg-neon-cyan/10 text-white shadow-[0_14px_34px_rgba(0,229,255,0.12)]'
+                : 'border-white/[0.08] bg-white/[0.04] text-white/55 hover:border-white/15 hover:bg-white/[0.06]'
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-display text-sm font-700">{option.label}</span>
+              {draft.durationKey === option.id && <CheckCircle2 className="h-4 w-4 text-neon-cyan" />}
+            </div>
+            <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{option.note}</p>
+          </button>
+        ))}
+      </div>
+
+      {draft.durationKey === 'custom' && (
+        <label className="block space-y-2">
+          <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Duree perso</span>
+          <input
+            type="number"
+            min="5"
+            max="10080"
+            value={draft.customDurationMinutes}
+            onChange={(event) => setDraft((current) => ({ ...current, customDurationMinutes: event.target.value }))}
+            className="input-field"
+            placeholder="180"
+          />
+          <p className={clsx('text-xs', durationMeta.valid ? 'text-white/42' : 'text-red-300')}>
+            {durationMeta.valid ? 'Entre 5 minutes et 7 jours.' : durationMeta.error}
+          </p>
+        </label>
+      )}
+
+      <label className="block space-y-2">
+        <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Polling live</span>
+        <select
+          value={String(draft.pollIntervalMs)}
+          onChange={(event) => setDraft((current) => ({ ...current, pollIntervalMs: Number(event.target.value) }))}
+          className="select-field"
+        >
+          {POLL_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label} - {option.note}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  )
+}
+
+function MailboxCard({ mailbox, active, onSelect, onRemove }) {
+  const unread = mailbox.messages.filter((message) => !message.read).length
+  const isPermanent = mailbox.durationKey === 'permanent' || !mailbox.expiresAt
+  const remainingLabel = mailbox.isExpired
+    ? 'Expiree'
+    : isPermanent
+      ? 'Permanent'
+      : formatRemaining(Math.max(0, mailbox.expiresAt - Date.now()))
+
+  return (
+    <motion.button
+      type="button"
+      layout
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.992 }}
+      onClick={onSelect}
+      className={clsx(
+        'ef-mailbox-card w-full text-left',
+        active && 'ef-mailbox-card-active',
+        mailbox.isExpired && 'ef-mailbox-card-expired'
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <div className={clsx(
+          'mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border',
+          active
+            ? 'border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan'
+            : 'border-white/10 bg-white/[0.04] text-white/45'
+        )}>
+          <Mail className="h-4 w-4" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-display text-sm font-700 text-white">{mailbox.label}</p>
+              <p className="truncate font-mono text-[11px] text-white/42" title={mailbox.address}>{mailbox.address}</p>
+            </div>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onRemove()
+              }}
+              className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-white/35 transition-all hover:border-red-400/20 hover:bg-red-400/10 hover:text-red-300"
+              aria-label={`Retirer ${mailbox.label}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className={clsx(
+              'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.16em]',
+              mailbox.isExpired
+                ? 'border-red-400/25 bg-red-400/10 text-red-300'
+                : isPermanent
+                  ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+                  : 'border-white/10 bg-white/[0.04] text-white/55'
+            )}>
+              {isPermanent ? <InfinityIcon className="h-3.5 w-3.5" /> : <Activity className="h-3.5 w-3.5" />}
+              {remainingLabel}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.16em] text-white/48">
+              <BellRing className="h-3.5 w-3.5" />
+              {unread} non lus
+            </span>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-4 text-[11px] text-white/38">
+            <span>{mailbox.messages.length} mails</span>
+            <span>Sync {mailbox.lastSyncAt ? formatMessageTime(mailbox.lastSyncAt) : '--'}</span>
+          </div>
+        </div>
+      </div>
+    </motion.button>
+  )
+}
+
+export default function EmailFastApp() {
+  const { state, actions } = useEmailFastManager()
+  const qrRef = useRef(null)
+  const [labelDraft, setLabelDraft] = useState('')
+
+  const createDurationMeta = useMemo(
+    () => getDurationConfig(state.createDraft.durationKey, state.createDraft.customDurationMinutes),
+    [state.createDraft.customDurationMinutes, state.createDraft.durationKey]
+  )
+
+  const runtimeDurationMeta = useMemo(
+    () => getDurationConfig(state.runtimeDraft.durationKey, state.runtimeDraft.customDurationMinutes),
+    [state.runtimeDraft.customDurationMinutes, state.runtimeDraft.durationKey]
+  )
+
+  const activeDurationMeta = useMemo(() => {
+    if (!state.activeMailbox) return null
+    return getDurationConfig(state.activeMailbox.durationKey, state.activeMailbox.customDurationMinutes)
+  }, [state.activeMailbox])
+
+  const allUnread = useMemo(
+    () => state.mailboxes.reduce((total, mailbox) => total + mailbox.messages.filter((message) => !message.read).length, 0),
+    [state.mailboxes]
+  )
+
+  const permanentCount = useMemo(
+    () => state.mailboxes.filter((mailbox) => mailbox.durationKey === 'permanent' || !mailbox.expiresAt).length,
+    [state.mailboxes]
+  )
+
+  const slotsLeft = MAX_MAILBOXES - state.mailboxes.length
+  const strengthMeta = getPasswordStrengthMeta(state.createPassword)
+  const previewText = state.selectedMessage
+    ? stripHtml(state.selectedMessage.bodyText || state.selectedMessage.bodyHtml || '')
+    : ''
+
+  useEffect(() => {
+    setLabelDraft(state.activeMailbox?.label || '')
+  }, [state.activeMailbox?.id, state.activeMailbox?.label])
+
+  useEffect(() => {
+    if (!state.qrOpen || !state.qrReady || !state.activeMailbox?.address || !qrRef.current || !window.QRCode) {
+      if (qrRef.current) qrRef.current.innerHTML = ''
+      return undefined
+    }
+
+    qrRef.current.innerHTML = ''
+    const instance = new window.QRCode(qrRef.current, {
+      text: state.activeMailbox.address,
+      width: 176,
+      height: 176,
+      colorDark: '#0f172a',
+      colorLight: '#ffffff',
+      correctLevel: window.QRCode.CorrectLevel.M,
+    })
+
+    return () => {
+      qrRef.current?.replaceChildren()
+      void instance
+    }
+  }, [state.activeMailbox?.address, state.qrOpen, state.qrReady])
+
+  function commitLabel() {
+    if (!state.activeMailbox?.id) return
+    const nextLabel = labelDraft.trim()
+    if (!nextLabel || nextLabel === state.activeMailbox.label) return
+    actions.setMailboxLabel(state.activeMailbox.id, nextLabel)
+  }
+
+  const motionFade = {
+    initial: { opacity: 0, y: 18 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.36, ease: 'easeOut' },
+  }
+
+  if (state.screen === 'auth') {
+    const hasSavedSession = state.mailboxes.length > 0
+
+    return (
+      <div className="email-fast-app px-4 py-5 sm:p-6 max-w-7xl mx-auto space-y-5">
+        <div className="ef-orb ef-orb-cyan" />
+        <div className="ef-orb ef-orb-violet" />
+
+        <motion.section className="feature-hero p-6 sm:p-7" {...motionFade}>
+          <div className="relative z-[1] flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <HeaderPill icon={Shield} label="session protegee" />
+                <HeaderPill icon={Sparkles} label="multi boites live" />
+                <HeaderPill icon={Gauge} label="jusqu a 5 adresses" />
+              </div>
+              <div>
+                <h1 className="font-display text-3xl font-800 text-white sm:text-4xl">Email Fast Fleet</h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55 sm:text-[15px]">
+                  Gere plusieurs boites temporaires en parallele, passe certaines en permanent, verrouille
+                  l acces avec un mot de passe unique et garde chaque inbox synchronisee sans quitter la page.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-3">
+            <MetricTile label="Capacite" value={`${MAX_MAILBOXES} boites`} detail="Pile multi-adresses prete a etre lancee." />
+            <MetricTile label="Retentions" value="10 min -> permanent" detail="Preset rapide ou duree perso." />
+            <MetricTile label="Protection" value="Mot de passe + lockout" detail="3 essais puis pause 30 secondes." />
+          </div>
+        </motion.section>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_360px]">
+          <motion.section className="glass-card relative overflow-hidden p-5 sm:p-6" {...motionFade}>
+            {state.lockoutSecondsLeft > 0 && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-950/90 backdrop-blur-xl">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-red-400/20 bg-red-400/10 text-red-300">
+                  <ShieldAlert className="h-6 w-6" />
+                </div>
+                <div className="text-center">
+                  <p className="font-display text-xl font-700 text-white">Pause securite</p>
+                  <p className="mt-2 font-mono text-sm text-red-300">{state.lockoutSecondsLeft}s avant nouvel essai</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-display font-700 text-white">
+                  {hasSavedSession ? 'Reprendre la session' : 'Initialiser la session'}
+                </p>
+                <p className="mt-1 text-sm text-white/45">
+                  {hasSavedSession
+                    ? 'Tes boites sont gardees en memoire. Debloque la session pour reprendre.'
+                    : 'Choisis le mot de passe maitre puis regle la premiere boite.'}
+                </p>
+              </div>
+
+              {!hasSavedSession && (
+                <div className="rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-1 text-[11px] font-mono text-neon-cyan">
+                  Session 1/{MAX_MAILBOXES}
+                </div>
+              )}
+            </div>
+
+            {!hasSavedSession && (
+              <div className="mt-5 flex rounded-2xl border border-white/10 bg-white/[0.04] p-1">
+                <button
+                  type="button"
+                  onClick={() => actions.setAuthMode('create')}
+                  className={clsx(
+                    'flex-1 rounded-xl px-4 py-2.5 text-sm font-display font-700 transition-all',
+                    state.authMode === 'create'
+                      ? 'bg-white/[0.08] text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
+                      : 'text-white/45 hover:text-white'
+                  )}
+                >
+                  Nouvelle flotte
+                </button>
+                <button
+                  type="button"
+                  onClick={() => actions.setAuthMode('access')}
+                  className={clsx(
+                    'flex-1 rounded-xl px-4 py-2.5 text-sm font-display font-700 transition-all',
+                    state.authMode === 'access'
+                      ? 'bg-white/[0.08] text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
+                      : 'text-white/45 hover:text-white'
+                  )}
+                >
+                  Acceder
+                </button>
+              </div>
+            )}
+
+            {state.authError && (
+              <div className="mt-5 rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+                {state.authError}
+              </div>
+            )}
+
+            {(!hasSavedSession && state.authMode === 'create') && (
+              <div className="mt-5 space-y-5">
+                <PasswordField
+                  label="Mot de passe maitre"
+                  placeholder="Choisis un mot de passe fort"
+                  value={state.createPassword}
+                  onChange={actions.setCreatePassword}
+                  visible={state.showCreatePassword}
+                  onToggle={() => actions.setShowCreatePassword((current) => !current)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      actions.handleCreateSubmit()
+                    }
+                  }}
+                />
+
+                <div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/[0.05]">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{ width: strengthMeta.width, background: strengthMeta.color }}
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+                    <span className="font-mono uppercase tracking-[0.16em] text-white/35">Solidite</span>
+                    <span className="text-white/45">{strengthMeta.label}</span>
+                  </div>
+                </div>
+
+                <PasswordField
+                  label="Confirmation"
+                  placeholder="Repete le mot de passe"
+                  value={state.createPasswordConfirm}
+                  onChange={actions.setCreatePasswordConfirm}
+                  visible={state.showCreatePasswordConfirm}
+                  onToggle={() => actions.setShowCreatePasswordConfirm((current) => !current)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      actions.handleCreateSubmit()
+                    }
+                  }}
+                />
+
+                <DurationSettingsBlock
+                  title="Reglage de la premiere boite"
+                  caption="Le preset definit la retention locale et le rythme de synchro de depart."
+                  draft={state.createDraft}
+                  setDraft={actions.setCreateDraft}
+                />
+
+                <button
+                  type="button"
+                  onClick={actions.handleCreateSubmit}
+                  disabled={state.isCreating || !createDurationMeta.valid}
+                  className="btn-primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-mono disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {state.isCreating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
+                  {state.isCreating ? 'Creation en cours' : 'Creer la premiere boite'}
+                </button>
+              </div>
+            )}
+
+            {(hasSavedSession || state.authMode === 'access') && (
+              <div className="mt-5 space-y-5">
+                {hasSavedSession && (
+                  <div className="rounded-2xl border border-neon-cyan/15 bg-neon-cyan/10 px-4 py-3 text-sm text-neon-cyan">
+                    {state.mailboxes.length} boite(s) en attente, {allUnread} email(s) non lus.
+                  </div>
+                )}
+
+                <PasswordField
+                  label="Mot de passe"
+                  placeholder="Entre le mot de passe maitre"
+                  value={state.accessPassword}
+                  onChange={actions.setAccessPassword}
+                  visible={state.showAccessPassword}
+                  onToggle={() => actions.setShowAccessPassword((current) => !current)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      actions.handleUnlock()
+                    }
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={actions.handleUnlock}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-4 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15"
+                >
+                  <KeyRound className="h-4 w-4" />
+                  Debloquer la flotte
+                </button>
+              </div>
+            )}
+          </motion.section>
+
+          <motion.aside className="space-y-4" {...motionFade}>
+            <div className="glass-card p-5 sm:p-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan">
+                  <UserPlus className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-display text-lg font-700 text-white">Ce que tu vas lancer</p>
+                  <p className="mt-1 text-sm text-white/45">Une vraie pile multi-adresses avec unlock unique.</p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <div className="ef-side-note">
+                  <span className="ef-side-note-dot bg-neon-cyan" />
+                  Jusqu a {MAX_MAILBOXES} boites actives en meme temps.
+                </div>
+                <div className="ef-side-note">
+                  <span className="ef-side-note-dot bg-emerald-300" />
+                  Chaque boite garde sa propre retention et sa cadence de sync.
+                </div>
+                <div className="ef-side-note">
+                  <span className="ef-side-note-dot bg-neon-violet" />
+                  Bascule instantanee entre inbox et messages en temps reel.
+                </div>
+              </div>
+            </div>
+
+            <div className="glass-card p-5 sm:p-6">
+              <p className="text-sm font-display font-700 text-white">Verrouillage intelligent</p>
+              <p className="mt-2 text-sm leading-6 text-white/45">
+                Le mot de passe protege toute la session. Trois erreurs consecutives declenchent un lockout de 30 secondes.
+              </p>
+
+              <div className="mt-5 grid gap-3">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                  <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Flotte</p>
+                  <p className="mt-2 font-display text-xl font-800 text-white">{state.mailboxes.length}/{MAX_MAILBOXES}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                  <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Permanent</p>
+                  <p className="mt-2 font-display text-xl font-800 text-white">{permanentCount}</p>
+                </div>
+              </div>
+            </div>
+          </motion.aside>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="email-fast-app px-4 py-5 sm:p-6 max-w-[1500px] mx-auto space-y-5">
+      <div className="ef-orb ef-orb-cyan" />
+      <div className="ef-orb ef-orb-violet" />
+
+      <motion.section className="feature-hero p-6 sm:p-7" {...motionFade}>
+        <div className="relative z-[1] flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <HeaderPill icon={Mail} label={`${state.mailboxes.length}/${MAX_MAILBOXES} boites`} />
+              <HeaderPill icon={BellRing} label={`${allUnread} non lus`} />
+              <HeaderPill icon={InfinityIcon} label={`${permanentCount} permanent(es)`} />
+            </div>
+            <div>
+              <h1 className="font-display text-3xl font-800 text-white sm:text-4xl">Email Fast Fleet</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55 sm:text-[15px]">
+                Passe d une boite a l autre sans perdre le fil, garde plusieurs inbox en synchro et ajuste la
+                retention de chaque adresse a la vollee.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-1 text-[11px] font-mono text-neon-cyan">
+                Active: {state.activeMailbox?.address || 'Aucune'}
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/45">
+                Derniere sync: {state.activeMailbox?.lastSyncAt ? formatDateTime(state.activeMailbox.lastSyncAt) : '--'}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={actions.copyActiveAddress}
+              disabled={!state.activeMailbox}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-neon-cyan/20 hover:text-white disabled:opacity-40"
+            >
+              <Copy className="h-4 w-4" />
+              Copier
+            </button>
+            <button
+              type="button"
+              onClick={actions.refreshActiveMailbox}
+              disabled={!state.activeMailbox || state.activeMailbox.isExpired}
+              className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-40"
+            >
+              <RefreshCw className={clsx('h-4 w-4', state.isRefreshing && 'animate-spin')} />
+              Actualiser
+            </button>
+            <button
+              type="button"
+              onClick={actions.handleLock}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-red-400/20 hover:bg-red-400/10 hover:text-red-300"
+            >
+              <Lock className="h-4 w-4" />
+              Verrouiller
+            </button>
+          </div>
+        </div>
+
+        <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-4">
+          <MetricTile label="Total boites" value={state.mailboxes.length} detail={`${slotsLeft} slot(s) libre(s)`} />
+          <MetricTile label="Unread global" value={allUnread} detail="Somme de toutes les inbox synchronisees." />
+          <MetricTile label="Permanent" value={permanentCount} detail="Boites sans limite de retention locale." />
+          <MetricTile
+            label="Boite active"
+            value={state.activeMailbox ? state.activeMailbox.messages.length : 0}
+            detail={state.activeMailbox ? `${state.unreadCount} non lus sur la boite ouverte.` : 'Ouvre une boite pour lire sa pile.'}
+          />
+        </div>
+      </motion.section>
+
+      <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
+        <motion.aside className="space-y-5" {...motionFade}>
+          <div className="glass-card p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-display text-lg font-700 text-white">Fleet</p>
+                <p className="mt-1 text-sm text-white/45">Clique une boite pour afficher sa reception en direct.</p>
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/45">
+                {state.mailboxes.length}/{MAX_MAILBOXES}
+              </div>
+            </div>
+
+            <div className="ef-mailbox-list mt-5">
+              <AnimatePresence initial={false}>
+                {state.mailboxes.map((mailbox) => (
+                  <MailboxCard
+                    key={mailbox.id}
+                    mailbox={mailbox}
+                    active={mailbox.id === state.activeMailboxId}
+                    onSelect={() => actions.switchMailbox(mailbox.id)}
+                    onRemove={() => actions.removeMailbox(mailbox.id)}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {state.mailboxes.length < MAX_MAILBOXES && (
+            <div className="glass-card p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-display text-lg font-700 text-white">Ajouter une boite</p>
+                  <p className="mt-1 text-sm text-white/45">Empile une nouvelle adresse sans couper les autres flux.</p>
+                </div>
+                <div className="rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-1 text-[11px] font-mono text-neon-cyan">
+                  {slotsLeft} libre(s)
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <DurationSettingsBlock
+                  title="Profil de la nouvelle boite"
+                  caption="Chaque adresse ajoutee garde ses propres reglages de retention et de synchro."
+                  draft={state.createDraft}
+                  setDraft={actions.setCreateDraft}
+                />
+
+                <button
+                  type="button"
+                  onClick={actions.handleCreateAnotherMailbox}
+                  disabled={state.isCreating || !createDurationMeta.valid}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {state.isCreating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
+                  {state.isCreating ? 'Creation...' : 'Ajouter une boite'}
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.aside>
+
+        <motion.section className="space-y-5" {...motionFade}>
+          <div className="glass-card p-5 sm:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="font-display text-lg font-700 text-white">Boite de reception</p>
+                <p className="mt-1 text-sm text-white/45">
+                  {state.activeMailbox
+                    ? `Flux en direct pour ${state.activeMailbox.label}.`
+                    : 'Selectionne une boite a gauche.'}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {FILTER_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => actions.setFilterMode(option.id)}
+                    className={clsx(
+                      'rounded-full border px-3 py-2 text-[11px] font-mono uppercase tracking-[0.16em] transition-all',
+                      state.filterMode === option.id
+                        ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan'
+                        : 'border-white/10 bg-white/[0.04] text-white/45 hover:text-white'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5 relative">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+              <input
+                value={state.searchQuery}
+                onChange={(event) => actions.setSearchQuery(event.target.value)}
+                placeholder="Rechercher un expediteur, objet ou contenu..."
+                className="input-field pl-11"
+              />
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {!state.activeMailbox && (
+                <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 py-12 text-center text-white/40">
+                  Ouvre une boite depuis la colonne de gauche.
+                </div>
+              )}
+
+              {state.activeMailbox && state.visibleMessages.length === 0 && (
+                <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 py-12 text-center">
+                  <Inbox className="mx-auto h-10 w-10 text-white/10" />
+                  <p className="mt-4 font-display text-lg font-700 text-white">
+                    {state.searchQuery ? 'Aucun resultat' : 'Inbox encore vide'}
+                  </p>
+                  <p className="mt-2 text-sm text-white/40">
+                    {state.searchQuery
+                      ? 'Change le filtre ou la recherche.'
+                      : 'Les nouveaux mails apparaitront ici en temps reel.'}
+                  </p>
+                </div>
+              )}
+
+              <AnimatePresence initial={false}>
+                {state.visibleMessages.map((message) => {
+                  const preview = stripHtml(message.bodyText || message.bodyHtml || '').slice(0, 150) || 'Apercu indisponible.'
+                  const selected = state.selectedMessage?.id === message.id
+
+                  return (
+                    <motion.button
+                      key={message.id}
+                      type="button"
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      onClick={() => actions.openMessage(message.id)}
+                      className={clsx(
+                        'w-full rounded-[24px] border p-4 text-left transition-all duration-200',
+                        selected
+                          ? 'border-neon-cyan/25 bg-neon-cyan/10 shadow-[0_16px_40px_rgba(0,229,255,0.08)]'
+                          : 'border-white/10 bg-white/[0.04] hover:border-white/15 hover:bg-white/[0.055]',
+                        !message.read && 'ef-mail-unread'
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            {!message.read && <span className="h-2 w-2 rounded-full bg-neon-cyan" />}
+                            <p className="truncate font-display text-base font-700 text-white">{message.subject}</p>
+                          </div>
+                          <p className="mt-1 truncate text-sm text-white/55">{message.from}</p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              actions.toggleStar(message.id)
+                            }}
+                            className={clsx(
+                              'rounded-xl border p-2 transition-all',
+                              message.starred
+                                ? 'border-amber-400/20 bg-amber-400/10 text-amber-300'
+                                : 'border-white/10 bg-white/[0.04] text-white/35 hover:text-amber-300'
+                            )}
+                            aria-label={message.starred ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                          >
+                            <Star className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              actions.deleteMessage(message.id)
+                            }}
+                            className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-white/35 transition-all hover:border-red-400/20 hover:bg-red-400/10 hover:text-red-300"
+                            aria-label="Supprimer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="mt-3 text-sm leading-6 text-white/45">{preview}</p>
+
+                      <div className="mt-4 flex items-center justify-between gap-3 text-[11px] font-mono uppercase tracking-[0.16em] text-white/32">
+                        <span>{formatMessageTime(message.date)}</span>
+                        <span>{message.starred ? 'favori' : message.read ? 'lu' : 'nouveau'}</span>
+                      </div>
+                    </motion.button>
+                  )
+                })}
+              </AnimatePresence>
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.aside className="space-y-5" {...motionFade}>
+          <div className="glass-card p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-display text-lg font-700 text-white">Pilotage de la boite</p>
+                <p className="mt-1 text-sm text-white/45">Ajuste la boite active sans casser la flotte.</p>
+              </div>
+              {activeDurationMeta && (
+                <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/48">
+                  {activeDurationMeta.label}
+                </div>
+              )}
+            </div>
+
+            {state.activeMailbox ? (
+              <div className="mt-5 space-y-5">
+                <div className="space-y-2">
+                  <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Nom local</span>
+                  <div className="flex gap-2">
+                    <input
+                      value={labelDraft}
+                      onChange={(event) => setLabelDraft(event.target.value)}
+                      onBlur={commitLabel}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          commitLabel()
+                        }
+                      }}
+                      className="input-field"
+                      placeholder="Nom de la boite"
+                    />
+                    <button
+                      type="button"
+                      onClick={commitLabel}
+                      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-white/70 transition-all hover:border-neon-cyan/20 hover:text-white"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="ef-panel space-y-4">
+                  <div>
+                    <p className="text-sm font-display font-700 text-white">Adresse active</p>
+                    <p className="mt-2 break-all font-mono text-sm text-neon-cyan">{state.activeMailbox.address}</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-white/45">Retention</span>
+                      <span className="font-mono text-white">
+                        {state.activeMailbox.isExpired
+                          ? 'Expiree'
+                          : activeDurationMeta?.isPermanent
+                            ? 'Permanent'
+                            : formatRemaining(state.remainingMs)}
+                      </span>
+                    </div>
+                    <div className="ef-progress-track">
+                      <div
+                        className={clsx('ef-progress-bar', activeDurationMeta?.isPermanent && 'ef-progress-bar-permanent')}
+                        style={{ width: `${state.activeMailbox.isExpired ? 100 : Math.max(6, state.progressPercent)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Messages</p>
+                      <p className="mt-2 font-display text-xl font-800 text-white">{state.activeMailbox.messages.length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Non lus</p>
+                      <p className="mt-2 font-display text-xl font-800 text-white">{state.unreadCount}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <DurationSettingsBlock
+                  title="Runtime actif"
+                  caption="Tu peux rallonger, rendre permanent ou ralentir la synchro a tout moment."
+                  draft={state.runtimeDraft}
+                  setDraft={actions.setRuntimeDraft}
+                />
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={actions.applyRuntimeSettings}
+                    disabled={!runtimeDurationMeta.valid}
+                    className="btn-primary inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-mono disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Gauge className="h-4 w-4" />
+                    Appliquer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => actions.extendActiveMailbox(60)}
+                    disabled={!state.activeMailbox || activeDurationMeta?.isPermanent}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-white/15 hover:text-white disabled:opacity-40"
+                  >
+                    <Activity className="h-4 w-4" />
+                    +1 heure
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => actions.extendActiveMailbox(10)}
+                    disabled={!state.activeMailbox || activeDurationMeta?.isPermanent}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-white/15 hover:text-white disabled:opacity-40"
+                  >
+                    <Activity className="h-4 w-4" />
+                    +10 min
+                  </button>
+                  <button
+                    type="button"
+                    onClick={actions.makeActivePermanent}
+                    disabled={!state.activeMailbox || activeDurationMeta?.isPermanent}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-300 transition-all hover:bg-emerald-400/15 disabled:opacity-40"
+                  >
+                    <InfinityIcon className="h-4 w-4" />
+                    Permanent
+                  </button>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={() => actions.setQrOpen((current) => !current)}
+                    className={clsx(
+                      'inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm transition-all',
+                      state.qrOpen
+                        ? 'border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan'
+                        : 'border-white/10 bg-white/[0.05] text-white/70 hover:text-white'
+                    )}
+                  >
+                    <QrCode className="h-4 w-4" />
+                    QR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={actions.copyActiveAddress}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-white/15 hover:text-white"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copier
+                  </button>
+                  <button
+                    type="button"
+                    onClick={actions.exportActiveMailbox}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-white/15 hover:text-white"
+                  >
+                    <Download className="h-4 w-4" />
+                    Export
+                  </button>
+                </div>
+
+                {state.syncError && (
+                  <div className="rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+                    {state.syncError}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-5 rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 py-12 text-center text-white/40">
+                Selectionne une boite pour piloter sa retention.
+              </div>
+            )}
+          </div>
+
+          {state.qrOpen && state.activeMailbox && (
+            <div className="glass-card p-5 sm:p-6">
+              <p className="font-display text-lg font-700 text-white">QR adresse</p>
+              <p className="mt-1 text-sm text-white/45">Scanne pour recuperer la boite sur mobile.</p>
+
+              <div className="mt-5 flex flex-col items-center gap-4">
+                <div className="ef-qr-shell">
+                  <div ref={qrRef} />
+                </div>
+                <p className="break-all text-center font-mono text-xs text-white/45">{state.activeMailbox.address}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="glass-card p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-display text-lg font-700 text-white">Preview</p>
+                <p className="mt-1 text-sm text-white/45">Lecture rapide du mail selectionne.</p>
+              </div>
+              {state.selectedMessage && (
+                <button
+                  type="button"
+                  onClick={actions.copyMessageContent}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white/70 transition-all hover:border-white/15 hover:text-white"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copier
+                </button>
+              )}
+            </div>
+
+            {!state.selectedMessage && (
+              <div className="mt-5 rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 py-12 text-center">
+                <Inbox className="mx-auto h-10 w-10 text-white/10" />
+                <p className="mt-4 font-display text-lg font-700 text-white">Aucun mail ouvert</p>
+                <p className="mt-2 text-sm text-white/40">Choisis un message pour afficher son contenu ici.</p>
+              </div>
+            )}
+
+            {state.selectedMessage && (
+              <div className="mt-5 space-y-4">
+                <div>
+                  <p className="text-xs font-mono uppercase tracking-[0.16em] text-white/35">Sujet</p>
+                  <p className="mt-2 font-display text-xl font-700 text-white">{state.selectedMessage.subject}</p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/65">
+                  <p><span className="text-white/38">De:</span> {state.selectedMessage.from}</p>
+                  <p className="mt-2"><span className="text-white/38">Recu:</span> {formatDateTime(state.selectedMessage.date)}</p>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => actions.setModalTab('text')}
+                    className={clsx(
+                      'rounded-full border px-3 py-2 text-[11px] font-mono uppercase tracking-[0.16em] transition-all',
+                      state.modalTab === 'text'
+                        ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan'
+                        : 'border-white/10 bg-white/[0.04] text-white/45 hover:text-white'
+                    )}
+                  >
+                    Texte
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => actions.setModalTab('html')}
+                    disabled={!state.selectedMessage.bodyHtml}
+                    className={clsx(
+                      'rounded-full border px-3 py-2 text-[11px] font-mono uppercase tracking-[0.16em] transition-all',
+                      state.modalTab === 'html'
+                        ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan'
+                        : 'border-white/10 bg-white/[0.04] text-white/45 hover:text-white',
+                      !state.selectedMessage.bodyHtml && 'cursor-not-allowed opacity-40'
+                    )}
+                  >
+                    HTML
+                  </button>
+                </div>
+
+                {state.modalTab === 'html' && state.selectedMessage.bodyHtml ? (
+                  <div className="ef-preview-shell">
+                    <iframe
+                      title={state.selectedMessage.subject}
+                      className="min-h-[360px] w-full rounded-[18px] bg-white"
+                      sandbox="allow-same-origin"
+                      srcDoc={state.selectedMessage.bodyHtml}
+                    />
+                  </div>
+                ) : (
+                  <div className="ef-preview-shell">
+                    <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-white/72">
+                      {state.selectedMessage.bodyText || previewText || '(vide)'}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </motion.aside>
+      </div>
+    </div>
+  )
+}
