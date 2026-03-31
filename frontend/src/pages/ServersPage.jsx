@@ -5,6 +5,7 @@ import {
   Activity,
   ArrowRight,
   CheckCircle2,
+  Compass,
   PlusCircle,
   RefreshCw,
   Rocket,
@@ -171,6 +172,17 @@ export default function ServersPage() {
                   <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                   {t('servers.sync')}
                 </motion.button>
+
+                <motion.button
+                  type="button"
+                  whileHover={{ y: -2, scale: 1.01 }}
+                  whileTap={{ scale: 0.985 }}
+                  onClick={() => navigate('/dashboard/osint')}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-neon-violet/25 bg-neon-violet/10 px-4 py-3 text-sm font-mono text-neon-violet transition-all hover:bg-neon-violet/16"
+                >
+                  <Compass className="h-4 w-4" />
+                  OSINT
+                </motion.button>
               </div>
             </div>
           </div>
@@ -191,6 +203,33 @@ export default function ServersPage() {
           </p>
         </ServerSurface>
       )}
+
+      <ServerSurface glow="violet" className="p-5 sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-neon-violet/20 bg-neon-violet/10 px-3 py-1 text-xs font-mono text-neon-violet">
+              <Compass className="h-3.5 w-3.5" />
+              Nouveau module
+            </div>
+            <p className="mt-3 font-display text-2xl font-700 text-white">OSINT</p>
+            <p className="mt-2 text-sm leading-7 text-white/45">
+              Ouvre le tracker de pseudos et la geolocalisation d image meme sans serveur actif.
+            </p>
+          </div>
+
+          <motion.button
+            type="button"
+            whileHover={{ y: -2, scale: 1.01 }}
+            whileTap={{ scale: 0.985 }}
+            onClick={() => navigate('/dashboard/osint')}
+            className="inline-flex items-center gap-2 rounded-2xl border border-neon-violet/25 bg-neon-violet/10 px-5 py-3 text-sm font-mono text-neon-violet transition-all hover:bg-neon-violet/16"
+          >
+            <Compass className="h-4 w-4" />
+            Ouvrir OSINT
+            <ArrowRight className="h-4 w-4" />
+          </motion.button>
+        </div>
+      </ServerSurface>
 
       {selectedGuild && (
         <ServerSurface glow="green" className="p-5 sm:p-6">
