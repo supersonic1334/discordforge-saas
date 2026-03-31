@@ -408,7 +408,7 @@ export default function AuthPage() {
 
     return (
     <div
-      className="auth-page-shell app-screen-scroll bg-surface-0 relative p-4 md:px-6 md:py-8"
+      className="auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8"
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >
