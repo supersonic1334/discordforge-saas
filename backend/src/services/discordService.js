@@ -444,6 +444,12 @@ function getGuildIconUrl(guildId, iconHash, size = 128) {
   return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.${ext}?size=${size}`;
 }
 
+function getBannerUrl(userId, bannerHash, size = 480) {
+  if (!bannerHash || !userId) return null;
+  const ext = String(bannerHash).startsWith('a_') ? 'gif' : 'png';
+  return `https://cdn.discordapp.com/banners/${userId}/${bannerHash}.${ext}?size=${size}`;
+}
+
 module.exports = {
   DiscordAPIError,
   validateToken,
@@ -479,6 +485,7 @@ module.exports = {
   sendDirectMessage,
   getGuildMembers,
   getAvatarUrl,
+  getBannerUrl,
   getGuildIconUrl,
   buildBotInviteUrl,
 };

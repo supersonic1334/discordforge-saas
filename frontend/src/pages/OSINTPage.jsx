@@ -15,11 +15,12 @@ import {
   Upload,
 } from 'lucide-react'
 import { osintAPI } from '../services/api'
+import DiscordIntelPanel from '../components/osint/DiscordIntelPanel'
 
 const PLATFORMS = [
   { id: 'instagram', name: 'Instagram', cat: 'Social', url: (value) => `https://instagram.com/${value}` },
   { id: 'tiktok', name: 'TikTok', cat: 'Social', url: (value) => `https://tiktok.com/@${value}` },
-  { id: 'twitter', name: 'Twitter/X', cat: 'Social', url: (value) => `https://twitter.com/${value}` },
+  { id: 'twitter', name: 'Twitter/X', cat: 'Social', url: (value) => `https://x.com/${value}` },
   { id: 'youtube', name: 'YouTube', cat: 'Video', url: (value) => `https://youtube.com/@${value}` },
   { id: 'snapchat', name: 'Snapchat', cat: 'Social', url: (value) => `https://snapchat.com/add/${value}` },
   { id: 'facebook', name: 'Facebook', cat: 'Social', url: (value) => `https://facebook.com/${value}` },
@@ -99,9 +100,51 @@ function MetricTile({ label, value, hint = '', tone = '' }) {
   )
 }
 
+function formatDuration(durationMs) {
+  if (!Number.isFinite(Number(durationMs))) return '--'
+  const seconds = Number(durationMs) / 1000
+  return seconds < 1 ? `${Math.max(1, Math.round(Number(durationMs)))} ms` : `${seconds.toFixed(seconds >= 10 ? 0 : 1)} s`
+}
+
+function formatDate(value) {
+  if (!value) return '--'
+
+  try {
+    return new Intl.DateTimeFormat('fr-FR', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value))
+  } catch {
+    return value
+  }
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes || 0)
+  if (!Number.isFinite(size) || size <= 0) return '--'
+  return size < 1024 * 1024 ? `${Math.round(size / 1024)} Ko` : `${(size / (1024 * 1024)).toFixed(2)} Mo`
+}
+
+function StatusBanner({ active, title, detail }) {
+  return (
+    <div className={`rounded-[22px] border px-4 py-4 ${active ? 'border-emerald-400/18 bg-emerald-400/10' : 'border-amber-400/18 bg-amber-400/10'}`}>
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl border ${active ? 'border-emerald-400/18 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/18 bg-amber-400/10 text-amber-100'}`}>
+          {active ? <ShieldCheck className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+        </div>
+        <div>
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{title}</p>
+          <p className="mt-1 text-sm leading-6 text-white/70">{detail}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function statusBadge(result, loading) {
   if (loading) return { label: 'Scan', tone: 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan' }
   if (!result) return { label: 'Attente', tone: 'border-white/10 bg-white/[0.04] text-white/45' }
+  if (result.supported === false) return { label: 'Hors corpus', tone: 'border-white/10 bg-white/[0.04] text-white/45' }
   if (result.found) {
     return result.confidence >= 70
       ? { label: 'Trouve', tone: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' }
@@ -114,29 +157,42 @@ function statusBadge(result, loading) {
 
 function UsernameTracker({ status }) {
   const categories = useMemo(() => ['Tous', ...new Set(PLATFORMS.map((platform) => platform.cat))], [])
+  const sweepFilters = useMemo(() => [
+    { id: 'found', label: 'Trouves' },
+    { id: 'unknown', label: 'Ambigus' },
+    { id: 'all', label: 'Tous' },
+  ], [])
   const [input, setInput] = useState('')
   const [username, setUsername] = useState('')
   const [filter, setFilter] = useState('Tous')
+  const [sweepFilter, setSweepFilter] = useState('found')
   const [phase, setPhase] = useState('idle')
-  const [results, setResults] = useState({})
+  const [scanData, setScanData] = useState(null)
   const [error, setError] = useState(null)
 
+  const results = scanData?.results || {}
   const filteredPlatforms = PLATFORMS.filter((platform) => filter === 'Tous' || platform.cat === filter)
   const foundPlatforms = PLATFORMS.filter((platform) => results[platform.id]?.found)
   const highConfidence = foundPlatforms.filter((platform) => Number(results[platform.id]?.confidence || 0) >= 70)
+  const sweepRows = useMemo(() => {
+    const rows = scanData?.sites || []
+    if (sweepFilter === 'found') return rows.filter((entry) => entry.status === 'found').slice(0, 120)
+    if (sweepFilter === 'unknown') return rows.filter((entry) => entry.status === 'unknown').slice(0, 120)
+    return rows.slice(0, 120)
+  }, [scanData, sweepFilter])
 
   async function handleScan() {
     const cleaned = input.trim().replace(/^@+/, '')
-    if (!cleaned || phase === 'loading' || !status.configured) return
+    if (!cleaned || phase === 'loading' || !status.usernameConfigured) return
 
     setPhase('loading')
     setUsername(cleaned)
-    setResults({})
+    setScanData(null)
     setError(null)
 
     try {
       const response = await osintAPI.scanUsername(cleaned)
-      setResults(response.data?.results || {})
+      setScanData(response.data || null)
       setPhase('done')
     } catch (requestError) {
       const nextError = getErrorPayload(requestError)
@@ -163,7 +219,7 @@ function UsernameTracker({ status }) {
                 }}
                 placeholder="Pseudo, handle, alias..."
                 className="input-field pl-11"
-                disabled={phase === 'loading' || status.loading || !status.configured}
+                disabled={phase === 'loading' || status.loading}
               />
             </div>
 
@@ -171,11 +227,11 @@ function UsernameTracker({ status }) {
               <button
                 type="button"
                 onClick={() => void handleScan()}
-                disabled={!input.trim() || phase === 'loading' || status.loading || !status.configured}
+                disabled={!input.trim() || phase === 'loading' || status.loading || !status.usernameConfigured}
                 className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <RefreshCw className={`h-4 w-4 ${phase === 'loading' ? 'animate-spin' : ''}`} />
-                {phase === 'loading' ? 'Scan...' : 'Scanner'}
+                {phase === 'loading' ? 'Sweep...' : 'Lancer le sweep'}
               </button>
 
               <button
@@ -183,9 +239,10 @@ function UsernameTracker({ status }) {
                 onClick={() => {
                   setInput('')
                   setUsername('')
-                  setResults({})
+                  setScanData(null)
                   setError(null)
                   setFilter('Tous')
+                  setSweepFilter('found')
                   setPhase('idle')
                 }}
                 className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:text-white"
@@ -208,15 +265,24 @@ function UsernameTracker({ status }) {
         </div>
       </div>
 
+      {!status.usernameConfigured ? (
+        <StatusBanner
+          active={false}
+          title="Sweep indisponible"
+          detail="Le corpus OSINT local n est pas charge sur le serveur. Tu peux saisir un pseudo, mais le sweep reseau restera bloque tant que le moteur n est pas disponible."
+        />
+      ) : null}
+
       <ErrorPanel error={error} onRetry={phase === 'error' ? () => void handleScan() : null} />
 
       {phase === 'done' || phase === 'error' ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricTile label="Plateformes" value={foundPlatforms.length} hint="comptes detectes" tone="border-neon-cyan/18 bg-neon-cyan/[0.08]" />
+            <MetricTile label="Hits" value={scanData?.summary?.found ?? foundPlatforms.length} hint="profils detectes" tone="border-neon-cyan/18 bg-neon-cyan/[0.08]" />
             <MetricTile label="Confiance forte" value={highConfidence.length} hint="score 70+" tone="border-emerald-400/20 bg-emerald-400/10 text-emerald-100" />
-            <MetricTile label="Probables" value={Math.max(0, foundPlatforms.length - highConfidence.length)} hint="a verifier" tone="border-amber-400/20 bg-amber-400/10 text-amber-100" />
-            <MetricTile label="Corpus" value={PLATFORMS.length} hint={username ? `pour @${username}` : 'plateformes'} />
+            <MetricTile label="Ambigus" value={scanData?.summary?.unknown ?? Math.max(0, foundPlatforms.length - highConfidence.length)} hint="rate limit ou doute" tone="border-amber-400/20 bg-amber-400/10 text-amber-100" />
+            <MetricTile label="Corpus" value={scanData?.summary?.checked ?? status.usernameSiteCount ?? PLATFORMS.length} hint={username ? `pour @${username}` : 'plateformes'} />
+            <MetricTile label="Duree" value={formatDuration(scanData?.summary?.durationMs)} hint="probe complet" tone="border-violet-400/18 bg-violet-400/10 text-violet-100" />
           </div>
 
           <div className="spotlight-card p-4">
@@ -300,13 +366,108 @@ function UsernameTracker({ status }) {
               )
             })}
           </div>
+
+          {scanData?.sites?.length ? (
+            <div className="spotlight-card p-5 sm:p-6">
+              <div className="relative z-[1] space-y-5">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div>
+                    <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Sweep etendu</p>
+                    <p className="mt-2 text-sm leading-6 text-white/55">
+                      Affichage de {sweepRows.length} ligne{sweepRows.length > 1 ? 's' : ''} sur {scanData.summary?.checked || scanData.sites.length} verifications.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {sweepFilters.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => setSweepFilter(entry.id)}
+                        className={`rounded-full border px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] transition-all ${
+                          sweepFilter === entry.id
+                            ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan'
+                            : 'border-white/10 bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/80'
+                        }`}
+                      >
+                        {entry.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid gap-4">
+                  {sweepRows.length ? sweepRows.map((entry) => {
+                    const badge = entry.status === 'found'
+                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+                      : entry.status === 'unknown'
+                        ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
+                        : 'border-white/10 bg-white/[0.04] text-white/45'
+
+                    const label = entry.status === 'found' ? 'Trouve' : entry.status === 'unknown' ? 'Ambigu' : 'Absent'
+
+                    return (
+                      <div key={`${entry.id}-${entry.profileUrl || entry.mainUrl || entry.siteName}`} className={`rounded-[22px] border p-4 ${entry.status === 'found' ? 'border-emerald-400/18 bg-emerald-400/[0.07]' : entry.status === 'unknown' ? 'border-amber-400/18 bg-amber-400/[0.06]' : 'border-white/8 bg-black/15'}`}>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-display text-lg font-700 text-white">{entry.siteName}</p>
+                              <span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] ${badge}`}>{label}</span>
+                              {entry.category ? <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/45">{entry.category}</span> : null}
+                            </div>
+                            <p className="mt-1 text-xs font-mono uppercase tracking-[0.2em] text-white/30">{entry.domain || 'profil public'}</p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">Score {entry.confidence}</span>
+                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">{formatDuration(entry.durationMs)}</span>
+                          </div>
+                        </div>
+
+                        <p className="mt-4 text-sm leading-6 text-white/65">{entry.info}</p>
+
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          {entry.profileUrl ? (
+                            <a
+                              href={entry.profileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15"
+                            >
+                              Profil
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          ) : null}
+                          {entry.mainUrl ? (
+                            <a
+                              href={entry.mainUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:text-white"
+                            >
+                              Site
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  }) : (
+                    <div className="rounded-[24px] border border-white/8 bg-black/15 px-5 py-6 text-sm text-white/50">
+                      Aucun resultat a afficher avec ce filtre.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="feature-hero p-10 text-center">
           <div className="relative z-[1]">
             <Fingerprint className="mx-auto h-12 w-12 text-white/10" />
             <p className="mt-4 font-display text-xl font-700 text-white">Username tracker</p>
-            <p className="mt-2 text-sm leading-6 text-white/45">Lance une estimation multi-plateformes sur un handle unique.</p>
+            <p className="mt-2 text-sm leading-6 text-white/45">Lance un sweep reseau massif sur un large corpus de profils publics.</p>
           </div>
         </div>
       )}
@@ -366,6 +527,7 @@ function ImageGeolocator({ status }) {
         base64: dataUrl.split(',')[1] || '',
         mimeType: file.type,
         name: file.name || 'image',
+        size: file.size || 0,
       })
       setResult(null)
       setError(null)
@@ -378,7 +540,7 @@ function ImageGeolocator({ status }) {
   }
 
   async function analyze() {
-    if (!imagePayload || phase === 'loading' || !status.configured) return
+    if (!imagePayload || phase === 'loading' || !status.imageConfigured) return
 
     setPhase('loading')
     setResult(null)
@@ -419,6 +581,11 @@ function ImageGeolocator({ status }) {
             {preview ? (
               <div className="space-y-4">
                 <img src={preview} alt={imagePayload?.name || 'Image'} className="max-h-[360px] w-full rounded-[20px] object-contain bg-black/20" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">{imagePayload?.name || 'image'}</span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">{formatFileSize(imagePayload?.size)}</span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">{imagePayload?.mimeType || '--'}</span>
+                </div>
                 {phase === 'loading' ? (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60 backdrop-blur-sm">
                     <RefreshCw className="h-8 w-8 animate-spin text-neon-cyan" />
@@ -450,8 +617,17 @@ function ImageGeolocator({ status }) {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:text-white"
+            >
+              <Upload className="h-4 w-4" />
+              Choisir une image
+            </button>
+
+            <button
+              type="button"
               onClick={() => void analyze()}
-              disabled={!imagePayload || phase === 'loading' || status.loading || !status.configured}
+              disabled={!imagePayload || phase === 'loading' || status.loading || !status.imageConfigured}
               className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-35"
             >
               <Compass className="h-4 w-4" />
@@ -475,6 +651,14 @@ function ImageGeolocator({ status }) {
           </div>
         </div>
       </div>
+
+      {!status.imageConfigured ? (
+        <StatusBanner
+          active={false}
+          title="Analyse image en attente"
+          detail="Tu peux deja charger et previsualiser une image. La geolocalisation se debloquera des qu une cle IA vision sera configuree cote serveur."
+        />
+      ) : null}
 
       <ErrorPanel error={error} onRetry={phase === 'error' ? () => void analyze() : null} />
 
@@ -596,7 +780,18 @@ function ImageGeolocator({ status }) {
 
 export default function OSINTPage() {
   const [tab, setTab] = useState('username')
-  const [status, setStatus] = useState({ loading: true, configured: false, provider: null, model: null, imageSupported: false })
+  const [status, setStatus] = useState({
+    loading: true,
+    configured: false,
+    usernameConfigured: false,
+    usernameSiteCount: 0,
+    usernameSource: null,
+    usernameSnapshotUpdatedAt: null,
+    imageConfigured: false,
+    provider: null,
+    model: null,
+    imageSupported: false,
+  })
 
   useEffect(() => {
     let active = true
@@ -605,13 +800,29 @@ export default function OSINTPage() {
       setStatus({
         loading: false,
         configured: Boolean(response.data?.configured),
+        usernameConfigured: Boolean(response.data?.usernameConfigured),
+        usernameSiteCount: Number(response.data?.usernameSiteCount || 0),
+        usernameSource: response.data?.usernameSource || null,
+        usernameSnapshotUpdatedAt: response.data?.usernameSnapshotUpdatedAt || null,
+        imageConfigured: Boolean(response.data?.imageConfigured),
         provider: response.data?.provider || null,
         model: response.data?.model || null,
         imageSupported: Boolean(response.data?.imageSupported),
       })
     }).catch(() => {
       if (!active) return
-      setStatus({ loading: false, configured: false, provider: null, model: null, imageSupported: false })
+      setStatus({
+        loading: false,
+        configured: false,
+        usernameConfigured: false,
+        usernameSiteCount: 0,
+        usernameSource: null,
+        usernameSnapshotUpdatedAt: null,
+        imageConfigured: false,
+        provider: null,
+        model: null,
+        imageSupported: false,
+      })
     })
     return () => { active = false }
   }, [])
@@ -623,47 +834,45 @@ export default function OSINTPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <span className="feature-chip"><Compass className="h-3.5 w-3.5" />osint</span>
-              <span className="feature-chip"><Fingerprint className="h-3.5 w-3.5" />username tracker</span>
+              <span className="feature-chip"><Fingerprint className="h-3.5 w-3.5" />username sweep</span>
               <span className="feature-chip"><Image className="h-3.5 w-3.5" />image geolocator</span>
+              <span className="feature-chip"><ShieldCheck className="h-3.5 w-3.5" />discord intel</span>
             </div>
             <div>
               <h1 className="font-display text-3xl font-800 text-white sm:text-4xl">OSINT</h1>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-white/55 sm:text-[15px]">
-                Module de recherche multi-plateformes et de geolocalisation d image, integre au cockpit avec la meme logique visuelle que le reste du site.
+                Module de recherche multi-plateformes, Discord Intel serveur et geolocalisation d image, integre au cockpit avec la meme logique visuelle que le reste du site.
               </p>
             </div>
           </div>
 
-          <div className="min-w-[280px] rounded-[24px] border border-white/[0.08] bg-black/15 p-5">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${status.configured ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/20 bg-amber-400/10 text-amber-100'}`}>
-                {status.configured ? <ShieldCheck className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
-              </div>
-              <div>
-                <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Moteur IA</p>
-                <p className="mt-1 font-display text-lg font-700 text-white">{status.loading ? 'Verification...' : status.configured ? 'Pret' : 'Non configure'}</p>
-              </div>
-            </div>
-            <div className="mt-5 space-y-3 text-sm text-white/55">
-              <div className="flex items-center justify-between gap-3"><span>Fournisseur</span><span className="font-mono text-white/80">{status.provider || '--'}</span></div>
-              <div className="flex items-center justify-between gap-3"><span>Modele</span><span className="truncate font-mono text-right text-white/80">{status.model || '--'}</span></div>
-              <div className="flex items-center justify-between gap-3"><span>Vision</span><span className={`font-mono ${status.imageSupported ? 'text-emerald-200' : 'text-white/45'}`}>{status.imageSupported ? 'active' : 'inactive'}</span></div>
-            </div>
+          <div className="grid min-w-[300px] gap-3">
+            <StatusBanner
+              active={status.usernameConfigured}
+              title="Sweep username"
+              detail={status.usernameConfigured ? `${status.usernameSiteCount || 0} sites publics charges dans le moteur.` : 'Moteur de sweep indisponible.'}
+            />
+            <StatusBanner
+              active={status.imageConfigured}
+              title="Analyse image"
+              detail={status.imageConfigured ? `Vision active via ${status.provider || 'IA'}${status.model ? ` - ${status.model}` : ''}.` : 'Une cle IA vision est necessaire pour lancer la geolocalisation.'}
+            />
           </div>
         </div>
 
         <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricTile label="Corpus" value={PLATFORMS.length} hint="plateformes ciblees" />
-          <MetricTile label="Outils" value="2" hint="username + geoloc" tone="border-neon-cyan/18 bg-neon-cyan/[0.08]" />
+          <MetricTile label="Corpus" value={status.usernameSiteCount || '--'} hint="sites publics cibles" />
+          <MetricTile label="Outils" value="3" hint="username + discord + geoloc" tone="border-neon-cyan/18 bg-neon-cyan/[0.08]" />
           <MetricTile label="Theme" value="Cockpit" hint="meme shell, memes animations" tone="border-violet-400/18 bg-violet-400/10 text-violet-100" />
-          <MetricTile label="Mode" value="Secure" hint="proxy serveur, pas de cle front" tone="border-emerald-400/20 bg-emerald-400/10 text-emerald-100" />
+          <MetricTile label="Mode" value="Server" hint="proxy backend, serveur gere, pas de cle front" tone="border-emerald-400/20 bg-emerald-400/10 text-emerald-100" />
         </div>
       </div>
 
       <div className="spotlight-card p-2 sm:p-3">
-        <div className="relative z-[1] grid gap-2 md:grid-cols-2">
+        <div className="relative z-[1] grid gap-2 md:grid-cols-3">
           {[
             { id: 'username', label: 'Username Tracker', icon: Fingerprint },
+            { id: 'discord', label: 'Discord Intel', icon: ShieldCheck },
             { id: 'image', label: 'Image Geolocator', icon: Sparkles },
           ].map((entry) => {
             const Icon = entry.icon
@@ -685,7 +894,9 @@ export default function OSINTPage() {
         </div>
       </div>
 
-      {tab === 'username' ? <UsernameTracker status={status} /> : <ImageGeolocator status={status} />}
+      {tab === 'username' ? <UsernameTracker status={status} /> : null}
+      {tab === 'discord' ? <DiscordIntelPanel /> : null}
+      {tab === 'image' ? <ImageGeolocator status={status} /> : null}
     </div>
   )
 }

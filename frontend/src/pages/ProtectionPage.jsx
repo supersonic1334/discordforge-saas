@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AtSign, AlertTriangle, Bot, ChevronDown, ChevronUp, FileText, Link2, Mail, RefreshCw, Settings, Shield, Sparkles, Terminal, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { botAPI, modulesAPI } from '../services/api'
+import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
 import { getModuleCopy, useI18n } from '../i18n'
 
@@ -1455,6 +1456,21 @@ export default function ProtectionPage() {
     }
     loadAll(true)
   }, [loadAll, selectedGuildId])
+
+  useEffect(() => {
+    const handleModulesRefresh = (payload = {}) => {
+      if (String(payload.guildId || '') !== String(selectedGuildIdRef.current || '')) return
+      void loadAll(false)
+    }
+
+    const unsubscribeModules = wsService.on('modules:updated', handleModulesRefresh)
+    const unsubscribeSnapshots = wsService.on('team:snapshot_restored', handleModulesRefresh)
+
+    return () => {
+      unsubscribeModules()
+      unsubscribeSnapshots()
+    }
+  }, [loadAll])
 
   const toggleModule = async (type, enabled) => {
     await modulesAPI.toggle(selectedGuildId, type, enabled)

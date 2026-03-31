@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { modulesAPI, botAPI } from '../services/api'
+import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
 import { getModuleCategoryLabel, getModuleCopy, useI18n } from '../i18n'
 
@@ -195,14 +196,7 @@ export default function ServerDetail() {
 
   const guild = guilds.find((entry) => entry.id === guildId)
 
-  useEffect(() => {
-    if (guildId) {
-      selectGuild(guildId)
-      loadModules()
-    }
-  }, [guildId])
-
-  const loadModules = async () => {
+  const loadModules = useCallback(async () => {
     setLoading(true)
     try {
       const response = await modulesAPI.list(guildId)
@@ -211,7 +205,29 @@ export default function ServerDetail() {
       toast.error(t('serverDetail.loadFailed'))
     }
     setLoading(false)
-  }
+  }, [guildId, t])
+
+  useEffect(() => {
+    if (guildId) {
+      selectGuild(guildId)
+      void loadModules()
+    }
+  }, [guildId, loadModules, selectGuild])
+
+  useEffect(() => {
+    const handleRealtimeSync = (payload = {}) => {
+      if (String(payload.guildId || '') !== String(guildId || '')) return
+      void loadModules()
+    }
+
+    const unsubscribeModules = wsService.on('modules:updated', handleRealtimeSync)
+    const unsubscribeSnapshots = wsService.on('team:snapshot_restored', handleRealtimeSync)
+
+    return () => {
+      unsubscribeModules()
+      unsubscribeSnapshots()
+    }
+  }, [guildId, loadModules])
 
   const handleUpdate = (updated, type) => {
     if (!updated) {

@@ -1,37 +1,12 @@
 'use strict';
 
-const fetch = require('node-fetch');
 const aiService = require('./aiService');
 const aiProviderKeyService = require('./aiProviderKeyService');
+const usernameProbeService = require('./usernameProbeService');
 const logger = require('../utils/logger').child('OSINTService');
 const { getProviderCatalog } = require('../config/aiCatalog');
 
-const USERNAME_PLATFORMS = [
-  'instagram',
-  'tiktok',
-  'twitter',
-  'youtube',
-  'snapchat',
-  'facebook',
-  'reddit',
-  'roblox',
-  'steam',
-  'twitch',
-  'github',
-  'gitlab',
-  'linkedin',
-  'spotify',
-  'soundcloud',
-  'telegram',
-  'medium',
-  'pinterest',
-  'tumblr',
-  'patreon',
-  'vimeo',
-  'lastfm',
-  'devto',
-  'kofi',
-];
+const fetch = global.fetch ? global.fetch.bind(globalThis) : require('node-fetch');
 
 function clamp(number, min, max) {
   return Math.max(min, Math.min(max, number));
@@ -65,29 +40,58 @@ function normalizeClueWeight(value) {
   return 'low';
 }
 
-function extractJSON(rawText) {
-  const raw = String(rawText || '').trim();
-  if (!raw) return null;
+function tryParseJSON(candidate) {
+  const normalized = String(candidate || '').trim();
+  if (!normalized) return null;
 
-  const tagMatch = raw.match(/<result>([\s\S]*?)<\/result>/i) || raw.match(/<r>([\s\S]*?)<\/r>/i);
-  if (tagMatch?.[1]) {
+  const attempts = [
+    normalized,
+    normalized.replace(/[“”]/g, '"').replace(/[‘’]/g, "'"),
+    normalized
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/,\s*([}\]])/g, '$1'),
+  ];
+
+  for (const attempt of attempts) {
     try {
-      return JSON.parse(tagMatch[1].trim());
+      return JSON.parse(attempt);
     } catch {}
   }
 
-  const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  return null;
+}
 
-  try {
-    return JSON.parse(cleaned);
-  } catch {}
-
+function extractBalancedJSONObject(source) {
+  const text = String(source || '');
   let depth = 0;
   let start = -1;
+  let inString = false;
+  let escapeNext = false;
   let bestChunk = '';
 
-  for (let index = 0; index < cleaned.length; index += 1) {
-    const char = cleaned[index];
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
 
     if (char === '{') {
       if (depth === 0) start = index;
@@ -96,9 +100,10 @@ function extractJSON(rawText) {
     }
 
     if (char === '}') {
+      if (depth <= 0) continue;
       depth -= 1;
       if (depth === 0 && start !== -1) {
-        const chunk = cleaned.slice(start, index + 1);
+        const chunk = text.slice(start, index + 1);
         if (chunk.length > bestChunk.length) {
           bestChunk = chunk;
         }
@@ -107,13 +112,182 @@ function extractJSON(rawText) {
     }
   }
 
-  if (!bestChunk) return null;
+  return bestChunk || null;
+}
 
-  try {
-    return JSON.parse(bestChunk);
-  } catch {
-    return null;
+function buildJsonClosers(source) {
+  const text = String(source || '');
+  const stack = [];
+  let inString = false;
+  let escapeNext = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{' || char === '[') {
+      stack.push(char);
+      continue;
+    }
+
+    if (char === '}' && stack[stack.length - 1] === '{') {
+      stack.pop();
+      continue;
+    }
+
+    if (char === ']' && stack[stack.length - 1] === '[') {
+      stack.pop();
+    }
   }
+
+  const closers = [];
+  if (inString) {
+    closers.push('"');
+  }
+
+  while (stack.length > 0) {
+    const entry = stack.pop();
+    closers.push(entry === '{' ? '}' : ']');
+  }
+
+  return closers.join('');
+}
+
+function collectOuterCutPoints(source) {
+  const text = String(source || '');
+  const positions = [];
+  let inString = false;
+  let escapeNext = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === ',' || char === '}' || char === ']') {
+      positions.push(index);
+    }
+  }
+
+  return positions;
+}
+
+function repairPartialJSONObject(source) {
+  const text = String(source || '').trim();
+  if (!text) return null;
+
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+
+  const candidate = text.slice(start);
+  const directParsed = tryParseJSON(`${candidate}${buildJsonClosers(candidate)}`);
+  if (directParsed && typeof directParsed === 'object') {
+    return directParsed;
+  }
+
+  const cutPoints = collectOuterCutPoints(candidate);
+  for (let index = cutPoints.length - 1; index >= 0; index -= 1) {
+    const cutPoint = cutPoints[index];
+    const prefix = candidate[cutPoint] === ','
+      ? candidate.slice(0, cutPoint)
+      : candidate.slice(0, cutPoint + 1);
+    const repaired = `${prefix}${buildJsonClosers(prefix)}`;
+    const parsed = tryParseJSON(repaired);
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function extractJSON(rawText) {
+  const raw = String(rawText || '').trim();
+  if (!raw) return null;
+
+  const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  const candidates = [];
+
+  const fullTagMatch = cleaned.match(/<result>([\s\S]*?)<\/result>/i) || cleaned.match(/<r>([\s\S]*?)<\/r>/i);
+  if (fullTagMatch?.[1]) {
+    candidates.push(fullTagMatch[1].trim());
+  }
+
+  const openTagIndex = cleaned.search(/<result>/i);
+  if (openTagIndex !== -1) {
+    candidates.push(cleaned.slice(openTagIndex).replace(/<result>/i, '').trim());
+  }
+
+  const shortTagIndex = cleaned.search(/<r>/i);
+  if (shortTagIndex !== -1) {
+    candidates.push(cleaned.slice(shortTagIndex).replace(/<r>/i, '').trim());
+  }
+
+  candidates.push(cleaned);
+
+  const balanced = extractBalancedJSONObject(cleaned);
+  if (balanced) {
+    candidates.push(balanced);
+  }
+
+  for (const candidate of candidates) {
+    const parsed = tryParseJSON(candidate);
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+
+    const nestedBalanced = extractBalancedJSONObject(candidate);
+    if (nestedBalanced) {
+      const nestedParsed = tryParseJSON(nestedBalanced);
+      if (nestedParsed && typeof nestedParsed === 'object') {
+        return nestedParsed;
+      }
+    }
+
+    const repaired = repairPartialJSONObject(candidate);
+    if (repaired && typeof repaired === 'object') {
+      return repaired;
+    }
+  }
+
+  return null;
 }
 
 function getProviderFailureStatus(statusCode, message) {
@@ -324,18 +498,6 @@ async function requestOSINTCompletion(aiConfig, request) {
   throw Object.assign(new Error(`Unsupported AI provider: ${aiConfig.provider}`), { status: 400 });
 }
 
-function normalizeUsernameResults(rawResults) {
-  return USERNAME_PLATFORMS.reduce((accumulator, platformId) => {
-    const entry = rawResults?.[platformId];
-    accumulator[platformId] = {
-      found: Boolean(entry?.found),
-      confidence: normalizeConfidence(entry?.confidence),
-      info: normalizeShortText(entry?.info || entry?.reason || entry?.detail, 280),
-    };
-    return accumulator;
-  }, {});
-}
-
 function normalizeCoordinates(coordinates) {
   const lat = Number(coordinates?.lat);
   const lon = Number(coordinates?.lon);
@@ -383,60 +545,13 @@ function normalizeGeolocationResult(rawResult) {
 }
 
 async function scanUsername(userId, username) {
-  const aiConfig = aiService.getAIConfig();
-  if (!aiConfig) {
-    const error = new Error('OSINT indisponible - IA non configuree');
-    error.status = 503;
-    throw error;
-  }
-
   const cleanedUsername = String(username || '').trim().replace(/^@+/, '').slice(0, 60);
-  const systemPrompt = [
-    'You are an OSINT analyst.',
-    'Return only one JSON object wrapped in <result></result>.',
-    'Do not use markdown.',
-    'Do not claim certainty. Give best-effort probability estimates only.',
-  ].join(' ');
-  const userPrompt = [
-    `Analyze the handle "${cleanedUsername}".`,
-    `Estimate whether accounts likely exist on these platform IDs: ${USERNAME_PLATFORMS.join(', ')}.`,
-    'Return exactly this structure and include every platform id:',
-    '<result>{"results":{"instagram":{"found":true,"confidence":82,"info":"Reason"},"tiktok":{"found":false,"confidence":18,"info":"Reason"}}}</result>',
-    'Use confidence from 0 to 100.',
-  ].join('\n');
 
   try {
-    const rawText = await requestOSINTCompletion(aiConfig, {
-      systemPrompt,
-      userContent: userPrompt,
-      parts: [{ text: userPrompt }],
-      content: userPrompt,
-      maxTokens: 2200,
-    });
-    const parsed = extractJSON(rawText);
-
-    if (!parsed?.results || typeof parsed.results !== 'object') {
-      const error = new Error('JSON OSINT introuvable dans la reponse IA');
-      error.status = 502;
-      error.raw = rawText.slice(0, 2500);
-      throw error;
-    }
-
-    markProviderKeySuccess(aiConfig);
-
-    return {
-      results: normalizeUsernameResults(parsed.results),
-      meta: {
-        provider: aiConfig.provider,
-        model: aiConfig.model,
-      },
-    };
+    return await usernameProbeService.scanUsername(cleanedUsername);
   } catch (error) {
-    markProviderKeyFailure(aiConfig, error?.status, error?.message);
     logger.warn('Username OSINT scan failed', {
       userId,
-      provider: aiConfig.provider,
-      model: aiConfig.model,
       message: error?.message || 'unknown_error',
       status: error?.status || null,
     });
@@ -459,9 +574,11 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
     'Do not use markdown.',
   ].join(' ');
   const userPrompt = [
-    'Analyze this image and estimate where it was taken.',
+    'Analyze this image and estimate where it was taken from visible clues only.',
+    'Respond with compact JSON only and keep the analysis concise.',
     'Use this exact schema:',
     '<result>{"confidence":"haute","country":"...","country_code":"...","region":"...","city":"...","district":"...","exact_location":"...","landmark":null,"coordinates":{"lat":0.0,"lon":0.0},"maps_search":"...","clues":[{"type":"Architecture","detail":"...","weight":"high"}],"time_of_day":"...","weather_conditions":"...","analysis":"...","alternative_locations":["..."]}</result>',
+    'Do not return more than 6 clues or 4 alternative locations.',
     'If a field is unknown, return an empty string or null.',
   ].join('\n');
 
@@ -511,7 +628,7 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
       userContent: anthropicImageContent,
       parts: geminiParts,
       content: openAIContent,
-      maxTokens: 1800,
+      maxTokens: 1400,
     });
     const parsed = extractJSON(rawText);
 
@@ -546,8 +663,15 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
 
 function getStatus() {
   const aiConfig = aiService.getAIConfig();
+  const usernameCatalog = usernameProbeService.getCatalogStatus();
+
   return {
-    configured: Boolean(aiConfig),
+    configured: Boolean(usernameCatalog?.count || aiConfig),
+    usernameConfigured: Boolean(usernameCatalog?.count),
+    usernameSiteCount: usernameCatalog?.count || 0,
+    usernameSource: usernameCatalog?.source || null,
+    usernameSnapshotUpdatedAt: usernameCatalog?.snapshotUpdatedAt || null,
+    imageConfigured: Boolean(aiConfig),
     provider: aiConfig?.provider || null,
     model: aiConfig?.model || null,
     imageSupported: Boolean(aiConfig),
@@ -555,7 +679,6 @@ function getStatus() {
 }
 
 module.exports = {
-  USERNAME_PLATFORMS,
   scanUsername,
   geolocateImage,
   getStatus,

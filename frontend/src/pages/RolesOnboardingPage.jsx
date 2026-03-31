@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CheckCircle2, Mail, Settings, Shield, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { botAPI, modulesAPI } from '../services/api'
+import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 
@@ -132,6 +133,7 @@ export default function RolesOnboardingPage() {
   const [autoRoleForm, setAutoRoleForm] = useState(normalizeAutoRole(null))
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
+  const selectedGuildIdRef = useRef(selectedGuildId)
 
   const resolvedLocale = useMemo(() => getResolvedLocale(locale), [locale])
   const textChannels = useMemo(
@@ -154,44 +156,71 @@ export default function RolesOnboardingPage() {
   }, [guild, welcomeCopy, welcomeForm.dm_message, welcomeForm.embed_title, welcomeForm.message])
 
   useEffect(() => {
+    selectedGuildIdRef.current = selectedGuildId
+  }, [selectedGuildId])
+
+  useEffect(() => {
     setRoles([])
     setChannels([])
     setWelcomeForm(normalizeWelcome(null, resolvedLocale))
     setAutoRoleForm(normalizeAutoRole(null))
   }, [selectedGuildId, resolvedLocale])
 
-  useEffect(() => {
-    if (!selectedGuildId) return
-    let active = true
+  const loadData = useCallback(async (showLoader = true) => {
+    const guildId = selectedGuildIdRef.current
+    if (!guildId) return
 
-    async function loadData() {
+    if (showLoader) {
       setLoading(true)
-      try {
-        const [rolesResponse, channelsResponse, welcomeResponse, autoRoleResponse] = await Promise.all([
-          botAPI.roles(selectedGuildId),
-          botAPI.channels(selectedGuildId),
-          modulesAPI.get(selectedGuildId, 'WELCOME_MESSAGE'),
-          modulesAPI.get(selectedGuildId, 'AUTO_ROLE'),
-        ])
+    }
 
-        if (!active) return
+    try {
+      const [rolesResponse, channelsResponse, welcomeResponse, autoRoleResponse] = await Promise.all([
+        botAPI.roles(guildId),
+        botAPI.channels(guildId),
+        modulesAPI.get(guildId, 'WELCOME_MESSAGE'),
+        modulesAPI.get(guildId, 'AUTO_ROLE'),
+      ])
 
-        setRoles(rolesResponse.data?.roles || rolesResponse.data || [])
-        setChannels(channelsResponse.data?.channels || channelsResponse.data || [])
-        setWelcomeForm(normalizeWelcome(welcomeResponse.data, resolvedLocale))
-        setAutoRoleForm(normalizeAutoRole(autoRoleResponse.data))
-      } catch (error) {
-        toast.error(getErrorMessage(error))
-      } finally {
-        if (active) setLoading(false)
+      if (guildId !== selectedGuildIdRef.current) return
+
+      setRoles(rolesResponse.data?.roles || rolesResponse.data || [])
+      setChannels(channelsResponse.data?.channels || channelsResponse.data || [])
+      setWelcomeForm(normalizeWelcome(welcomeResponse.data, resolvedLocale))
+      setAutoRoleForm(normalizeAutoRole(autoRoleResponse.data))
+    } catch (error) {
+      if (guildId !== selectedGuildIdRef.current) return
+      toast.error(getErrorMessage(error))
+    } finally {
+      if (showLoader && guildId === selectedGuildIdRef.current) {
+        setLoading(false)
       }
     }
+  }, [resolvedLocale])
 
-    loadData()
-    return () => {
-      active = false
+  useEffect(() => {
+    if (!selectedGuildId) return
+    void loadData(true)
+  }, [loadData, selectedGuildId, resolvedLocale])
+
+  useEffect(() => {
+    const handleRealtimeSync = (payload = {}) => {
+      if (String(payload.guildId || '') !== String(selectedGuildIdRef.current || '')) return
+      if (payload.moduleType && !['WELCOME_MESSAGE', 'AUTO_ROLE'].includes(String(payload.moduleType))) return
+      void loadData(false)
     }
-  }, [selectedGuildId, resolvedLocale])
+
+    const unsubscribeModules = wsService.on('modules:updated', handleRealtimeSync)
+    const unsubscribeSnapshots = wsService.on('team:snapshot_restored', (payload = {}) => {
+      if (String(payload.guildId || '') !== String(selectedGuildIdRef.current || '')) return
+      void loadData(false)
+    })
+
+    return () => {
+      unsubscribeModules()
+      unsubscribeSnapshots()
+    }
+  }, [loadData])
 
   function toggleRole(roleId) {
     setAutoRoleForm((current) => ({

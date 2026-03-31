@@ -8,7 +8,9 @@ const { moduleToggleSchema, moduleConfigSchema, moduleTypeSchema } = require('..
 const { MODULE_DEFINITIONS, MODULE_TYPES } = require('../bot/modules/definitions');
 const botManager = require('../services/botManager');
 const { syncNativeAutoModRules } = require('../services/discordAutoModService');
+const guildAccessService = require('../services/guildAccessService');
 const { decrypt } = require('../services/encryptionService');
+const wsServer = require('../websocket');
 const db = require('../database');
 const { v4: uuidv4 } = require('uuid');
 const { logBotEvent } = require('../bot/utils/modHelpers');
@@ -41,6 +43,35 @@ function logModuleSiteAction(req, actionLabel, moduleType, moduleName, details =
     module_name: moduleName,
     details,
   });
+}
+
+function notifyGuildModuleSync(req, payload = {}) {
+  const recipients = guildAccessService.listGuildCollaborators(req.guild.id);
+  const userIds = new Set(
+    recipients
+      .map((entry) => String(entry?.user_id || '').trim())
+      .filter(Boolean)
+  );
+
+  if (req.guild?.user_id) {
+    userIds.add(String(req.guild.user_id));
+  }
+
+  const eventPayload = {
+    guildId: req.guild.id,
+    discordGuildId: req.guild.guild_id,
+    actorUserId: req.user.id,
+    actorUsername: req.user.username,
+    updatedAt: new Date().toISOString(),
+    ...payload,
+  };
+
+  for (const userId of userIds) {
+    wsServer.broadcastToUser(userId, {
+      event: 'modules:updated',
+      data: eventPayload,
+    });
+  }
 }
 
 const PROTECTION_PRESET_PROFILES = {
@@ -781,6 +812,12 @@ router.patch('/:moduleType/toggle', validate(moduleToggleSchema), async (req, re
   // Invalidate bot's in-memory module cache
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  notifyGuildModuleSync(req, {
+    action: 'toggle',
+    moduleType: type,
+    enabled: Boolean(enabled),
+    updatedAt: now,
+  });
   logModuleSiteAction(req, enabled ? 'Module active' : 'Module desactive', type, moduleName, [
     `Module : ${moduleName}`,
     `Etat : ${enabled ? 'active' : 'desactive'}`,
@@ -841,6 +878,11 @@ router.patch('/:moduleType/config', validate(moduleConfigSchema), async (req, re
 
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  notifyGuildModuleSync(req, {
+    action: 'config',
+    moduleType: type,
+    updatedAt: now,
+  });
   const changedSimpleKeys = Object.keys(req.body.simple_config || {});
   const changedAdvancedKeys = Object.keys(req.body.advanced_config || {});
   logModuleSiteAction(req, 'Configuration module mise a jour', type, moduleName, [
@@ -896,6 +938,12 @@ router.post('/:moduleType/reset', async (req, res) => {
 
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  notifyGuildModuleSync(req, {
+    action: 'reset',
+    moduleType: type,
+    enabled: false,
+    updatedAt: now,
+  });
   logModuleSiteAction(req, 'Module reinitialise', type, moduleName, [
     `Module : ${moduleName}`,
     'Etat : desactive',

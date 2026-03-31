@@ -826,6 +826,7 @@ async function buildUserModerationProfile(req, token, userId) {
   const baseProfile = member
     ? buildMemberProfile(member, roleMap, guildId, req.guild.owner_id)
     : buildBasicUserProfile(ban?.user || remoteUser, userId);
+  const enrichedUser = remoteUser || member?.user || ban?.user || null;
 
   const warnings = warningRows;
   const siteActions = siteActionRows;
@@ -848,6 +849,10 @@ async function buildUserModerationProfile(req, token, userId) {
   return {
     profile: {
       ...baseProfile,
+      banner_url: discordService.getBannerUrl(enrichedUser?.id, enrichedUser?.banner, 640),
+      accent_color: Number.isFinite(Number(enrichedUser?.accent_color)) ? Number(enrichedUser.accent_color) : null,
+      public_flags: Number.isFinite(Number(enrichedUser?.public_flags)) ? Number(enrichedUser.public_flags) : 0,
+      bio: typeof enrichedUser?.bio === 'string' ? enrichedUser.bio : '',
       in_server: Boolean(member),
       banned: Boolean(ban),
       ban_reason: ban?.reason || '',

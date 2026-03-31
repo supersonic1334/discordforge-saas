@@ -265,11 +265,11 @@ export const aiAPI = {
 
 export const osintAPI = {
   status: () => api.get('/osint/status'),
-  scanUsername: (username) => api.post('/osint/username', { username }),
+  scanUsername: (username) => api.post('/osint/username', { username }, { timeout: 70000 }),
   geolocate: (imageBase64, mimeType) => api.post('/osint/geolocate', {
     image_base64: imageBase64,
     mime_type: mimeType,
-  }),
+  }, { timeout: 90000 }),
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
