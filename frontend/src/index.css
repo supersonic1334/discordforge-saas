@@ -864,7 +864,7 @@
     opacity: 0.7;
   }
 
-  body[data-keyboard-open="true"] .auth-mobile-shell,
+  body[data-keyboard-open="true"] .auth-page-shell[data-scrollable="true"] .auth-mobile-shell,
   body[data-keyboard-open="true"] .setup-mobile-shell {
     align-items: center !important;
     justify-content: flex-start !important;
@@ -872,7 +872,7 @@
     padding-top: max(env(safe-area-inset-top), 10px) !important;
   }
 
-  body[data-keyboard-open="true"] .auth-mobile-panel {
+  body[data-keyboard-open="true"] .auth-page-shell[data-scrollable="true"] .auth-mobile-panel {
     padding-top: 0.35rem !important;
     margin-inline: auto !important;
   }
@@ -885,13 +885,13 @@
     margin-inline: auto !important;
   }
 
-  body[data-keyboard-open="true"] .auth-mobile-hero,
-  body[data-keyboard-open="true"] .auth-mobile-features,
+  body[data-keyboard-open="true"] .auth-page-shell[data-scrollable="true"] .auth-mobile-hero,
+  body[data-keyboard-open="true"] .auth-page-shell[data-scrollable="true"] .auth-mobile-features,
   body[data-keyboard-open="true"] .setup-mobile-guide {
     display: none !important;
   }
 
-  body[data-keyboard-open="true"] .auth-mobile-card,
+  body[data-keyboard-open="true"] .auth-page-shell[data-scrollable="true"] .auth-mobile-card,
   body[data-keyboard-open="true"] .setup-mobile-card {
     margin-top: 0 !important;
     transform: none !important;
