@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
@@ -344,15 +344,17 @@ export default function Layout() {
   const canAccessProviderPanel = user?.role === 'api_provider'
   const hasSelectedGuild = !!selectedGuildId
   const isEmailFastRoute = location.pathname === '/email-fast'
+  const isOsintRoute = location.pathname === '/dashboard/osint'
   const canOpenWithoutGuild = (
     location.pathname === '/dashboard/servers'
     || location.pathname === '/dashboard/provider'
     || location.pathname === '/dashboard/reviews'
     || location.pathname === '/dashboard/support'
+    || isOsintRoute
     || isEmailFastRoute
   )
   const mustStayOnServers = !hasSelectedGuild && !canOpenWithoutGuild
-  const shouldRenderSidebar = hasSelectedGuild || isEmailFastRoute
+  const shouldRenderSidebar = hasSelectedGuild || isEmailFastRoute || isOsintRoute
 
   const selectedGuild = guilds.find((g) => g.id === selectedGuildId)
   const navItems = [
@@ -363,6 +365,7 @@ export default function Layout() {
     { icon: UserPlus, label: t('layout.nav.onboarding', 'Accueil & rôles'), path: '/dashboard/onboarding', needsGuild: true },
     { icon: Search, label: t('layout.nav.search', 'Search'), path: '/dashboard/search', needsGuild: true },
     { icon: Fingerprint, label: t('layout.nav.scan', 'Scan'), path: '/dashboard/scan', needsGuild: true },
+    { icon: Compass, label: t('layout.nav.osint', 'OSINT'), path: '/dashboard/osint' },
     { icon: ScrollText, label: t('layout.nav.logs', 'Logs'), path: '/dashboard/logs', needsGuild: true },
     { icon: ShieldAlert, label: t('layout.nav.incidents', 'Incidents'), path: '/dashboard/incidents', needsGuild: true },
     { icon: Send, label: t('layout.nav.messages', 'Messages'), path: '/dashboard/messages', needsGuild: true },

@@ -33,6 +33,7 @@ import SettingsPage from './pages/SettingsPage'
 import AdminPanel from './pages/AdminPanel'
 import ProviderPanel from './pages/ProviderPanel'
 import EmailFastPage from './pages/EmailFastPage'
+import OSINTPage from './pages/OSINTPage'
 import OAuthCallback from './pages/OAuthCallback'
 import { I18nProvider } from './i18n'
 
@@ -571,6 +572,7 @@ function AppRoot() {
           <Route path="reviews" element={<PageTransition><ReviewsPage /></PageTransition>} />
           <Route path="support" element={<PageTransition><SupportPage /></PageTransition>} />
           <Route path="team" element={<PageTransition><TeamPage /></PageTransition>} />
+          <Route path="osint" element={<PageTransition><OSINTPage /></PageTransition>} />
           <Route path="ai" element={<PageTransition><AIAssistant /></PageTransition>} />
           <Route path="settings" element={<PageTransition><SettingsPage /></PageTransition>} />
           <Route path="provider" element={

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Activity, ArrowRight, BellRing, CheckCircle2, Command, Cpu, Gauge, Play, RefreshCw, Rocket, RotateCcw, ScrollText, Search, Server, Shield, Sparkles, Square, TrendingUp, Unplug, Users, Wifi } from 'lucide-react'
+import { Activity, ArrowRight, BellRing, CheckCircle2, Command, Compass, Cpu, Gauge, Play, RefreshCw, Rocket, RotateCcw, ScrollText, Search, Server, Shield, Sparkles, Square, TrendingUp, Unplug, Users, Wifi } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { botAPI } from '../services/api'
 import { useAuthStore, useGuildStore, useBotStore } from '../stores'
@@ -260,6 +260,13 @@ export default function Dashboard() {
       tone: 'green',
     },
     {
+      icon: Compass,
+      title: 'OSINT',
+      desc: 'Lance un tracker de pseudos et une geolocalisation d image sans quitter le cockpit.',
+      path: '/dashboard/osint',
+      tone: 'green',
+    },
+    {
       icon: BellRing,
       title: 'Messages',
       desc: 'Envoie des MP et configure les notifications plus proprement.',
@@ -285,6 +292,7 @@ export default function Dashboard() {
   const cockpitLinks = [
     { label: 'Protection', path: '/dashboard/protection' },
     { label: 'Recherche', path: '/dashboard/search' },
+    { label: 'OSINT', path: '/dashboard/osint' },
     { label: 'Logs', path: '/dashboard/logs' },
     { label: 'Messages', path: '/dashboard/messages' },
   ]

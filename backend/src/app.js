@@ -28,6 +28,7 @@ const providerRoutes = require('./routes/providerAI');
 const supportRoutes = require('./routes/support');
 const reviewsRoutes = require('./routes/reviews');
 const playbooksRoutes = require('./routes/playbooks');
+const osintRoutes = require('./routes/osint');
 
 // ── App ───────────────────────────────────────────────────────────────────────
 const app = express();
@@ -323,6 +324,7 @@ app.use(`${prefix}/admin`,   adminRouter);
 app.use(`${prefix}/provider`, providerRoutes);
 app.use(`${prefix}/support`, supportRoutes);
 app.use(`${prefix}/reviews`, reviewsRoutes);
+app.use(`${prefix}/osint`, osintRoutes);
 app.use(`${prefix}/guilds/:guildId/playbooks`, playbooksRoutes);
 
 if (fs.existsSync(frontendDistDir)) {

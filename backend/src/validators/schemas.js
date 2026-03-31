@@ -240,6 +240,22 @@ const aiContinueActionSchema = z.object({
   pending_action: aiPendingActionSchema,
 });
 
+const osintUsernameScanSchema = z.object({
+  username: z.string()
+    .trim()
+    .min(1)
+    .max(60)
+    .regex(/^[A-Za-z0-9._-]+$/, 'Pseudo invalide'),
+});
+
+const osintImageScanSchema = z.object({
+  image_base64: z.string().trim().min(32).max(10_000_000),
+  mime_type: z.string()
+    .trim()
+    .toLowerCase()
+    .regex(/^image\/(?:png|jpe?g|webp|gif)$/i, 'Format image non supporte'),
+});
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 const aiConfigSchema = z.object({
   provider: z.enum(AI_PROVIDER_IDS),
@@ -376,6 +392,8 @@ module.exports = {
   commandToggleSchema,
   aiMessageSchema,
   aiContinueActionSchema,
+  osintUsernameScanSchema,
+  osintImageScanSchema,
   aiConfigSchema,
   providerAiKeySchema,
   providerAiModelSchema,

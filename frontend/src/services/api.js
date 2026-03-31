@@ -263,6 +263,15 @@ export const aiAPI = {
   transcribe: (data) => api.post('/ai/transcribe', data),
 }
 
+export const osintAPI = {
+  status: () => api.get('/osint/status'),
+  scanUsername: (username) => api.post('/osint/username', { username }),
+  geolocate: (imageBase64, mimeType) => api.post('/osint/geolocate', {
+    image_base64: imageBase64,
+    mime_type: mimeType,
+  }),
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const adminAPI = {
   users:      (params)   => api.get('/admin/users', { params }),
