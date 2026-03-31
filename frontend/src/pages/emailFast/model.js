@@ -10,9 +10,9 @@ export const DURATION_OPTIONS = [
   { id: '1m', label: '1 min', note: 'Flash', minutes: 1 },
   { id: '10m', label: '10 min', note: 'Rapide', minutes: 10 },
   { id: '1h', label: '1 heure', note: 'Classique', minutes: 60 },
-  { id: '24h', label: '24 heures', note: 'Journee', minutes: 1440 },
-  { id: 'permanent', label: 'Permanent', note: 'Sans limite', minutes: null },
-  { id: 'custom', label: 'Perso', note: '1 min a 7 jours', minutes: 'custom' },
+  { id: '24h', label: '24 heures', note: 'Journée', minutes: 1440 },
+  { id: 'permanent', label: 'Illimité', note: 'Sans limite', minutes: null },
+  { id: 'custom', label: 'Perso', note: '1 min à 7 jours', minutes: 'custom' },
 ]
 
 export const FILTER_OPTIONS = [
@@ -140,7 +140,7 @@ export function getDurationConfig(durationKey, customInput) {
   if (durationKey === 'permanent') {
     return {
       key: durationKey,
-      label: 'Permanent',
+      label: 'Illimité',
       summary: 'Sans expiration locale',
       isPermanent: true,
       minutes: null,
@@ -160,7 +160,7 @@ export function getDurationConfig(durationKey, customInput) {
         minutes: null,
         totalMs: null,
         valid: false,
-        error: 'Choisis une duree perso entre 1 minute et 7 jours.',
+        error: 'Choisis une durée perso entre 1 minute et 7 jours.',
       }
     }
 
@@ -187,7 +187,7 @@ export function getDurationConfig(durationKey, customInput) {
       minutes: null,
       totalMs: null,
       valid: false,
-      error: 'Preset de duree introuvable.',
+      error: 'Preset de durée introuvable.',
     }
   }
 
@@ -220,7 +220,7 @@ export function formatMessageTime(value) {
   try {
     const date = new Date(value)
     const diff = Date.now() - date.getTime()
-    if (diff < 60000) return 'A l instant'
+    if (diff < 60000) return 'À l’instant'
     if (diff < 3600000) return `${Math.floor(diff / 60000)} min`
     if (diff < 86400000) return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
     return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
@@ -380,7 +380,7 @@ export async function encryptVault(password, payload) {
 
 export async function decryptVault(password, vault) {
   if (!vault?.salt || !vault?.iv || !vault?.data) {
-    throw new Error('Donnees Email Fast invalides.')
+    throw new Error('Données Email Fast invalides.')
   }
 
   try {

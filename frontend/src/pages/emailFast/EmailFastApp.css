@@ -119,6 +119,25 @@
     box-shadow 180ms ease;
 }
 
+.ef-choice-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ef-choice-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: 'Sora', sans-serif;
+  font-size: clamp(0.82rem, 2.1vw, 0.95rem);
+  font-weight: 700;
+  line-height: 1.15;
+  color: rgba(255,255,255,0.96);
+  overflow-wrap: anywhere;
+}
+
 .ef-choice-card:hover {
   transform: translateY(-2px);
   border-color: rgba(255,255,255,0.14);

@@ -325,10 +325,10 @@ export function useEmailFastManager() {
 
     if (expiredAddresses.length) {
       if (activeMailboxIdRef.current && expiredAddresses.includes(mailboxesRef.current.find((mailbox) => mailbox.id === activeMailboxIdRef.current)?.address)) {
-        setSyncError('La duree de cette adresse est terminee. Passe-la en permanent ou cree-en une autre.')
+        setSyncError('La durée de cette adresse est terminée. Passe-la en permanent ou crée-en une autre.')
       }
       expiredAddresses.forEach((address) => {
-        toast.error(`Adresse expiree: ${address}`)
+        toast.error(`Adresse expirée: ${address}`)
       })
     }
   }, [timeTick])
@@ -534,7 +534,7 @@ export function useEmailFastManager() {
     const draft = createDraft
     const duration = getDurationConfig(draft.durationKey, draft.customDurationMinutes)
     if (!duration.valid) {
-      const message = duration.error || 'Duree invalide.'
+      const message = duration.error || 'Durée invalide.'
       if (fromAuth) setAuthError(message)
       else toast.error(message)
       return false
@@ -595,7 +595,7 @@ export function useEmailFastManager() {
       setAuthMode('access')
       setSyncError('')
       wakeMailbox(nextMailbox.id)
-      toast.success(mailboxesRef.current.length ? 'Nouvelle adresse ajoutee.' : 'Adresse creee.')
+      toast.success(mailboxesRef.current.length ? 'Nouvelle adresse ajoutée.' : 'Adresse créée.')
       return true
     } catch (error) {
       console.error(error)
@@ -612,7 +612,7 @@ export function useEmailFastManager() {
 
     if (mailboxesRef.current.length > 0 || hasStoredVault) {
       setAuthMode('access')
-      setAuthError('Entre ta cle d acces pour retrouver tes adresses.')
+      setAuthError("Entre ta clé d'accès pour retrouver tes adresses.")
       return
     }
 
@@ -622,13 +622,13 @@ export function useEmailFastManager() {
     }
 
     if (nextAccessKey.length < 15) {
-      setAuthError('Cle trop courte. Regeneres-en une nouvelle.')
+      setAuthError('Clé trop courte. Régénère-en une nouvelle.')
       return
     }
 
     const duration = getDurationConfig(createDraft.durationKey, createDraft.customDurationMinutes)
     if (!duration.valid) {
-      setAuthError(duration.error || 'Duree invalide.')
+      setAuthError(duration.error || 'Durée invalide.')
       return
     }
 
@@ -644,7 +644,7 @@ export function useEmailFastManager() {
 
   async function handleCreateAnotherMailbox() {
     if (!sessionPassword) {
-      toast.error('Cle d acces indisponible pour cette session.')
+      toast.error("Clé d'accès indisponible pour cette session.")
       return
     }
 
@@ -660,7 +660,7 @@ export function useEmailFastManager() {
     setSelectedMessageId(null)
     setQrOpen(false)
     setSyncError('')
-    toast.success('Acces verrouille.')
+    toast.success('Accès verrouillé.')
   }
 
   async function restoreStoredVault(password, { silent = false } = {}) {
@@ -740,8 +740,8 @@ export function useEmailFastManager() {
     if (!silent) {
       toast.success(
         inactiveCount
-          ? `${restoredMailboxes.length} adresse(s) retrouvee(s), ${inactiveCount} indisponible(s).`
-          : `${restoredMailboxes.length} adresse(s) retrouvee(s).`
+          ? `${restoredMailboxes.length} adresse(s) retrouvée(s), ${inactiveCount} indisponible(s).`
+          : `${restoredMailboxes.length} adresse(s) retrouvée(s).`
       )
     }
   }
@@ -752,7 +752,7 @@ export function useEmailFastManager() {
     const enteredAccessKey = accessPassword.trim()
 
     if (!enteredAccessKey) {
-      setAuthError('Entre ta cle d acces.')
+      setAuthError("Entre ta clé d'accès.")
       return
     }
 
@@ -772,7 +772,7 @@ export function useEmailFastManager() {
           setLockoutUntil(Date.now() + 30000)
           setAuthError('Trop de tentatives. Attends 30 secondes.')
         } else {
-          setAuthError(error.message || `Cle incorrecte. ${3 - nextFailedAttempts} essai(s) restant(s).`)
+          setAuthError(error.message || `Clé incorrecte. ${3 - nextFailedAttempts} essai(s) restant(s).`)
         }
       } finally {
         setIsRestoring(false)
@@ -782,7 +782,7 @@ export function useEmailFastManager() {
     }
 
     if (!mailboxesRef.current.length) {
-      setAuthError('Aucune adresse a ouvrir.')
+      setAuthError('Aucune adresse à ouvrir.')
       return
     }
 
@@ -795,7 +795,7 @@ export function useEmailFastManager() {
         setLockoutUntil(Date.now() + 30000)
         setAuthError('Trop de tentatives. Attends 30 secondes.')
       } else {
-        setAuthError(`Cle incorrecte. ${3 - nextFailedAttempts} essai(s) restant(s).`)
+        setAuthError(`Clé incorrecte. ${3 - nextFailedAttempts} essai(s) restant(s).`)
       }
       return
     }
@@ -805,7 +805,7 @@ export function useEmailFastManager() {
     setScreen('app')
     setAccessPassword('')
     saveStoredSessionPassword(enteredAccessKey || sessionPassword || '')
-    toast.success('Acces restaure.')
+    toast.success('Accès restauré.')
   }
 
   function switchMailbox(mailboxId) {
@@ -829,7 +829,7 @@ export function useEmailFastManager() {
     if (!activeMailbox) return
     const duration = getDurationConfig(runtimeDraft.durationKey, runtimeDraft.customDurationMinutes)
     if (!duration.valid) {
-      toast.error(duration.error || 'Duree invalide.')
+      toast.error(duration.error || 'Durée invalide.')
       return
     }
 
@@ -847,12 +847,12 @@ export function useEmailFastManager() {
 
     setSyncError('')
     wakeMailbox(activeMailbox.id)
-    toast.success(duration.isPermanent ? 'Adresse passee en permanent.' : `Duree reglee sur ${duration.label}.`)
+    toast.success(duration.isPermanent ? 'Adresse passée en permanent.' : `Durée réglée sur ${duration.label}.`)
   }
 
   function extendActiveMailbox(minutesToAdd) {
     if (!activeMailbox || activeMailbox.durationKey === 'permanent') {
-      toast.error('Cette adresse est deja permanente.')
+      toast.error('Cette adresse est déjà permanente.')
       return
     }
 
@@ -882,7 +882,7 @@ export function useEmailFastManager() {
 
     setSyncError('')
     wakeMailbox(activeMailbox.id)
-    toast.success(`+${nextMinutes - currentRemainingMinutes} min ajoutees.`)
+    toast.success(`+${nextMinutes - currentRemainingMinutes} min ajoutées.`)
   }
 
   function makeActivePermanent() {
@@ -900,7 +900,7 @@ export function useEmailFastManager() {
     }))
     setSyncError('')
     wakeMailbox(activeMailbox.id)
-    toast.success('Adresse passee en permanent.')
+    toast.success('Adresse passée en permanent.')
   }
 
   async function refreshActiveMailbox() {
@@ -911,31 +911,31 @@ export function useEmailFastManager() {
   async function copyActiveAddress() {
     if (!activeMailbox?.address) return
     await copyText(activeMailbox.address)
-    toast.success('Adresse copiee.')
+    toast.success('Adresse copiée.')
   }
 
   async function copyAccessKey() {
     const accessKey = String(sessionPassword || createPassword || '').trim()
     if (!accessKey) {
-      toast.error('Aucune cle disponible.')
+      toast.error('Aucune clé disponible.')
       return
     }
 
     await copyText(accessKey)
-    toast.success('Cle copiee.')
+    toast.success('Clé copiée.')
   }
 
   function regenerateCreatePassword() {
     const nextAccessKey = generateSecureAccessKey(18)
     setCreatePassword(nextAccessKey)
     setShowCreatePassword(false)
-    toast.success('Nouvelle cle generee.')
+    toast.success('Nouvelle clé générée.')
   }
 
   async function copyMessageContent() {
     if (!selectedMessage) return
     await copyText(selectedMessage.bodyText || stripHtml(selectedMessage.bodyHtml) || '(vide)')
-    toast.success('Contenu copie.')
+    toast.success('Contenu copié.')
   }
 
   function openMessage(messageId) {
@@ -997,7 +997,7 @@ export function useEmailFastManager() {
       setCreatePassword('')
     }
 
-    toast.success('Adresse retiree.')
+    toast.success('Adresse retirée.')
   }
 
   function setMailboxLabel(mailboxId, label) {

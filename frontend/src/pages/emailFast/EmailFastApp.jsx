@@ -95,7 +95,7 @@ function DurationPicker({ title, draft, setDraft, compact = false }) {
           <p className="mt-1 text-sm leading-6 text-white/45">Choisis le temps avant expiration.</p>
         </div>
         <div className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono leading-none text-white/52">
-          {durationMeta.valid ? durationMeta.label : 'A regler'}
+          {durationMeta.valid ? durationMeta.label : 'À régler'}
         </div>
       </div>
 
@@ -110,8 +110,8 @@ function DurationPicker({ title, draft, setDraft, compact = false }) {
               onClick={() => setDraft((current) => ({ ...current, durationKey: option.id }))}
               className={clsx('ef-choice-card', active && 'ef-choice-card-active')}
             >
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-display text-sm font-700 text-white">{option.label}</span>
+              <div className="ef-choice-head">
+                <span className="ef-choice-label">{option.label}</span>
                 {active && <CheckCircle2 className="h-4 w-4 text-neon-cyan" />}
               </div>
               <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{option.note}</p>
@@ -122,7 +122,7 @@ function DurationPicker({ title, draft, setDraft, compact = false }) {
 
       {draft.durationKey === 'custom' && (
         <label className="block space-y-2">
-          <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Duree perso</span>
+          <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Durée perso</span>
           <input
             type="number"
             min="1"
@@ -150,7 +150,7 @@ function MailboxCard({ mailbox, active, onSelect, onRemove }) {
     ? Math.max(8, Math.min(100, (remainingMs / mailbox.totalDurationMs) * 100))
     : 100
   const remainingLabel = mailbox.isExpired
-    ? 'Expiree'
+    ? 'Expirée'
     : mailbox.status === 'inactive'
       ? 'Indisponible'
       : isPermanent
@@ -356,7 +356,7 @@ export default function EmailFastApp() {
   const activeMailboxHealth = state.activeMailbox ? getMailboxHealth(state.activeMailbox) : null
   const activeRemainingLabel = state.activeMailbox
     ? state.activeMailbox.isExpired
-      ? 'Expiree'
+      ? 'Expirée'
       : activeDurationMeta?.isPermanent
         ? 'Permanent'
         : formatRemaining(state.remainingMs)
@@ -439,12 +439,12 @@ export default function EmailFastApp() {
           <div className="relative z-[1] max-w-3xl">
             <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/70">Email temporaire</p>
             <h1 className="mt-4 font-display text-3xl font-800 text-white sm:text-4xl">
-              {hasSavedSession ? 'Retrouver mes adresses' : 'Creer une adresse temporaire'}
+              {hasSavedSession ? 'Retrouver mes adresses' : 'Créer une adresse temporaire'}
             </h1>
             <p className="mt-3 text-sm leading-7 text-white/52 sm:text-[15px]">
               {hasSavedSession
-                ? 'Tes adresses peuvent etre rouvertes tout de suite depuis cet appareil.'
-                : 'Choisis une duree, clique, et ton adresse se cree tout de suite.'}
+                ? 'Tes adresses peuvent être rouvertes tout de suite depuis cet appareil.'
+                : 'Choisis une durée, clique, et ton adresse se crée tout de suite.'}
             </p>
           </div>
 
@@ -456,23 +456,23 @@ export default function EmailFastApp() {
 
           {!hasSavedSession ? (
             <div className="relative z-[1] mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-              <DurationPicker title="Duree de l adresse" draft={state.createDraft} setDraft={actions.setCreateDraft} />
+              <DurationPicker title="Durée de l'adresse" draft={state.createDraft} setDraft={actions.setCreateDraft} />
 
               <div className="space-y-5">
                 <div className="ef-panel space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-display font-700 text-white">Cle d acces</p>
+                      <p className="text-sm font-display font-700 text-white">Clé d'accès</p>
                       <p className="mt-1 text-sm leading-6 text-white/45">
-                        Elle est generee automatiquement et reste disponible dans l espace.
+                        Elle est générée automatiquement et reste disponible dans l'espace.
                       </p>
                     </div>
                     <KeyRound className="mt-1 h-5 w-5 text-neon-cyan" />
                   </div>
 
                   <PasswordField
-                    label="Cle generee"
-                    placeholder="Cle auto-generee"
+                    label="Clé générée"
+                    placeholder="Clé auto-générée"
                     value={state.createPassword}
                     onChange={actions.setCreatePassword}
                     visible={state.showCreatePassword}
@@ -493,7 +493,7 @@ export default function EmailFastApp() {
                       className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-white/15 hover:text-white"
                     >
                       <Copy className="h-4 w-4" />
-                      Copier la cle
+                      Copier la clé
                     </button>
                     <button
                       type="button"
@@ -501,7 +501,7 @@ export default function EmailFastApp() {
                       className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15"
                     >
                       <RefreshCw className="h-4 w-4" />
-                      Regenerer
+                      Régénérer
                     </button>
                   </div>
                 </div>
@@ -513,21 +513,21 @@ export default function EmailFastApp() {
                   className="btn-primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-mono disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {state.isCreating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
-                  {state.isCreating ? 'Creation en cours' : 'Creer une adresse temporaire'}
+                  {state.isCreating ? 'Création en cours' : 'Créer une adresse temporaire'}
                 </button>
               </div>
             </div>
           ) : (
             <div className="relative z-[1] mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
               <div className="ef-panel space-y-4">
-                <p className="text-sm font-display font-700 text-white">Adresses detectees</p>
+                <p className="text-sm font-display font-700 text-white">Adresses détectées</p>
                 <p className="text-sm leading-6 text-white/45">
-                  {storedMailboxCount} adresse{storedMailboxCount > 1 ? 's' : ''} retrouvee
+                  {storedMailboxCount} adresse{storedMailboxCount > 1 ? 's' : ''} retrouvée
                   {storedMailboxCount > 1 ? 's' : ''} sur cet appareil.
                 </p>
                 {state.storedVaultMeta?.updatedAt && (
                   <p className="text-xs font-mono text-white/35">
-                    Derniere mise a jour: {formatDateTime(state.storedVaultMeta.updatedAt)}
+                    Dernière mise à jour: {formatDateTime(state.storedVaultMeta.updatedAt)}
                   </p>
                 )}
               </div>
@@ -535,8 +535,8 @@ export default function EmailFastApp() {
               <div className="space-y-5">
                 <div className="ef-panel space-y-4">
                   <PasswordField
-                    label="Cle d acces"
-                    placeholder="Colle ta cle d acces"
+                    label="Clé d'accès"
+                    placeholder="Colle ta clé d'accès"
                     value={state.accessPassword}
                     onChange={actions.setAccessPassword}
                     visible={state.showAccessPassword}
@@ -572,7 +572,7 @@ export default function EmailFastApp() {
         <div className="relative z-[1] grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="depth-panel rounded-[32px] p-5 sm:p-6">
             <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/70">Email temporaire</p>
-            <h1 className="mt-4 font-display text-3xl font-800 text-white sm:text-4xl">Boite de reception</h1>
+            <h1 className="mt-4 font-display text-3xl font-800 text-white sm:text-4xl">Boîte de réception</h1>
 
             {state.activeMailbox ? (
               <div className="mt-5 space-y-4">
@@ -616,7 +616,7 @@ export default function EmailFastApp() {
                       className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/72 transition-all hover:border-neon-cyan/20 hover:text-white"
                     >
                       <Copy className="h-4 w-4" />
-                      Copier l adresse
+                      Copier l'adresse
                     </button>
                     <button
                       type="button"
@@ -653,7 +653,7 @@ export default function EmailFastApp() {
               </div>
             ) : (
               <div className="mt-5 rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 py-12 text-center text-white/40">
-                Cree une adresse pour afficher la boite de reception.
+                Crée une adresse pour afficher la boîte de réception.
               </div>
             )}
           </div>
@@ -661,9 +661,9 @@ export default function EmailFastApp() {
           <div className="depth-panel rounded-[32px] p-5 sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-display font-700 text-white">Cle d acces</p>
+                <p className="text-sm font-display font-700 text-white">Clé d'accès</p>
                 <p className="mt-1 text-sm leading-6 text-white/45">
-                  Elle reste disponible ici et protege toutes tes adresses.
+                  Elle reste disponible ici et protège toutes tes adresses.
                 </p>
               </div>
               <button
@@ -678,8 +678,8 @@ export default function EmailFastApp() {
 
             <div className="mt-5">
               <PasswordField
-                label="Cle active"
-                placeholder="Cle d acces"
+                label="Clé active"
+                placeholder="Clé d'accès"
                 value={state.sessionPassword || state.createPassword || ''}
                 onChange={() => {}}
                 visible={showVaultKey}
@@ -703,7 +703,7 @@ export default function EmailFastApp() {
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-4 py-3 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {state.isCreating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
-              {state.isCreating ? 'Creation...' : 'Creer une adresse'}
+              {state.isCreating ? 'Création...' : 'Créer une adresse'}
             </button>
           </div>
 
@@ -712,7 +712,7 @@ export default function EmailFastApp() {
               <div>
                 <p className="font-display text-lg font-700 text-white">Mes adresses</p>
                 <p className="mt-1 text-sm leading-6 text-white/45">
-                  Clique une adresse pour ouvrir sa boite.
+                  Clique une adresse pour ouvrir sa boîte.
                 </p>
               </div>
               <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/45">
@@ -743,7 +743,7 @@ export default function EmailFastApp() {
                 <div>
                   <p className="font-display text-lg font-700 text-white">Temps de cette adresse</p>
                   <p className="mt-1 text-sm leading-6 text-white/45">
-                    Change la duree quand tu veux.
+                    Change la durée quand tu veux.
                   </p>
                 </div>
 
@@ -753,7 +753,7 @@ export default function EmailFastApp() {
               </div>
 
               <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_180px]">
-                <DurationPicker title="Duree" draft={state.runtimeDraft} setDraft={actions.setRuntimeDraft} compact />
+                <DurationPicker title="Durée" draft={state.runtimeDraft} setDraft={actions.setRuntimeDraft} compact />
 
                 <div className="space-y-3">
                   <button
@@ -782,7 +782,7 @@ export default function EmailFastApp() {
           {state.qrOpen && state.activeMailbox && (
             <div className="depth-panel rounded-[30px] p-5 sm:p-6">
               <p className="font-display text-lg font-700 text-white">QR adresse</p>
-              <p className="mt-1 text-sm leading-6 text-white/45">Scanne pour recuperer l adresse sur mobile.</p>
+              <p className="mt-1 text-sm leading-6 text-white/45">Scanne pour récupérer l'adresse sur mobile.</p>
 
               <div className="mt-5 flex flex-col items-center gap-4">
                 <div className="ef-qr-shell">
@@ -796,7 +796,7 @@ export default function EmailFastApp() {
           <div className="depth-panel rounded-[30px] p-5 sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-display text-lg font-700 text-white">Boite de reception</p>
+                <p className="font-display text-lg font-700 text-white">Boîte de réception</p>
                 <p className="mt-1 text-sm leading-6 text-white/45">
                   Les nouveaux mails arrivent automatiquement ici.
                 </p>
@@ -823,7 +823,7 @@ export default function EmailFastApp() {
 
             {!state.activeMailbox && (
               <div className="mt-5 rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 py-12 text-center text-white/40">
-                Cree ou selectionne une adresse pour afficher les emails.
+                Crée ou sélectionne une adresse pour afficher les emails.
               </div>
             )}
 
@@ -831,7 +831,7 @@ export default function EmailFastApp() {
               <div className="mt-5 rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 py-12 text-center">
                 <Inbox className="mx-auto h-10 w-10 text-white/10" />
                 <p className="mt-4 font-display text-lg font-700 text-white">Aucun mail pour le moment</p>
-                <p className="mt-2 text-sm text-white/40">La boite se mettra a jour toute seule.</p>
+                <p className="mt-2 text-sm text-white/40">La boîte se mettra à jour toute seule.</p>
               </div>
             )}
 
@@ -945,9 +945,9 @@ export default function EmailFastApp() {
                   <Trash2 className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="font-display text-xl font-700 text-white">Suppression protegee</p>
+                  <p className="font-display text-xl font-700 text-white">Suppression protégée</p>
                   <p className="mt-2 text-sm leading-6 text-white/48">
-                    Cette adresse sera retiree. Pour confirmer, ecris
+                    Cette adresse sera retirée. Pour confirmer, écris
                     <span className="mx-1 rounded-md border border-white/10 bg-white/[0.05] px-2 py-1 font-mono text-xs text-white">
                       {DELETE_CONFIRMATION_WORD}
                     </span>
