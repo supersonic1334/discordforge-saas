@@ -251,6 +251,13 @@ async function setPassword(userId, newPassword) {
   db.update('users', { password_hash: newHash }, { id: userId });
 }
 
+async function verifyPassword(userId, password) {
+  const user = db.findOne('users', { id: userId });
+  if (!user) throw Object.assign(new Error('Account not found'), { status: 404 });
+  if (!user.password_hash) return true;
+  return bcrypt.compare(String(password || ''), user.password_hash);
+}
+
 // ── Create founder account if it doesn't exist ────────────────────────────────
 async function ensureFounder() {
   const founderEmail = normalizeEmail(config.FOUNDER_EMAIL);
@@ -291,6 +298,7 @@ module.exports = {
   changeUsername,
   updateAvatar,
   setPassword,
+  verifyPassword,
   signToken,
   safeUser,
   ensureFounder,

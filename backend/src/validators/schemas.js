@@ -62,6 +62,17 @@ const preferencesSchema = z.object({
   analytics_layout: analyticsLayoutSchema.optional(),
 });
 
+const emailFastVaultSchema = z.object({
+  payload: z.record(z.unknown()).refine((value) => {
+    const mailboxes = Array.isArray(value?.mailboxes) ? value.mailboxes : [];
+    return mailboxes.length <= 500;
+  }, 'Invalid Email Fast payload'),
+});
+
+const emailFastVaultUnlockSchema = z.object({
+  currentPassword: z.string().trim().min(1).max(200).optional(),
+});
+
 const discordLinkSchema = z.object({
   return_to: z.string().trim().max(500).optional().default('/dashboard/search'),
   mode: z.enum(['redirect', 'popup']).optional().default('popup'),
@@ -342,6 +353,8 @@ module.exports = {
   changeUsernameSchema,
   avatarUpdateSchema,
   preferencesSchema,
+  emailFastVaultSchema,
+  emailFastVaultUnlockSchema,
   discordLinkSchema,
   botTokenSchema,
   moduleToggleSchema,

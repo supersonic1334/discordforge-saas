@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { authAPI } from '../../services/api'
 import {
   API,
   AUTO_SYNC_INTERVAL_MS,
@@ -62,7 +63,6 @@ function sanitizeMailboxForVault(mailbox) {
     totalDurationMs: mailbox.totalDurationMs,
     isExpired: mailbox.isExpired,
     status: mailbox.status || 'active',
-    lastSyncAt: mailbox.lastSyncAt,
   }
 }
 
@@ -94,6 +94,9 @@ export function useEmailFastManager() {
   const [lockoutUntil, setLockoutUntil] = useState(null)
   const [hasStoredVault, setHasStoredVault] = useState(false)
   const [storedVaultMeta, setStoredVaultMeta] = useState(null)
+  const [cloudVaultMeta, setCloudVaultMeta] = useState(null)
+  const [accountUnlockPassword, setAccountUnlockPassword] = useState('')
+  const [showAccountUnlockPassword, setShowAccountUnlockPassword] = useState(false)
   const [mailboxes, setMailboxes] = useState([])
   const [activeMailboxId, setActiveMailboxId] = useState(null)
   const [createDraft, setCreateDraft] = useState(DEFAULT_DRAFT)
@@ -107,12 +110,14 @@ export function useEmailFastManager() {
   const [isCreating, setIsCreating] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isRestoring, setIsRestoring] = useState(false)
+  const [isCloudRestoring, setIsCloudRestoring] = useState(false)
   const [timeTick, setTimeTick] = useState(() => Date.now())
   const [qrReady, setQrReady] = useState(false)
 
   const mailboxesRef = useRef(mailboxes)
   const activeMailboxIdRef = useRef(activeMailboxId)
   const inFlightRef = useRef(new Set())
+  const lastCloudPayloadRef = useRef('')
 
   const activeMailbox = useMemo(
     () => mailboxes.find((mailbox) => mailbox.id === activeMailboxId) || null,
@@ -216,6 +221,31 @@ export function useEmailFastManager() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
+    authAPI.getEmailFastVaultMeta()
+      .then(({ data }) => {
+        if (cancelled) return
+
+        if (data?.hasVault) {
+          setCloudVaultMeta(data)
+          setAuthMode('access')
+          return
+        }
+
+        setCloudVaultMeta(null)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.error(error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     const previousTitle = document.title
     document.title = 'Email Fast - DiscordForger'
 
@@ -260,7 +290,7 @@ export function useEmailFastManager() {
     if (!mailboxes.length) {
       if (screen === 'app') {
         setScreen('auth')
-        setAuthMode(hasStoredVault ? 'access' : 'create')
+        setAuthMode(hasStoredVault || cloudVaultMeta?.hasVault ? 'access' : 'create')
       }
       setActiveMailboxId(null)
       return
@@ -269,12 +299,12 @@ export function useEmailFastManager() {
     if (!activeMailboxId || !mailboxes.some((mailbox) => mailbox.id === activeMailboxId)) {
       setActiveMailboxId(mailboxes[0].id)
     }
-  }, [mailboxes, activeMailboxId, hasStoredVault, screen])
+  }, [mailboxes, activeMailboxId, hasStoredVault, cloudVaultMeta?.hasVault, screen])
 
   useEffect(() => {
-    if (hasStoredVault || mailboxes.length > 0) return
+    if (hasStoredVault || cloudVaultMeta?.hasVault || mailboxes.length > 0) return
     setCreatePassword((current) => current || generateSecureAccessKey())
-  }, [hasStoredVault, mailboxes.length])
+  }, [hasStoredVault, cloudVaultMeta?.hasVault, mailboxes.length])
 
   useEffect(() => {
     if (!sessionPassword || !mailboxes.length) return undefined
@@ -286,24 +316,42 @@ export function useEmailFastManager() {
       createDraft,
       mailboxes: mailboxes.map(sanitizeMailboxForVault),
     }
-
-    encryptVault(sessionPassword, payload)
-      .then((vault) => {
-        if (cancelled) return
-        saveStoredVault(vault)
-        setHasStoredVault(true)
-        setStoredVaultMeta({
-          mailboxCount: Number(vault.mailboxCount || mailboxes.length),
-          updatedAt: vault.updatedAt || Date.now(),
+    const payloadString = JSON.stringify(payload)
+    const timeoutId = window.setTimeout(() => {
+      encryptVault(sessionPassword, payload)
+        .then((vault) => {
+          if (cancelled) return
+          saveStoredVault(vault)
+          setHasStoredVault(true)
+          setStoredVaultMeta({
+            mailboxCount: Number(vault.mailboxCount || mailboxes.length),
+            updatedAt: vault.updatedAt || Date.now(),
+          })
         })
-      })
-      .catch((error) => {
-        console.error(error)
-        toast.error('Sauvegarde Email Fast impossible.')
-      })
+        .catch((error) => {
+          console.error(error)
+          toast.error('Sauvegarde Email Fast impossible.')
+        })
+
+      if (payloadString !== lastCloudPayloadRef.current) {
+        authAPI.saveEmailFastVault(payload)
+          .then(({ data }) => {
+            if (cancelled) return
+            lastCloudPayloadRef.current = payloadString
+            if (data?.meta) {
+              setCloudVaultMeta(data.meta)
+            }
+          })
+          .catch((error) => {
+            if (cancelled) return
+            console.error(error)
+          })
+      }
+    }, 180)
 
     return () => {
       cancelled = true
+      window.clearTimeout(timeoutId)
     }
   }, [activeMailboxId, createDraft, mailboxes, sessionPassword])
 
@@ -611,9 +659,9 @@ export function useEmailFastManager() {
   async function handleCreateSubmit() {
     setAuthError('')
 
-    if (mailboxesRef.current.length > 0 || hasStoredVault) {
+    if (mailboxesRef.current.length > 0 || hasStoredVault || cloudVaultMeta?.hasVault) {
       setAuthMode('access')
-      setAuthError("Entre ta clé d'accès pour retrouver tes adresses.")
+      setAuthError('Retrouve d abord tes adresses deja liees a cet appareil ou a ton compte.')
       return
     }
 
@@ -664,13 +712,7 @@ export function useEmailFastManager() {
     toast.success('Accès verrouillé.')
   }
 
-  async function restoreStoredVault(password, { silent = false } = {}) {
-    const storedVault = loadStoredVault()
-    if (!storedVault) {
-      throw new Error('Aucune adresse enregistree.')
-    }
-
-    const payload = await decryptVault(password, storedVault)
+  async function hydrateVaultPayload(payload, { accessKey, vaultMeta = null, silent = false } = {}) {
     const persistedMailboxes = Array.isArray(payload?.mailboxes) ? payload.mailboxes : []
 
     if (!persistedMailboxes.length) {
@@ -712,9 +754,18 @@ export function useEmailFastManager() {
       })
     )
 
-    setSessionPassword(password)
-    saveStoredSessionPassword(password)
-    setCreateDraft(payload?.createDraft || DEFAULT_DRAFT)
+    const nextAccessKey = String(accessKey || generateSecureAccessKey()).trim()
+    const nextCreateDraft = payload?.createDraft || DEFAULT_DRAFT
+    const nextMeta = {
+      hasVault: true,
+      mailboxCount: Number(vaultMeta?.mailboxCount || restoredMailboxes.length),
+      updatedAt: vaultMeta?.updatedAt || Date.now(),
+      requiresPassword: Boolean(vaultMeta?.requiresPassword),
+    }
+
+    setSessionPassword(nextAccessKey)
+    saveStoredSessionPassword(nextAccessKey)
+    setCreateDraft(nextCreateDraft)
     setMailboxes(restoredMailboxes)
     setActiveMailboxId(
       restoredMailboxes.some((mailbox) => mailbox.id === payload?.activeMailboxId)
@@ -723,16 +774,23 @@ export function useEmailFastManager() {
     )
     setHasStoredVault(true)
     setStoredVaultMeta({
-      mailboxCount: Number(storedVault.mailboxCount || restoredMailboxes.length),
-      updatedAt: storedVault.updatedAt || Date.now(),
+      mailboxCount: nextMeta.mailboxCount,
+      updatedAt: nextMeta.updatedAt,
     })
+    setCloudVaultMeta(nextMeta)
     setScreen('app')
     setAuthMode('access')
     setAccessPassword('')
-    setCreatePassword(password)
+    setAccountUnlockPassword('')
+    setCreatePassword(nextAccessKey)
     setSelectedMessageId(null)
     setQrOpen(false)
     setSyncError('')
+    lastCloudPayloadRef.current = JSON.stringify({
+      activeMailboxId: payload?.activeMailboxId || restoredMailboxes[0]?.id || null,
+      createDraft: nextCreateDraft,
+      mailboxes: restoredMailboxes.map(sanitizeMailboxForVault),
+    })
 
     const firstActiveMailbox = restoredMailboxes.find((mailbox) => mailbox.status === 'active')
     if (firstActiveMailbox) wakeMailbox(firstActiveMailbox.id)
@@ -745,6 +803,25 @@ export function useEmailFastManager() {
           : `${restoredMailboxes.length} adresse(s) retrouvée(s).`
       )
     }
+  }
+
+  async function restoreStoredVault(password, { silent = false } = {}) {
+    const storedVault = loadStoredVault()
+    if (!storedVault) {
+      throw new Error('Aucune adresse enregistree.')
+    }
+
+    const payload = await decryptVault(password, storedVault)
+    await hydrateVaultPayload(payload, {
+      accessKey: password,
+      vaultMeta: {
+        hasVault: true,
+        mailboxCount: Number(storedVault.mailboxCount || (Array.isArray(payload?.mailboxes) ? payload.mailboxes.length : 0)),
+        updatedAt: storedVault.updatedAt || Date.now(),
+        requiresPassword: Boolean(cloudVaultMeta?.requiresPassword),
+      },
+      silent,
+    })
   }
 
   async function handleUnlock() {
@@ -807,6 +884,52 @@ export function useEmailFastManager() {
     setAccessPassword('')
     saveStoredSessionPassword(enteredAccessKey || sessionPassword || '')
     toast.success('Accès restauré.')
+  }
+
+  async function handleAccountUnlock() {
+    if (lockoutSecondsLeft > 0) return
+    setAuthError('')
+
+    if (!cloudVaultMeta?.hasVault) {
+      setAuthError('Aucune adresse liée à ce compte pour le moment.')
+      return
+    }
+
+    const requiresPassword = Boolean(cloudVaultMeta.requiresPassword)
+    const accountPassword = accountUnlockPassword.trim()
+
+    if (requiresPassword && !accountPassword) {
+      setAuthError('Entre le mot de passe de ton compte.')
+      return
+    }
+
+    setIsCloudRestoring(true)
+
+    try {
+      const { data } = await authAPI.unlockEmailFastVault(requiresPassword ? accountPassword : undefined)
+      const nextAccessKey = generateSecureAccessKey(18)
+      await hydrateVaultPayload(data?.payload || {}, {
+        accessKey: nextAccessKey,
+        vaultMeta: data?.meta || cloudVaultMeta,
+      })
+      setFailedAttempts(0)
+      setLockoutUntil(null)
+      setShowAccountUnlockPassword(false)
+      toast.success('Adresses récupérées sur cet appareil.')
+    } catch (error) {
+      const nextFailedAttempts = failedAttempts + 1
+      setFailedAttempts(nextFailedAttempts)
+      setAccountUnlockPassword('')
+
+      if (nextFailedAttempts >= 3) {
+        setLockoutUntil(Date.now() + 30000)
+        setAuthError('Trop de tentatives. Attends 30 secondes.')
+      } else {
+        setAuthError(error?.response?.data?.error || error.message || `Mot de passe incorrect. ${3 - nextFailedAttempts} essai(s) restant(s).`)
+      }
+    } finally {
+      setIsCloudRestoring(false)
+    }
   }
 
   function switchMailbox(mailboxId) {
@@ -999,13 +1122,26 @@ export function useEmailFastManager() {
     if (!nextMailboxes.length) {
       clearStoredSessionPassword()
       clearStoredVault()
+      lastCloudPayloadRef.current = ''
       setHasStoredVault(false)
       setStoredVaultMeta(null)
       setSessionPassword(null)
       setScreen('auth')
-      setAuthMode('create')
+      setAuthMode(cloudVaultMeta?.hasVault ? 'access' : 'create')
       setAccessPassword('')
+      setAccountUnlockPassword('')
       setCreatePassword('')
+      void authAPI.clearEmailFastVault()
+        .then(({ data }) => {
+          if (data?.meta?.hasVault) {
+            setCloudVaultMeta(data.meta)
+          } else {
+            setCloudVaultMeta(null)
+          }
+        })
+        .catch((error) => {
+          console.error(error)
+        })
     }
 
     toast.success('Adresse retirée.')
@@ -1058,6 +1194,9 @@ export function useEmailFastManager() {
       lockoutSecondsLeft,
       hasStoredVault,
       storedVaultMeta,
+      cloudVaultMeta,
+      accountUnlockPassword,
+      showAccountUnlockPassword,
       createDraft,
       runtimeDraft,
       mailboxes,
@@ -1075,6 +1214,7 @@ export function useEmailFastManager() {
       isCreating,
       isRefreshing,
       isRestoring,
+      isCloudRestoring,
       qrReady,
       remainingMs,
       progressPercent,
@@ -1085,6 +1225,8 @@ export function useEmailFastManager() {
       setAccessPassword,
       setShowCreatePassword,
       setShowAccessPassword,
+      setAccountUnlockPassword,
+      setShowAccountUnlockPassword,
       setCreateDraft,
       setRuntimeDraft,
       setSearchQuery,
@@ -1095,6 +1237,7 @@ export function useEmailFastManager() {
       handleCreateAnotherMailbox,
       handleLock,
       handleUnlock,
+      handleAccountUnlock,
       switchMailbox,
       applyRuntimeSettings,
       extendActiveMailbox,

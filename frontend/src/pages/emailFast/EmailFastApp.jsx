@@ -362,7 +362,11 @@ export default function EmailFastApp() {
         ? 'Permanent'
         : formatRemaining(state.remainingMs)
     : '--'
-  const storedMailboxCount = state.mailboxes.length || state.storedVaultMeta?.mailboxCount || 0
+  const storedMailboxCount = Math.max(
+    state.mailboxes.length || 0,
+    state.storedVaultMeta?.mailboxCount || 0,
+    state.cloudVaultMeta?.mailboxCount || 0
+  )
 
   useEffect(() => {
     setLabelDraft(state.activeMailbox?.label || '')
@@ -571,6 +575,228 @@ export default function EmailFastApp() {
       </div>
     )
   }
+  const renderAuthScreenNext = () => {
+    const hasLocalVault = state.hasStoredVault || state.mailboxes.length > 0
+    const hasCloudVault = Boolean(state.cloudVaultMeta?.hasVault)
+    const hasSavedSession = hasLocalVault || hasCloudVault
+    const lastVaultUpdate = state.cloudVaultMeta?.updatedAt || state.storedVaultMeta?.updatedAt || null
+
+    return (
+      <div className="email-fast-app mx-auto max-w-[1240px] space-y-5 px-4 py-5 sm:p-6">
+        <motion.section className="depth-panel relative overflow-hidden rounded-[32px] p-5 sm:p-6" {...motionFade}>
+          {state.lockoutSecondsLeft > 0 && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-950/92 backdrop-blur-xl">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-red-400/20 bg-red-400/10 text-red-300">
+                <ShieldAlert className="h-6 w-6" />
+              </div>
+              <div className="text-center">
+                <p className="font-display text-xl font-700 text-white">Pause sécurité</p>
+                <p className="mt-2 font-mono text-sm text-red-300">{state.lockoutSecondsLeft}s avant nouvel essai</p>
+              </div>
+            </div>
+          )}
+
+          <div className="relative z-[1] max-w-3xl">
+            <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/70">Email temporaire</p>
+            <h1 className="mt-4 font-display text-3xl font-800 text-white sm:text-4xl">
+              {hasSavedSession ? 'Retrouver mes adresses' : 'Créer une adresse temporaire'}
+            </h1>
+            <p className="mt-3 text-sm leading-7 text-white/52 sm:text-[15px]">
+              {!hasSavedSession
+                ? 'Choisis une durée, clique, et ton adresse se crée tout de suite.'
+                : hasLocalVault && hasCloudVault
+                  ? 'Rouvre tes adresses ici ou récupère-les depuis ton compte sur un nouvel appareil.'
+                  : hasCloudVault
+                    ? 'Tes adresses peuvent être récupérées depuis ton compte sur ce nouvel appareil.'
+                    : 'Tes adresses peuvent être rouvertes tout de suite depuis cet appareil.'}
+            </p>
+          </div>
+
+          {state.authError && (
+            <div className="relative z-[1] mt-5 rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+              {state.authError}
+            </div>
+          )}
+
+          {!hasSavedSession ? (
+            <div className="relative z-[1] mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+              <DurationPicker title="Durée de l'adresse" draft={state.createDraft} setDraft={actions.setCreateDraft} />
+
+              <div className="space-y-5">
+                <div className="ef-panel space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-display font-700 text-white">Clé d'accès</p>
+                      <p className="mt-1 text-sm leading-6 text-white/45">
+                        Elle est générée automatiquement et reste disponible dans l'espace.
+                      </p>
+                    </div>
+                    <KeyRound className="mt-1 h-5 w-5 text-neon-cyan" />
+                  </div>
+
+                  <PasswordField
+                    label="Clé générée"
+                    placeholder="Clé auto-générée"
+                    value={state.createPassword}
+                    onChange={actions.setCreatePassword}
+                    visible={state.showCreatePassword}
+                    onToggle={() => actions.setShowCreatePassword((current) => !current)}
+                    readOnly
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        actions.handleCreateSubmit()
+                      }
+                    }}
+                  />
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={actions.copyAccessKey}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/70 transition-all hover:border-white/15 hover:text-white"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copier la clé
+                    </button>
+                    <button
+                      type="button"
+                      onClick={actions.regenerateCreatePassword}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Régénérer
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={actions.handleCreateSubmit}
+                  disabled={state.isCreating || !createDurationMeta.valid}
+                  className="btn-primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-mono disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {state.isCreating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
+                  {state.isCreating ? 'Création en cours' : 'Créer une adresse temporaire'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="relative z-[1] mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+              <div className="ef-panel space-y-4">
+                <p className="text-sm font-display font-700 text-white">Adresses détectées</p>
+                <p className="text-sm leading-6 text-white/45">
+                  {storedMailboxCount} adresse{storedMailboxCount > 1 ? 's' : ''} prête
+                  {storedMailboxCount > 1 ? 's' : ''} à être récupérée
+                  {storedMailboxCount > 1 ? 's' : ''}.
+                </p>
+                {lastVaultUpdate && (
+                  <p className="text-xs font-mono text-white/35">
+                    Dernière mise à jour: {formatDateTime(lastVaultUpdate)}
+                  </p>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Sur cet appareil</p>
+                    <p className="mt-2 text-sm text-white/70">
+                      {hasLocalVault ? 'Ouverture immédiate avec ta clé.' : 'Aucune adresse locale pour le moment.'}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Depuis ton compte</p>
+                    <p className="mt-2 text-sm text-white/70">
+                      {hasCloudVault ? 'Récupération rapide sur un nouvel appareil.' : 'Aucune adresse liée à ton compte pour le moment.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                {hasLocalVault && (
+                  <div className="ef-panel space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-display font-700 text-white">Sur cet appareil</p>
+                        <p className="mt-1 text-sm leading-6 text-white/45">
+                          Utilise ta clé d'accès si l'appareil connaît déjà tes adresses.
+                        </p>
+                      </div>
+                      <KeyRound className="mt-1 h-5 w-5 text-neon-cyan" />
+                    </div>
+                    <PasswordField
+                      label="Clé d'accès"
+                      placeholder="Colle ta clé d'accès"
+                      value={state.accessPassword}
+                      onChange={actions.setAccessPassword}
+                      visible={state.showAccessPassword}
+                      onToggle={() => actions.setShowAccessPassword((current) => !current)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          actions.handleUnlock()
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={actions.handleUnlock}
+                      disabled={state.isRestoring}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-4 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {state.isRestoring ? <RefreshCw className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                      {state.isRestoring ? 'Ouverture...' : 'Ouvrir ici'}
+                    </button>
+                  </div>
+                )}
+
+                {hasCloudVault && (
+                  <div className="ef-panel space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-display font-700 text-white">Depuis ton compte</p>
+                        <p className="mt-1 text-sm leading-6 text-white/45">
+                          Sur un nouvel appareil, récupère tes adresses avec ton compte puis une nouvelle clé locale sera créée.
+                        </p>
+                      </div>
+                      <Mail className="mt-1 h-5 w-5 text-neon-cyan" />
+                    </div>
+
+                    {state.cloudVaultMeta?.requiresPassword && (
+                      <PasswordField
+                        label="Mot de passe du compte"
+                        placeholder="Entre le mot de passe du compte"
+                        value={state.accountUnlockPassword}
+                        onChange={actions.setAccountUnlockPassword}
+                        visible={state.showAccountUnlockPassword}
+                        onToggle={() => actions.setShowAccountUnlockPassword((current) => !current)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            actions.handleAccountUnlock()
+                          }
+                        }}
+                      />
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={actions.handleAccountUnlock}
+                      disabled={state.isCloudRestoring}
+                      className="btn-primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-mono disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {state.isCloudRestoring ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                      {state.isCloudRestoring ? 'Récupération...' : 'Récupérer depuis mon compte'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </motion.section>
+      </div>
+    )
+  }
+
   const renderAppScreen = () => (
     <div className="email-fast-app mx-auto max-w-[1480px] space-y-5 px-4 py-5 sm:p-6">
       <motion.section className="section-hero" {...motionFade}>
@@ -1037,5 +1263,5 @@ export default function EmailFastApp() {
     </div>
   )
 
-  return state.screen === 'auth' ? renderAuthScreen() : renderAppScreen()
+  return state.screen === 'auth' ? renderAuthScreenNext() : renderAppScreen()
 }

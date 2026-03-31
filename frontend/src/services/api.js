@@ -141,6 +141,10 @@ export const authAPI = {
   updateAvatar:   (avatar_url) => api.patch('/auth/me/avatar', { avatar_url }),
   changePassword: (data)     => api.patch('/auth/me/password', data),
   updatePreferences: (data)  => api.patch('/auth/me/preferences', data),
+  getEmailFastVaultMeta: ()  => api.get('/auth/me/email-fast-vault/meta'),
+  saveEmailFastVault: (payload) => api.put('/auth/me/email-fast-vault', { payload }),
+  unlockEmailFastVault: (currentPassword) => api.post('/auth/me/email-fast-vault/unlock', currentPassword ? { currentPassword } : {}),
+  clearEmailFastVault: ()    => api.delete('/auth/me/email-fast-vault'),
 }
 
 // ── Bot ───────────────────────────────────────────────────────────────────────

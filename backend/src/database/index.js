@@ -229,6 +229,8 @@ function runMigrations() {
   ensureColumn('users', 'discord_avatar_url', 'TEXT');
   ensureColumn('guild_access_members', 'suspended_until', 'TEXT');
   ensureColumn('users', 'last_seen_at', 'TEXT');
+  ensureColumn('users', 'email_fast_vault', 'TEXT');
+  ensureColumn('users', 'email_fast_vault_updated_at', 'TEXT');
   ensureColumn('guilds', 'discord_logs_cleared_before', 'TEXT');
   ensureColumn('support_tickets', 'claimed_once_at', 'TEXT');
   db.exec(`

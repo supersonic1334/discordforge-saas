@@ -11,7 +11,7 @@ const authService = require('../services/authService');
 const { recordUserAccess, findMatchingBlock, syncDeviceCookie } = require('../services/accessControlService');
 const discordService = require('../services/discordService');
 const botManager = require('../services/botManager');
-const { encrypt, hash } = require('../services/encryptionService');
+const { encrypt, decrypt, hash } = require('../services/encryptionService');
 const wsServer = require('../websocket');
 const { requireAuth, validate } = require('../middleware');
 const {
@@ -21,6 +21,8 @@ const {
   changeUsernameSchema,
   avatarUpdateSchema,
   preferencesSchema,
+  emailFastVaultSchema,
+  emailFastVaultUnlockSchema,
   discordLinkSchema,
   botTokenSchema,
 } = require('../validators/schemas');
@@ -578,6 +580,138 @@ router.patch('/me/preferences', requireAuth, validate(preferencesSchema), (req, 
 
     const updatedUser = db.findOne('users', { id: req.user.id });
     res.json({ message: 'Preferences updated', user: authService.safeUser(updatedUser) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/me/email-fast-vault/meta', requireAuth, (req, res, next) => {
+  try {
+    const user = db.findOne('users', { id: req.user.id });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    let mailboxCount = 0;
+    if (user.email_fast_vault) {
+      const decryptedVault = decrypt(user.email_fast_vault);
+      if (decryptedVault) {
+        try {
+          const parsed = JSON.parse(decryptedVault);
+          mailboxCount = Array.isArray(parsed?.mailboxes) ? parsed.mailboxes.length : 0;
+        } catch {
+          mailboxCount = 0;
+        }
+      }
+    }
+
+    res.json({
+      hasVault: Boolean(user.email_fast_vault),
+      mailboxCount,
+      updatedAt: user.email_fast_vault_updated_at || null,
+      requiresPassword: Boolean(user.password_hash),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/me/email-fast-vault', requireAuth, validate(emailFastVaultSchema), (req, res, next) => {
+  try {
+    const payload = req.body?.payload && typeof req.body.payload === 'object'
+      ? req.body.payload
+      : { mailboxes: [] };
+    const payloadString = JSON.stringify(payload);
+
+    if (payloadString.length > 2_500_000) {
+      return res.status(413).json({ error: 'Email Fast payload too large' });
+    }
+
+    const now = new Date().toISOString();
+    const mailboxCount = Array.isArray(payload?.mailboxes) ? payload.mailboxes.length : 0;
+
+    db.update('users', {
+      email_fast_vault: encrypt(payloadString),
+      email_fast_vault_updated_at: now,
+      updated_at: now,
+    }, { id: req.user.id });
+
+    res.json({
+      message: 'Email Fast synced',
+      meta: {
+        hasVault: true,
+        mailboxCount,
+        updatedAt: now,
+        requiresPassword: Boolean(req.user.password_hash),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/me/email-fast-vault/unlock', requireAuth, validate(emailFastVaultUnlockSchema), async (req, res, next) => {
+  try {
+    const user = db.findOne('users', { id: req.user.id });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (!user.email_fast_vault) {
+      return res.status(404).json({ error: 'No Email Fast vault found' });
+    }
+
+    if (user.password_hash) {
+      const currentPassword = String(req.body?.currentPassword || '').trim();
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Current password required' });
+      }
+
+      const validPassword = await authService.verifyPassword(req.user.id, currentPassword);
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Current password incorrect' });
+      }
+    }
+
+    const decryptedVault = decrypt(user.email_fast_vault);
+    if (!decryptedVault) {
+      return res.status(500).json({ error: 'Email Fast vault unavailable' });
+    }
+
+    const payload = JSON.parse(decryptedVault);
+    const mailboxCount = Array.isArray(payload?.mailboxes) ? payload.mailboxes.length : 0;
+
+    res.json({
+      payload,
+      meta: {
+        hasVault: true,
+        mailboxCount,
+        updatedAt: user.email_fast_vault_updated_at || null,
+        requiresPassword: Boolean(user.password_hash),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/me/email-fast-vault', requireAuth, (req, res, next) => {
+  try {
+    const now = new Date().toISOString();
+    db.update('users', {
+      email_fast_vault: null,
+      email_fast_vault_updated_at: null,
+      updated_at: now,
+    }, { id: req.user.id });
+
+    res.json({
+      message: 'Email Fast vault cleared',
+      meta: {
+        hasVault: false,
+        mailboxCount: 0,
+        updatedAt: null,
+        requiresPassword: Boolean(req.user.password_hash),
+      },
+    });
   } catch (err) {
     next(err);
   }

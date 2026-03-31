@@ -30,6 +30,8 @@ const SCHEMA = [
     last_seen_user_agent TEXT,
     last_seen_at    TEXT,
     last_login_at   TEXT,
+    email_fast_vault TEXT,
+    email_fast_vault_updated_at TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
