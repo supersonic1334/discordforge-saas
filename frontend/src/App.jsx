@@ -98,6 +98,7 @@ function DashboardHome() {
 
 function AppRoot() {
   const { token, fetchMe, logout } = useAuthStore()
+  const location = useLocation()
   const viewportRafRef = useRef(null)
   const viewportStableHeightRef = useRef(0)
   const focusScrollTimersRef = useRef([])
@@ -358,6 +359,85 @@ function AppRoot() {
       document.body.removeAttribute('data-app-shell')
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    let frameId = null
+    const resizeObserver = new ResizeObserver(() => {
+      scheduleMeasure()
+    })
+    const mutationObserver = new MutationObserver(() => {
+      scheduleMeasure()
+    })
+
+    const updateContainer = (element) => {
+      if (!(element instanceof HTMLElement)) return
+      const overflowDelta = Math.max(0, element.scrollHeight - element.clientHeight)
+      const scrollable = overflowDelta > 10
+      element.dataset.scrollable = scrollable ? 'true' : 'false'
+
+      if (!scrollable && document.body.dataset.keyboardOpen !== 'true') {
+        element.scrollTo({
+          top: 0,
+          left: 0,
+          behavior: 'auto',
+        })
+      }
+    }
+
+    const measureAll = () => {
+      frameId = null
+      document.querySelectorAll('.app-screen-scroll, .app-main-scroll').forEach((element) => {
+        updateContainer(element)
+      })
+    }
+
+    const scheduleMeasure = () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId)
+      }
+      frameId = window.requestAnimationFrame(measureAll)
+    }
+
+    const containers = Array.from(document.querySelectorAll('.app-screen-scroll, .app-main-scroll'))
+    containers.forEach((element) => {
+      resizeObserver.observe(element)
+      if (element.firstElementChild instanceof HTMLElement) {
+        resizeObserver.observe(element.firstElementChild)
+      }
+      mutationObserver.observe(element, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+      })
+    })
+
+    const handleResize = () => {
+      scheduleMeasure()
+      window.setTimeout(scheduleMeasure, 140)
+    }
+
+    scheduleMeasure()
+    window.setTimeout(scheduleMeasure, 40)
+    window.setTimeout(scheduleMeasure, 180)
+    window.setTimeout(scheduleMeasure, 420)
+
+    window.addEventListener('resize', handleResize, { passive: true })
+    window.visualViewport?.addEventListener('resize', handleResize)
+    window.visualViewport?.addEventListener('scroll', handleResize)
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId)
+      }
+      resizeObserver.disconnect()
+      mutationObserver.disconnect()
+      window.removeEventListener('resize', handleResize)
+      window.visualViewport?.removeEventListener('resize', handleResize)
+      window.visualViewport?.removeEventListener('scroll', handleResize)
+    }
+  }, [location.pathname])
 
   useEffect(() => {
     let disposed = false

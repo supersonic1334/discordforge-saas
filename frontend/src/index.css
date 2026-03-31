@@ -399,6 +399,13 @@
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
     padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
   }
+  .app-main-scroll[data-scrollable="false"] {
+    overflow-y: hidden !important;
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+  .app-main-scroll[data-scrollable="true"] {
+    overflow-y: auto;
+  }
   .app-screen-scroll {
     height: var(--app-height);
     min-height: var(--app-height);
@@ -411,6 +418,13 @@
     scroll-padding-top: 24px;
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
     padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+  }
+  .app-screen-scroll[data-scrollable="false"] {
+    overflow-y: hidden !important;
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+  .app-screen-scroll[data-scrollable="true"] {
+    overflow-y: auto;
   }
   .auth-page-shell {
     display: flex;
@@ -812,6 +826,7 @@
 @media (hover: none) and (pointer: coarse) {
   body[data-keyboard-open="true"] .app-screen-scroll,
   body[data-keyboard-open="true"] .app-main-scroll {
+    overflow-y: auto !important;
     scroll-padding-top: 10px !important;
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px) !important;
     padding-bottom: calc(env(safe-area-inset-bottom) + 12px) !important;
