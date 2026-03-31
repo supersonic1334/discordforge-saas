@@ -154,9 +154,19 @@ function AppRoot() {
       })
     }
 
+    const shouldLockInputViewport = (element) => (
+      isTouchInputMode
+      && element instanceof HTMLElement
+      && !!element.closest('.auth-page-shell')
+    )
+
     const scrollActiveFieldIntoView = (behavior = 'smooth') => {
       const activeElement = document.activeElement
       if (!isEditableElement(activeElement)) return
+      if (shouldLockInputViewport(activeElement)) {
+        restoreWindowHorizontalPosition()
+        return
+      }
 
       const visualViewport = window.visualViewport
       const visibleHeight = Math.round(visualViewport?.height || window.innerHeight || 0)
