@@ -105,6 +105,9 @@ function AppRoot() {
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
     const isTouchInputMode = 'ontouchstart' in window || (navigator?.maxTouchPoints || 0) > 0
+    const KEYBOARD_OFFSET_THRESHOLD = 72
+
+    const isTouchViewportMode = () => isTouchInputMode && window.innerWidth <= 1280
 
     const isEditableElement = (element) => (
       element instanceof HTMLElement
@@ -244,6 +247,7 @@ function AppRoot() {
       const nextHeight = Math.round(visualViewport?.height || window.innerHeight || 0)
       const nextWidth = Math.round(visualViewport?.width || window.innerWidth || 0)
       const viewportOffsetTop = Math.round(visualViewport?.offsetTop || 0)
+      const touchViewportMode = isTouchViewportMode()
 
       viewportStableHeightRef.current = Math.max(
         viewportStableHeightRef.current || 0,
@@ -252,13 +256,19 @@ function AppRoot() {
       )
 
       const stableHeight = Math.max(viewportStableHeightRef.current, nextHeight)
-      const keyboardOffset = Math.max(0, stableHeight - nextHeight - viewportOffsetTop)
+      const rawKeyboardOffset = Math.max(0, stableHeight - nextHeight - viewportOffsetTop)
+      const hasFocusedEditable = isEditableElement(document.activeElement)
+      const keyboardOpen = touchViewportMode && hasFocusedEditable && rawKeyboardOffset > KEYBOARD_OFFSET_THRESHOLD
+      const shellHeight = touchViewportMode ? stableHeight : nextHeight
+      const keyboardOffset = keyboardOpen ? rawKeyboardOffset : 0
 
-      document.documentElement.style.setProperty('--app-height', `${nextHeight}px`)
+      document.documentElement.style.setProperty('--app-height', `${shellHeight}px`)
+      document.documentElement.style.setProperty('--app-visible-height', `${nextHeight}px`)
       document.documentElement.style.setProperty('--app-width', `${nextWidth}px`)
       document.documentElement.style.setProperty('--app-stable-height', `${stableHeight}px`)
       document.documentElement.style.setProperty('--app-keyboard-offset', `${keyboardOffset}px`)
-      document.body.dataset.keyboardOpen = keyboardOffset > 0 ? 'true' : 'false'
+      document.body.dataset.keyboardOpen = keyboardOpen ? 'true' : 'false'
+      document.body.dataset.inputFocus = hasFocusedEditable ? 'true' : 'false'
     }
 
     const scheduleViewportSize = () => {
@@ -270,19 +280,36 @@ function AppRoot() {
 
     const handleViewportResize = () => {
       scheduleViewportSize()
-      scheduleFocusScroll('auto', [24, 120, 260, 420])
+      if (isEditableElement(document.activeElement)) {
+        scheduleFocusScroll('auto', [28, 120, 240])
+        return
+      }
+      clearFocusScrollTimers()
     }
 
     const handleOrientationChange = () => {
       viewportStableHeightRef.current = 0
       scheduleViewportSize()
-      scheduleFocusScroll('auto', [120, 260, 520])
+      if (isEditableElement(document.activeElement)) {
+        scheduleFocusScroll('auto', [120, 260, 520])
+        return
+      }
+      clearFocusScrollTimers()
     }
 
     const handleFocusIn = (event) => {
       if (isEditableElement(event.target)) {
-        scheduleFocusScroll(isTouchInputMode ? 'auto' : 'smooth', [40, 160, 320, 520])
+        scheduleViewportSize()
+        scheduleFocusScroll(isTouchInputMode ? 'auto' : 'smooth', [32, 128, 260])
       }
+    }
+
+    const handleFocusOut = (event) => {
+      if (!isEditableElement(event.target)) return
+      clearFocusScrollTimers()
+      window.requestAnimationFrame(() => {
+        scheduleViewportSize()
+      })
     }
 
     scheduleViewportSize()
@@ -291,6 +318,7 @@ function AppRoot() {
     window.visualViewport?.addEventListener('resize', handleViewportResize)
     window.visualViewport?.addEventListener('scroll', handleViewportResize)
     document.addEventListener('focusin', handleFocusIn)
+    document.addEventListener('focusout', handleFocusOut)
 
     return () => {
       if (viewportRafRef.current) {
@@ -298,11 +326,13 @@ function AppRoot() {
       }
       clearFocusScrollTimers()
       delete document.body.dataset.keyboardOpen
+      delete document.body.dataset.inputFocus
       window.removeEventListener('resize', handleViewportResize)
       window.removeEventListener('orientationchange', handleOrientationChange)
       window.visualViewport?.removeEventListener('resize', handleViewportResize)
       window.visualViewport?.removeEventListener('scroll', handleViewportResize)
       document.removeEventListener('focusin', handleFocusIn)
+      document.removeEventListener('focusout', handleFocusOut)
     }
   }, [])
 

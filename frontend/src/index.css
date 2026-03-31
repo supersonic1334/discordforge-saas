@@ -397,7 +397,7 @@
     touch-action: pan-y;
     scroll-padding-top: 24px;
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
-    padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 8px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
   }
   .app-screen-scroll {
     height: var(--app-height);
@@ -410,7 +410,7 @@
     touch-action: pan-y;
     scroll-padding-top: 24px;
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 32px);
-    padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 16px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
   }
   .auth-page-shell {
     display: flex;
@@ -758,6 +758,7 @@
   body[data-keyboard-open="true"] .app-main-scroll {
     scroll-padding-top: 10px !important;
     scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px) !important;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 12px) !important;
   }
 
   body[data-keyboard-open="true"] .input-field,
@@ -1255,7 +1256,7 @@ html {
 
   .app-main-scroll,
   .app-screen-scroll {
-    padding-bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset) + 18px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 18px);
   }
 }
 
