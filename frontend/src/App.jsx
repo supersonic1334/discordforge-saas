@@ -364,10 +364,8 @@ function AppRoot() {
     if (typeof window === 'undefined') return undefined
 
     let frameId = null
+    const timerIds = []
     const resizeObserver = new ResizeObserver(() => {
-      scheduleMeasure()
-    })
-    const mutationObserver = new MutationObserver(() => {
       scheduleMeasure()
     })
 
@@ -375,9 +373,13 @@ function AppRoot() {
       if (!(element instanceof HTMLElement)) return
       const overflowDelta = Math.max(0, element.scrollHeight - element.clientHeight)
       const scrollable = overflowDelta > 10
-      element.dataset.scrollable = scrollable ? 'true' : 'false'
+      const nextScrollableValue = scrollable ? 'true' : 'false'
 
-      if (!scrollable && document.body.dataset.keyboardOpen !== 'true') {
+      if (element.dataset.scrollable !== nextScrollableValue) {
+        element.dataset.scrollable = nextScrollableValue
+      }
+
+      if (!scrollable && document.body.dataset.keyboardOpen !== 'true' && (element.scrollTop !== 0 || element.scrollLeft !== 0)) {
         element.scrollTo({
           top: 0,
           left: 0,
@@ -406,22 +408,22 @@ function AppRoot() {
       if (element.firstElementChild instanceof HTMLElement) {
         resizeObserver.observe(element.firstElementChild)
       }
-      mutationObserver.observe(element, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-      })
     })
+
+    const queueMeasure = (delay) => {
+      const timerId = window.setTimeout(scheduleMeasure, delay)
+      timerIds.push(timerId)
+    }
 
     const handleResize = () => {
       scheduleMeasure()
-      window.setTimeout(scheduleMeasure, 140)
+      queueMeasure(140)
     }
 
     scheduleMeasure()
-    window.setTimeout(scheduleMeasure, 40)
-    window.setTimeout(scheduleMeasure, 180)
-    window.setTimeout(scheduleMeasure, 420)
+    queueMeasure(40)
+    queueMeasure(180)
+    queueMeasure(420)
 
     window.addEventListener('resize', handleResize, { passive: true })
     window.visualViewport?.addEventListener('resize', handleResize)
@@ -431,8 +433,8 @@ function AppRoot() {
       if (frameId) {
         window.cancelAnimationFrame(frameId)
       }
+      timerIds.forEach((timerId) => window.clearTimeout(timerId))
       resizeObserver.disconnect()
-      mutationObserver.disconnect()
       window.removeEventListener('resize', handleResize)
       window.visualViewport?.removeEventListener('resize', handleResize)
       window.visualViewport?.removeEventListener('scroll', handleResize)
