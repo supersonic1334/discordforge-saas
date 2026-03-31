@@ -337,6 +337,7 @@ export default function EmailFastApp() {
   const { state, actions } = useEmailFastManager()
   const qrRef = useRef(null)
   const [showVaultKey, setShowVaultKey] = useState(false)
+  const [showMailboxPassword, setShowMailboxPassword] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deletePhrase, setDeletePhrase] = useState('')
@@ -366,6 +367,10 @@ export default function EmailFastApp() {
   useEffect(() => {
     setLabelDraft(state.activeMailbox?.label || '')
   }, [state.activeMailbox?.id, state.activeMailbox?.label])
+
+  useEffect(() => {
+    setShowMailboxPassword(false)
+  }, [state.activeMailbox?.id])
 
   useEffect(() => {
     if (!state.qrOpen || !state.qrReady || !state.activeMailbox?.address || !qrRef.current || !window.QRCode) {
@@ -579,6 +584,37 @@ export default function EmailFastApp() {
                 <div>
                   <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Adresse active</p>
                   <p className="mt-2 break-all font-display text-xl font-700 text-white">{state.activeMailbox.address}</p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Mot de passe de l'adresse</p>
+                      <p className="mt-1 text-sm leading-6 text-white/45">
+                        Chaque adresse a sa propre clé forte, générée automatiquement.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={actions.copyActiveMailboxPassword}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white/70 transition-all hover:border-white/15 hover:text-white"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copier le mot de passe
+                    </button>
+                  </div>
+
+                  <div className="mt-4">
+                    <PasswordField
+                      label="Clé de cette adresse"
+                      placeholder="Mot de passe généré"
+                      value={state.activeMailbox.password || ''}
+                      onChange={() => {}}
+                      visible={showMailboxPassword}
+                      onToggle={() => setShowMailboxPassword((current) => !current)}
+                      readOnly
+                    />
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">

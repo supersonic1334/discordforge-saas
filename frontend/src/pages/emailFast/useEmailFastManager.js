@@ -10,6 +10,7 @@ import {
   decryptVault,
   encryptVault,
   ensureQRCodeScript,
+  generateMailboxPassword,
   generateSecureAccessKey,
   getDurationConfig,
   loadStoredSessionPassword,
@@ -562,7 +563,7 @@ export function useEmailFastManager() {
       }
 
       const address = `${randomString(10)}@${domain}`
-      const mailboxPassword = randomString(16)
+      const mailboxPassword = generateMailboxPassword(28)
 
       const createResponse = await fetch(`${API}/accounts`, {
         method: 'POST',
@@ -925,6 +926,16 @@ export function useEmailFastManager() {
     toast.success('Clé copiée.')
   }
 
+  async function copyActiveMailboxPassword() {
+    if (!activeMailbox?.password) {
+      toast.error("Aucun mot de passe d'adresse disponible.")
+      return
+    }
+
+    await copyText(activeMailbox.password)
+    toast.success("Mot de passe d'adresse copié.")
+  }
+
   function regenerateCreatePassword() {
     const nextAccessKey = generateSecureAccessKey(18)
     setCreatePassword(nextAccessKey)
@@ -1015,6 +1026,7 @@ export function useEmailFastManager() {
     if (!activeMailbox?.address) return
     const payload = {
       address: activeMailbox.address,
+      password: activeMailbox.password,
       label: activeMailbox.label,
       duration: getDurationConfig(activeMailbox.durationKey, activeMailbox.customDurationMinutes).label,
       pollIntervalMs: activeMailbox.pollIntervalMs,
@@ -1089,6 +1101,7 @@ export function useEmailFastManager() {
       makeActivePermanent,
       refreshActiveMailbox,
       copyActiveAddress,
+      copyActiveMailboxPassword,
       copyAccessKey,
       copyMessageContent,
       openMessage,

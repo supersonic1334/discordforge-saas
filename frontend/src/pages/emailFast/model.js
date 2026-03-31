@@ -99,6 +99,33 @@ export function generateSecureAccessKey(length = 18) {
   return buffer.join('')
 }
 
+export function generateMailboxPassword(length = 28) {
+  const strongSymbols = '!@#$%*-_+=.?'
+  const groups = [
+    'ABCDEFGHJKLMNPQRSTUVWXYZ',
+    'abcdefghijkmnopqrstuvwxyz',
+    '23456789',
+    strongSymbols,
+  ]
+  const allChars = groups.join('')
+  const size = Math.max(25, Number(length) || 28)
+  const buffer = groups.flatMap((charset) => [
+    charset[getRandomIndex(charset.length)],
+    charset[getRandomIndex(charset.length)],
+  ])
+
+  while (buffer.length < size) {
+    buffer.push(allChars[getRandomIndex(allChars.length)])
+  }
+
+  for (let index = buffer.length - 1; index > 0; index -= 1) {
+    const swapIndex = getRandomIndex(index + 1)
+    ;[buffer[index], buffer[swapIndex]] = [buffer[swapIndex], buffer[index]]
+  }
+
+  return buffer.join('')
+}
+
 export function stripHtml(value) {
   return String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
