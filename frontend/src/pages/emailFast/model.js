@@ -11,7 +11,7 @@ export const DURATION_OPTIONS = [
   { id: '10m', label: '10 min', note: 'Rapide', minutes: 10 },
   { id: '1h', label: '1 heure', note: 'Classique', minutes: 60 },
   { id: '24h', label: '24 heures', note: 'Journée', minutes: 1440 },
-  { id: 'permanent', label: 'Illimité', note: 'Sans limite', minutes: null },
+  { id: 'permanent', label: 'Inf', note: 'Sans limite', minutes: null },
   { id: 'custom', label: 'Perso', note: '1 min à 7 jours', minutes: 'custom' },
 ]
 
@@ -167,7 +167,7 @@ export function getDurationConfig(durationKey, customInput) {
   if (durationKey === 'permanent') {
     return {
       key: durationKey,
-      label: 'Illimité',
+      label: 'Inf',
       summary: 'Sans expiration locale',
       isPermanent: true,
       minutes: null,
