@@ -10,6 +10,8 @@ const TEXT_CHANNEL_TYPES = new Set([0, 5, 11, 12, 15])
 const AUTO_REFRESH_MS = 12000
 const AUTOSAVE_DELAY_MS = 1500
 const LOCAL_DRAFT_PREFIX = 'ticket-generator-draft:'
+const MAX_TICKET_ASSET_LENGTH = 320000
+const MAX_TICKET_REQUEST_LENGTH = 850000
 
 const PRESETS = [
   {
@@ -168,7 +170,7 @@ function loadImageElement(source) {
 
 async function buildOptimizedImageAsset(file) {
   const rawDataUrl = await readFileAsDataUrl(file)
-  if (rawDataUrl.length <= 1_100_000) return rawDataUrl
+  if (rawDataUrl.length <= MAX_TICKET_ASSET_LENGTH) return rawDataUrl
   if (String(file.type || '').toLowerCase() === 'image/gif') {
     throw new Error('GIF trop lourd. Choisis une image plus legere.')
   }
@@ -180,7 +182,7 @@ async function buildOptimizedImageAsset(file) {
   let quality = 0.88
   let output = rawDataUrl
 
-  while (output.length > 1_100_000 && scale > 0.35) {
+  while (output.length > MAX_TICKET_ASSET_LENGTH && scale > 0.16) {
     const canvas = document.createElement('canvas')
     canvas.width = Math.max(1, Math.round(width * scale))
     canvas.height = Math.max(1, Math.round(height * scale))
@@ -188,12 +190,42 @@ async function buildOptimizedImageAsset(file) {
     if (!context) break
     context.drawImage(image, 0, 0, canvas.width, canvas.height)
     output = canvas.toDataURL('image/webp', quality)
-    quality = Math.max(0.45, quality - 0.08)
-    scale *= 0.88
+    quality = Math.max(0.28, quality - 0.1)
+    scale *= 0.82
   }
 
-  if (output.length > 1_100_000) {
+  if (output.length > MAX_TICKET_ASSET_LENGTH) {
     throw new Error('Image trop lourde. Reduis sa taille avant envoi.')
+  }
+
+  return output
+}
+
+async function optimizeImageAssetValue(value, maxLength = MAX_TICKET_ASSET_LENGTH) {
+  const raw = String(value || '').trim()
+  if (!raw || /^https?:\/\//i.test(raw)) return raw
+  if (!/^data:image\//i.test(raw)) return raw
+  if (raw.length <= maxLength) return raw
+
+  const image = await loadImageElement(raw)
+  let scale = Math.min(1, 1500 / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height))
+  let quality = 0.8
+  let output = raw
+
+  while (output.length > maxLength && scale > 0.12) {
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale))
+    canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale))
+    const context = canvas.getContext('2d')
+    if (!context) break
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    output = canvas.toDataURL('image/webp', quality)
+    quality = Math.max(0.22, quality - 0.08)
+    scale *= 0.8
+  }
+
+  if (output.length > maxLength) {
+    throw new Error('Image trop lourde pour la sauvegarde du panel.')
   }
 
   return output
@@ -269,6 +301,27 @@ function buildTicketSavePayload(value = {}) {
       }
     }),
   }
+}
+
+async function buildTicketSavePayloadForRequest(value = {}) {
+  const payload = buildTicketSavePayload(value)
+  payload.panel_thumbnail_url = await optimizeImageAssetValue(payload.panel_thumbnail_url, 220000)
+  payload.panel_image_url = await optimizeImageAssetValue(payload.panel_image_url, 420000)
+
+  let serialized = JSON.stringify(payload)
+  if (serialized.length > MAX_TICKET_REQUEST_LENGTH && payload.panel_image_url.startsWith('data:image/')) {
+    payload.panel_image_url = await optimizeImageAssetValue(payload.panel_image_url, 260000)
+    serialized = JSON.stringify(payload)
+  }
+  if (serialized.length > MAX_TICKET_REQUEST_LENGTH && payload.panel_thumbnail_url.startsWith('data:image/')) {
+    payload.panel_thumbnail_url = await optimizeImageAssetValue(payload.panel_thumbnail_url, 140000)
+    serialized = JSON.stringify(payload)
+  }
+  if (serialized.length > MAX_TICKET_REQUEST_LENGTH) {
+    throw new Error('Le panel est trop lourd. Reduis la miniature ou la banniere.')
+  }
+
+  return payload
 }
 
 function SelectField({ label, value, onChange, options, emptyLabel }) {
@@ -483,9 +536,12 @@ export default function TicketGeneratorPage() {
 
   const saveConfig = async ({ silent = false, throwOnError = true, mode = 'manual' } = {}) => {
     if (!selectedGuildId || !normalizedDraft) return
-    const payload = buildTicketSavePayload(normalizedDraft)
     setSaving(true)
     try {
+      const payload = await buildTicketSavePayloadForRequest(normalizedDraft)
+      if (JSON.stringify(payload) !== draftFingerprint) {
+        setDraft(normalizeConfig(payload))
+      }
       const response = await ticketGeneratorAPI.save(selectedGuildId, payload)
       applyOverview(response.data, false)
       setLoadError('')
