@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { aiAPI, botAPI, commandsAPI } from '../services/api'
+import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
@@ -751,24 +752,35 @@ function getCommandsCopy(locale) {
       active: 'Online',
       slash: 'Slash',
       dynamic: 'Varied',
+      systemCount: 'Built-in',
+      customCount: 'AI',
       systemSectionTitle: 'Built-in Discord commands',
       systemSectionText: 'These commands are provisioned by default, cannot be deleted, and run natively on Discord.',
       customSectionTitle: 'AI and custom commands',
       customSectionText: 'These commands remain fully editable with the assistant.',
+      systemTab: 'Automatic commands',
+      customTab: 'AI commands',
+      systemPanelTitle: 'Native command center',
+      systemPanelText: 'These built-in commands are isolated from AI commands. You can toggle them and adjust their native settings only.',
+      switchToCustom: 'Open AI builder',
       systemBadge: 'Built-in',
       systemConfigTitle: 'Native settings',
       systemSave: 'Save settings',
       systemSaving: 'Saving...',
       logChannel: 'Log channel',
       noLogChannel: 'No log channel',
+      defaultTargetChannel: 'Default channel',
       dmUser: 'Send DM to user',
       requireReason: 'Require reason',
       deleteMessageSeconds: 'Delete message history (seconds)',
       defaultTimeoutMinutes: 'Default timeout (minutes)',
       defaultPoints: 'Default warning points',
+      defaultSlowmodeSeconds: 'Default slowmode (seconds)',
       defaultAmount: 'Default amount',
       minAmount: 'Minimum',
       maxAmount: 'Maximum',
+      allowMentions: 'Allow mentions',
+      pingEveryone: 'Allow @everyone',
       visibilityLabel: 'Success visibility',
       visibilityEphemeral: 'Private',
       visibilityPublic: 'Public',
@@ -812,24 +824,35 @@ function getCommandsCopy(locale) {
       active: 'Activos',
       slash: 'Slash',
       dynamic: 'Variables',
+      systemCount: 'Integrados',
+      customCount: 'IA',
       systemSectionTitle: 'Comandos Discord integrados',
       systemSectionText: 'Estos comandos se crean por defecto, no se pueden borrar y se ejecutan de forma nativa en Discord.',
       customSectionTitle: 'Comandos IA y personalizados',
       customSectionText: 'Estos comandos siguen siendo editables con el asistente.',
+      systemTab: 'Comandos automaticos',
+      customTab: 'Comandos IA',
+      systemPanelTitle: 'Centro nativo',
+      systemPanelText: 'Estos comandos integrados estan separados del flujo IA. Solo puedes activarlos y ajustar su configuracion nativa.',
+      switchToCustom: 'Abrir creador IA',
       systemBadge: 'Integrado',
       systemConfigTitle: 'Ajustes nativos',
       systemSave: 'Guardar ajustes',
       systemSaving: 'Guardando...',
       logChannel: 'Canal de logs',
       noLogChannel: 'Sin canal de logs',
+      defaultTargetChannel: 'Canal por defecto',
       dmUser: 'Enviar DM al usuario',
       requireReason: 'Exigir motivo',
       deleteMessageSeconds: 'Borrar historial (segundos)',
       defaultTimeoutMinutes: 'Timeout por defecto (minutos)',
       defaultPoints: 'Puntos por defecto',
+      defaultSlowmodeSeconds: 'Slowmode por defecto (segundos)',
       defaultAmount: 'Cantidad por defecto',
       minAmount: 'Minimo',
       maxAmount: 'Maximo',
+      allowMentions: 'Permitir menciones',
+      pingEveryone: 'Permitir @everyone',
       visibilityLabel: 'Visibilidad del exito',
       visibilityEphemeral: 'Privado',
       visibilityPublic: 'Publico',
@@ -872,24 +895,35 @@ function getCommandsCopy(locale) {
     active: 'Actives',
     slash: 'Slash',
     dynamic: 'Variables',
+    systemCount: 'Defaut',
+    customCount: 'IA',
     systemSectionTitle: 'Commandes Discord par defaut',
     systemSectionText: 'Ces commandes sont creees automatiquement, non supprimables, et executees nativement sur Discord.',
     customSectionTitle: 'Commandes IA et personnalisees',
     customSectionText: 'Ces commandes restent modifiables librement avec l assistant.',
+    systemTab: 'Commandes automatiques',
+    customTab: 'Commandes IA',
+    systemPanelTitle: 'Centre natif Discord',
+    systemPanelText: 'Ces commandes integrees sont separees du flux IA. Tu peux seulement les activer et ajuster leurs reglages natifs.',
+    switchToCustom: 'Ouvrir le studio IA',
     systemBadge: 'Defaut',
     systemConfigTitle: 'Reglages natifs',
     systemSave: 'Sauvegarder',
     systemSaving: 'Sauvegarde...',
     logChannel: 'Salon de logs',
     noLogChannel: 'Aucun salon de logs',
+    defaultTargetChannel: 'Salon par defaut',
     dmUser: 'Envoyer un DM au membre',
     requireReason: 'Raison obligatoire',
     deleteMessageSeconds: 'Historique a effacer (secondes)',
     defaultTimeoutMinutes: 'Timeout par defaut (minutes)',
     defaultPoints: 'Points par defaut',
+    defaultSlowmodeSeconds: 'Slowmode par defaut (secondes)',
     defaultAmount: 'Quantite par defaut',
     minAmount: 'Minimum',
     maxAmount: 'Maximum',
+    allowMentions: 'Autoriser les mentions',
+    pingEveryone: 'Autoriser @everyone',
     visibilityLabel: 'Visibilite du succes',
     visibilityEphemeral: 'Prive',
     visibilityPublic: 'Public',
@@ -952,14 +986,18 @@ function buildSystemDraft(command) {
   const config = command?.action_config || {}
   return {
     log_channel_id: config.log_channel_id || '',
+    default_channel_id: config.default_channel_id || '',
     dm_user: Boolean(config.dm_user),
     require_reason: Boolean(config.require_reason),
     delete_message_seconds: String(config.delete_message_seconds ?? 0),
     default_timeout_minutes: String(Math.max(1, Math.round(Number(config.default_duration_ms || 600000) / 60000))),
     default_points: String(config.default_points ?? 1),
+    default_slowmode_seconds: String(config.default_seconds ?? 30),
     default_amount: String(config.default_amount ?? 20),
     min_amount: String(config.min_amount ?? 1),
     max_amount: String(config.max_amount ?? 100),
+    allow_mentions: Boolean(config.allow_mentions),
+    ping_everyone: Boolean(config.ping_everyone),
     success_visibility: config.success_visibility === 'public' ? 'public' : 'ephemeral',
   }
 }
@@ -998,6 +1036,11 @@ function buildSystemActionConfig(command, draft) {
 
     case 'kick_member':
     case 'untimeout_member':
+    case 'unban_member':
+    case 'add_role':
+    case 'remove_role':
+    case 'set_nickname':
+    case 'move_member':
       return {
         ...currentConfig,
         ...base,
@@ -1023,6 +1066,40 @@ function buildSystemActionConfig(command, draft) {
         default_points: clampIntegerString(draft?.default_points, 1, 20, Number(currentConfig.default_points || 1)),
       }
 
+    case 'lock_channel':
+    case 'unlock_channel':
+      return {
+        ...currentConfig,
+        ...base,
+        default_channel_id: String(draft?.default_channel_id || '').trim(),
+        require_reason: Boolean(draft?.require_reason),
+      }
+
+    case 'slowmode_channel':
+      return {
+        ...currentConfig,
+        ...base,
+        default_channel_id: String(draft?.default_channel_id || '').trim(),
+        require_reason: Boolean(draft?.require_reason),
+        default_seconds: clampIntegerString(draft?.default_slowmode_seconds, 0, 21600, Number(currentConfig.default_seconds || 30)),
+      }
+
+    case 'say_message':
+      return {
+        ...currentConfig,
+        ...base,
+        default_channel_id: String(draft?.default_channel_id || '').trim(),
+        allow_mentions: Boolean(draft?.allow_mentions),
+      }
+
+    case 'announce_message':
+      return {
+        ...currentConfig,
+        ...base,
+        default_channel_id: String(draft?.default_channel_id || '').trim(),
+        ping_everyone: Boolean(draft?.ping_everyone),
+      }
+
     default:
       return {
         ...currentConfig,
@@ -1031,9 +1108,33 @@ function buildSystemActionConfig(command, draft) {
   }
 }
 
+const AI_PAGE_UI = {
+  fr: {
+    title: 'Commandes IA',
+    subtitle: "Cree, modifie et peaufine tes commandes avec l'assistant. Les commandes natives vivent maintenant dans la page Commandes.",
+    openNative: 'Ouvrir Commandes',
+  },
+  en: {
+    title: 'AI Commands',
+    subtitle: 'Create, edit, and refine your commands with the assistant. Built-in commands now live in the Commands page.',
+    openNative: 'Open Commands',
+  },
+  es: {
+    title: 'Comandos IA',
+    subtitle: 'Crea, edita y mejora tus comandos con el asistente. Los comandos nativos ahora viven en la pagina Comandos.',
+    openNative: 'Abrir Comandos',
+  },
+}
+
 export default function CommandsPage() {
   const { locale } = useI18n()
-  const ui = getUi(locale)
+  const localeKey = String(locale || 'fr').toLowerCase().split('-')[0]
+  const aiPageUi = AI_PAGE_UI[localeKey] || AI_PAGE_UI.fr
+  const ui = {
+    ...getUi(locale),
+    title: aiPageUi.title,
+    subtitle: aiPageUi.subtitle,
+  }
   const pageCopy = getCommandsCopy(locale)
   const triggerExamples = useMemo(() => getCommandTriggerExamples(), [])
   const promptIdeas = useMemo(() => getPromptIdeas(locale), [locale])
@@ -1051,6 +1152,7 @@ export default function CommandsPage() {
   const [togglingCommandIds, setTogglingCommandIds] = useState({})
   const [systemDrafts, setSystemDrafts] = useState({})
   const [savingSystemIds, setSavingSystemIds] = useState({})
+  const [activeCategory, setActiveCategory] = useState('custom')
   const toggleDesiredRef = useRef(new Map())
   const toggleRunningRef = useRef(new Set())
   const assistantCardRef = useRef(null)
@@ -1106,17 +1208,27 @@ export default function CommandsPage() {
   const commandStats = useMemo(() => ({
     total: commands.length,
     active: commands.filter((entry) => entry.enabled).length,
-    slash: commands.filter((entry) => entry.command_type === 'slash').length,
-    dynamic: commands.filter((entry) => isDynamicCommand(entry)).length,
-  }), [commands])
+    system: systemCommands.length,
+    custom: customCommands.length,
+  }), [commands, systemCommands.length, customCommands.length])
+  const visibleCommands = customCommands
 
   useEffect(() => {
     if (!selectedGuildId) {
       setCommands([])
       setChannels([])
       setSystemDrafts({})
+      setEditingCommand(null)
+      setCommandInput('')
+      setPrompt('')
+      setMessages([])
       return
     }
+    setActiveCategory('custom')
+    setEditingCommand(null)
+    setCommandInput('')
+    setPrompt('')
+    setMessages([])
     loadCommands()
   }, [selectedGuildId])
 
@@ -1131,6 +1243,35 @@ export default function CommandsPage() {
     return () => window.clearTimeout(timer)
   }, [editingCommand?.id])
 
+  useEffect(() => {
+    const handleRealtimeSync = (payload = {}) => {
+      if (String(payload.guildId || '') !== String(selectedGuildId || '')) return
+      const incomingCommands = Array.isArray(payload.commands) ? payload.commands.filter((entry) => !entry.is_system) : null
+      if (incomingCommands) {
+        setCommands(incomingCommands)
+        setEditingCommand((current) => {
+          if (!current) return null
+          return incomingCommands.find((entry) => entry.id === current.id) || null
+        })
+        return
+      }
+      void loadCommands()
+    }
+
+    const handleSnapshotRestore = (payload = {}) => {
+      if (String(payload.guildId || '') !== String(selectedGuildId || '')) return
+      void loadCommands()
+    }
+
+    const unsubscribeCommands = wsService.on('commands:updated', handleRealtimeSync)
+    const unsubscribeSnapshots = wsService.on('team:snapshot_restored', handleSnapshotRestore)
+
+    return () => {
+      unsubscribeCommands()
+      unsubscribeSnapshots()
+    }
+  }, [selectedGuildId])
+
   async function loadCommands(showToast = false) {
     if (!selectedGuildId) return
     setLoading(true)
@@ -1140,7 +1281,7 @@ export default function CommandsPage() {
         botAPI.channels(selectedGuildId),
       ])
       const nextCommands = commandsResponse.data.commands || []
-      setCommands(nextCommands)
+      setCommands(nextCommands.filter((command) => !command.is_system))
       setChannels(channelsResponse.data.channels || [])
       setSystemDrafts(
         Object.fromEntries(
@@ -1158,6 +1299,7 @@ export default function CommandsPage() {
   }
 
   function openCreate() {
+    setActiveCategory('custom')
     setEditingCommand(null)
     setCommandInput('')
     setPrompt('')
@@ -1166,6 +1308,7 @@ export default function CommandsPage() {
 
   function openEdit(command) {
     if (command?.is_system) return
+    setActiveCategory('custom')
     setEditingCommand(command)
     setCommandInput(getCommandInputValue(command))
     setPrompt('')
@@ -1414,6 +1557,25 @@ export default function CommandsPage() {
   function renderSystemConfig(command) {
     if (!command?.is_system) return null
     const draft = systemDrafts[command.id] || buildSystemDraft(command)
+    const moderationWithDm = ['ban_member', 'kick_member', 'timeout_member', 'untimeout_member', 'warn_member']
+    const supportsReason = [
+      ...moderationWithDm,
+      'unban_member',
+      'add_role',
+      'remove_role',
+      'set_nickname',
+      'lock_channel',
+      'unlock_channel',
+      'slowmode_channel',
+      'move_member',
+    ].includes(command.action_type)
+    const supportsDefaultChannel = [
+      'lock_channel',
+      'unlock_channel',
+      'slowmode_channel',
+      'say_message',
+      'announce_message',
+    ].includes(command.action_type)
 
     return (
       <div className="rounded-[24px] border border-amber-400/15 bg-amber-500/[0.04] p-4 space-y-4">
@@ -1463,7 +1625,27 @@ export default function CommandsPage() {
           </label>
         </div>
 
-        {['ban_member', 'kick_member', 'timeout_member', 'untimeout_member', 'warn_member'].includes(command.action_type) && (
+        {supportsDefaultChannel && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.defaultTargetChannel}</span>
+              <select
+                className="input-field"
+                value={draft.default_channel_id}
+                onChange={(event) => updateSystemDraft(command.id, { default_channel_id: event.target.value })}
+              >
+                <option value="">{pageCopy.noLogChannel}</option>
+                {textChannels.map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    #{channel.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {moderationWithDm.includes(command.action_type) && (
           <div className="flex flex-wrap gap-3">
             <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/72">
               <input
@@ -1474,6 +1656,21 @@ export default function CommandsPage() {
               {pageCopy.dmUser}
             </label>
 
+            {supportsReason && (
+              <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/72">
+                <input
+                  type="checkbox"
+                  checked={draft.require_reason}
+                  onChange={(event) => updateSystemDraft(command.id, { require_reason: event.target.checked })}
+                />
+                {pageCopy.requireReason}
+              </label>
+            )}
+          </div>
+        )}
+
+        {supportsReason && !moderationWithDm.includes(command.action_type) && (
+          <div className="flex flex-wrap gap-3">
             <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/72">
               <input
                 type="checkbox"
@@ -1533,6 +1730,22 @@ export default function CommandsPage() {
           </div>
         )}
 
+        {command.action_type === 'slowmode_channel' && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.defaultSlowmodeSeconds}</span>
+              <input
+                className="input-field"
+                type="number"
+                min="0"
+                max="21600"
+                value={draft.default_slowmode_seconds}
+                onChange={(event) => updateSystemDraft(command.id, { default_slowmode_seconds: event.target.value })}
+              />
+            </label>
+          </div>
+        )}
+
         {command.action_type === 'clear_messages' && (
           <div className="grid gap-3 md:grid-cols-3">
             <label className="space-y-2">
@@ -1567,6 +1780,32 @@ export default function CommandsPage() {
                 value={draft.max_amount}
                 onChange={(event) => updateSystemDraft(command.id, { max_amount: event.target.value })}
               />
+            </label>
+          </div>
+        )}
+
+        {command.action_type === 'say_message' && (
+          <div className="flex flex-wrap gap-3">
+            <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/72">
+              <input
+                type="checkbox"
+                checked={draft.allow_mentions}
+                onChange={(event) => updateSystemDraft(command.id, { allow_mentions: event.target.checked })}
+              />
+              {pageCopy.allowMentions}
+            </label>
+          </div>
+        )}
+
+        {command.action_type === 'announce_message' && (
+          <div className="flex flex-wrap gap-3">
+            <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/72">
+              <input
+                type="checkbox"
+                checked={draft.ping_everyone}
+                onChange={(event) => updateSystemDraft(command.id, { ping_everyone: event.target.checked })}
+              />
+              {pageCopy.pingEveryone}
             </label>
           </div>
         )}
@@ -1739,13 +1978,30 @@ export default function CommandsPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <Link
+                to="/dashboard/commands"
+                className="inline-flex items-center gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-2.5 text-sm font-mono text-amber-200 transition-all hover:border-amber-300/40 hover:bg-amber-400/16"
+              >
+                <Shield className="h-4 w-4" />
+                {aiPageUi.openNative}
+              </Link>
               <button onClick={() => loadCommands(true)} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-mono text-white/72 transition-all hover:border-neon-cyan/30 hover:bg-white/[0.07] hover:text-white">
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 {ui.refresh}
               </button>
-              <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-gradient-to-r from-neon-cyan/18 to-neon-violet/18 px-4 py-2.5 text-sm font-mono text-white transition-all hover:scale-[1.02] hover:border-neon-cyan/40">
+              <button
+                onClick={() => {
+                  if (activeCategory === 'custom') {
+                    openCreate()
+                    return
+                  }
+                  setActiveCategory('custom')
+                  openCreate()
+                }}
+                className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-gradient-to-r from-neon-cyan/18 to-neon-violet/18 px-4 py-2.5 text-sm font-mono text-white transition-all hover:scale-[1.02] hover:border-neon-cyan/40"
+              >
                 <Plus className="h-4 w-4" />
-                {ui.new}
+                {activeCategory === 'custom' ? ui.new : pageCopy.switchToCustom}
               </button>
             </div>
           </div>
@@ -1754,8 +2010,8 @@ export default function CommandsPage() {
             {[
               { label: pageCopy.total, value: commandStats.total, tone: 'from-neon-cyan/18 to-neon-cyan/5' },
               { label: pageCopy.active, value: commandStats.active, tone: 'from-emerald-500/18 to-emerald-500/5' },
-              { label: pageCopy.slash, value: commandStats.slash, tone: 'from-neon-violet/18 to-neon-violet/5' },
-              { label: pageCopy.dynamic, value: commandStats.dynamic, tone: 'from-fuchsia-500/18 to-fuchsia-500/5' },
+              { label: pageCopy.slash, value: customCommands.filter((entry) => entry.command_type === 'slash').length, tone: 'from-neon-violet/18 to-neon-violet/5' },
+              { label: pageCopy.dynamic, value: customCommands.filter((entry) => isDynamicCommand(entry)).length, tone: 'from-fuchsia-500/18 to-fuchsia-500/5' },
             ].map((card) => (
               <div key={card.label} className={`feature-metric depth-panel rounded-[24px] bg-gradient-to-br ${card.tone} p-4 backdrop-blur-xl`}>
                 <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/34">{card.label}</p>
@@ -1763,12 +2019,17 @@ export default function CommandsPage() {
               </div>
             ))}
           </div>
+
+          <div className="rounded-[26px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.82),rgba(30,24,45,0.94))] p-5">
+            <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/80">{pageCopy.customSectionTitle}</p>
+            <p className="mt-3 text-sm leading-6 text-white/55">{pageCopy.customSectionText}</p>
+          </div>
         </div>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_400px]">
         <div className="space-y-3">
-          {commands.length === 0 && !loading && (
+          {visibleCommands.length === 0 && !loading && (
             <div className="glass-card p-10 text-center">
               <Terminal className="w-12 h-12 text-white/10 mx-auto mb-3" />
               <p className="text-white/40 mb-1">{ui.empty}</p>
@@ -1776,27 +2037,22 @@ export default function CommandsPage() {
             </div>
           )}
 
-          {systemCommands.length > 0 && (
-            <div className="space-y-3">
-              <div className="rounded-[26px] border border-amber-300/12 bg-[linear-gradient(135deg,rgba(39,27,12,0.88),rgba(26,22,34,0.96))] p-5">
-                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-amber-200/80">{pageCopy.systemSectionTitle}</p>
-                <p className="mt-3 text-sm leading-6 text-white/55">{pageCopy.systemSectionText}</p>
-              </div>
-              {systemCommands.map(renderCommandCard)}
-            </div>
-          )}
-
-          {customCommands.length > 0 && (
+          {visibleCommands.length > 0 && (
             <div className="space-y-3">
               <div className="rounded-[26px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.82),rgba(30,24,45,0.94))] p-5">
-                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/80">{pageCopy.customSectionTitle}</p>
-                <p className="mt-3 text-sm leading-6 text-white/55">{pageCopy.customSectionText}</p>
+                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/80">
+                  {pageCopy.customSectionTitle}
+                </p>
+                <p className="mt-3 text-sm leading-6 text-white/55">
+                  {pageCopy.customSectionText}
+                </p>
               </div>
-              {customCommands.map(renderCommandCard)}
+              {visibleCommands.map(renderCommandCard)}
             </div>
           )}
         </div>
 
+        {activeCategory === 'custom' ? (
         <div ref={assistantCardRef} className="sticky top-24 h-fit overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(160deg,rgba(15,23,42,0.94),rgba(24,18,38,0.98))] p-5 shadow-[0_20px_60px_rgba(2,8,23,0.35)]">
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-3">
@@ -1982,6 +2238,46 @@ export default function CommandsPage() {
             )}
           </div>
         </div>
+        ) : (
+        <div className="sticky top-24 h-fit overflow-hidden rounded-[28px] border border-amber-300/16 bg-[linear-gradient(160deg,rgba(46,31,12,0.94),rgba(28,20,18,0.98))] p-5 shadow-[0_20px_60px_rgba(120,53,15,0.22)]">
+          <div className="space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <p className="font-display text-lg font-700 text-white">{pageCopy.systemPanelTitle}</p>
+                <p className="text-sm text-white/55">{pageCopy.systemPanelText}</p>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 text-amber-100">
+                <Shield className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { label: pageCopy.systemCount, value: systemCommands.length },
+                { label: ui.active, value: systemCommands.filter((entry) => entry.enabled).length },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{item.label}</p>
+                  <p className="mt-3 font-display text-3xl font-800 text-white">{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-amber-300/16 bg-black/20 p-4 text-sm leading-6 text-white/68">
+              {pageCopy.builtInLocked}
+            </div>
+
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-neon-cyan/25 bg-gradient-to-r from-neon-cyan/18 to-neon-violet/18 px-4 py-3 text-sm font-mono text-white transition-all hover:scale-[1.01] hover:border-neon-cyan/40"
+            >
+              <Sparkles className="h-4 w-4" />
+              {pageCopy.switchToCustom}
+            </button>
+          </div>
+        </div>
+        )}
       </div>
     </div>
   )

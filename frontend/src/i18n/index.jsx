@@ -27,6 +27,7 @@ const translations = {
         scan: 'Scan',
         osint: 'OSINT',
         commands: 'Commandes',
+        commandsAi: 'Commandes IA',
         analytics: 'Analytics',
         reviews: 'Avis',
         aiAssistant: 'Assistant IA',
@@ -267,6 +268,7 @@ const translations = {
         scan: 'Scan',
         osint: 'OSINT',
         commands: 'Commands',
+        commandsAi: 'AI Commands',
         analytics: 'Analytics',
         reviews: 'Reviews',
         aiAssistant: 'AI Assistant',
@@ -507,6 +509,7 @@ const translations = {
         scan: 'Scan',
         osint: 'OSINT',
         commands: 'Comandos',
+        commandsAi: 'Comandos IA',
         analytics: 'Analiticas',
         reviews: 'Resenas',
         aiAssistant: 'Asistente IA',
@@ -903,6 +906,7 @@ const extraTranslations = {
       quickLinks: {
         moderation: 'Moderation',
         commands: 'Commandes',
+        commandsAi: 'Commandes IA',
         analytics: 'Analytics',
       },
       categories: {
@@ -1138,6 +1142,7 @@ const extraTranslations = {
       quickLinks: {
         moderation: 'Moderation',
         commands: 'Commands',
+        commandsAi: 'AI Commands',
         analytics: 'Analytics',
       },
       categories: {
@@ -1373,6 +1378,7 @@ const extraTranslations = {
       quickLinks: {
         moderation: 'Moderacion',
         commands: 'Comandos',
+        commandsAi: 'Comandos IA',
         analytics: 'Analiticas',
       },
       categories: {

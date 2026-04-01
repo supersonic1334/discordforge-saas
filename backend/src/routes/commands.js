@@ -9,13 +9,56 @@ const { customCommandSchema, commandAssistantSchema, commandToggleSchema } = req
 const db = require('../database');
 const botManager = require('../services/botManager');
 const aiService = require('../services/aiService');
+const guildAccessService = require('../services/guildAccessService');
 const logger = require('../utils/logger').child('CommandsRoutes');
 const { logBotEvent } = require('../bot/utils/modHelpers');
 const { COMMAND_ACTION_TYPES, SUPPORTED_NATIVE_ACTIONS, DEFAULT_SYSTEM_COMMANDS } = require('../constants/systemCommands');
+const wsServer = require('../websocket');
 
 router.use(requireAuth, requireBotToken, requireGuildOwner);
 
 const scheduledCommandSyncs = new Map();
+
+function listMappedCommandsForGuild(guildId) {
+  ensureDefaultCommandsForGuild(guildId);
+  const commands = db.raw(
+    `SELECT * FROM custom_commands
+     WHERE guild_id = ?
+     ORDER BY is_system DESC, command_type ASC, trigger ASC`,
+    [guildId]
+  );
+  return commands.map(mapCommandRow);
+}
+
+function notifyGuildCommandSync(req, payload = {}) {
+  const recipients = guildAccessService.listGuildCollaborators(req.guild.id);
+  const userIds = new Set(
+    recipients
+      .map((entry) => String(entry?.user_id || '').trim())
+      .filter(Boolean)
+  );
+
+  if (req.guild?.user_id) {
+    userIds.add(String(req.guild.user_id));
+  }
+
+  const eventPayload = {
+    guildId: req.guild.id,
+    discordGuildId: req.guild.guild_id,
+    actorUserId: req.user.id,
+    actorUsername: req.user.username,
+    updatedAt: new Date().toISOString(),
+    commands: listMappedCommandsForGuild(req.guild.id),
+    ...payload,
+  };
+
+  for (const userId of userIds) {
+    wsServer.broadcastToUser(userId, {
+      event: 'commands:updated',
+      data: eventPayload,
+    });
+  }
+}
 
 function parseJsonArray(rawValue) {
   try {
@@ -194,6 +237,63 @@ function normalizeWarnActionConfig(value = {}, fallbackValue = {}) {
   };
 }
 
+function normalizeReasonActionConfig(value = {}, fallbackValue = {}, defaultRequireReason = false) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const fallback = fallbackValue && typeof fallbackValue === 'object' && !Array.isArray(fallbackValue) ? fallbackValue : {};
+
+  return {
+    log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+    require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? defaultRequireReason),
+    success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+  };
+}
+
+function normalizeChannelActionConfig(value = {}, fallbackValue = {}, defaultRequireReason = false) {
+  const base = normalizeReasonActionConfig(value, fallbackValue, defaultRequireReason);
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const fallback = fallbackValue && typeof fallbackValue === 'object' && !Array.isArray(fallbackValue) ? fallbackValue : {};
+
+  return {
+    ...base,
+    default_channel_id: normalizeSnowflake(source.default_channel_id, fallback.default_channel_id),
+  };
+}
+
+function normalizeSlowmodeActionConfig(value = {}, fallbackValue = {}) {
+  const base = normalizeChannelActionConfig(value, fallbackValue, false);
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const fallback = fallbackValue && typeof fallbackValue === 'object' && !Array.isArray(fallbackValue) ? fallbackValue : {};
+
+  return {
+    ...base,
+    default_seconds: clampNumber(source.default_seconds ?? fallback.default_seconds, 0, 21600, 30),
+  };
+}
+
+function normalizeSayActionConfig(value = {}, fallbackValue = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const fallback = fallbackValue && typeof fallbackValue === 'object' && !Array.isArray(fallbackValue) ? fallbackValue : {};
+
+  return {
+    log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+    default_channel_id: normalizeSnowflake(source.default_channel_id, fallback.default_channel_id),
+    allow_mentions: normalizeBooleanFlag(source.allow_mentions, fallback.allow_mentions ?? false),
+    success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+  };
+}
+
+function normalizeAnnounceActionConfig(value = {}, fallbackValue = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const fallback = fallbackValue && typeof fallbackValue === 'object' && !Array.isArray(fallbackValue) ? fallbackValue : {};
+
+  return {
+    log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+    default_channel_id: normalizeSnowflake(source.default_channel_id, fallback.default_channel_id),
+    ping_everyone: normalizeBooleanFlag(source.ping_everyone, fallback.ping_everyone ?? false),
+    success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+  };
+}
+
 function normalizeActionConfig(actionType, value = {}, fallbackValue = {}) {
   if (actionType === COMMAND_ACTION_TYPES.CLEAR_MESSAGES) {
     return normalizeClearActionConfig(value, fallbackValue);
@@ -215,6 +315,29 @@ function normalizeActionConfig(actionType, value = {}, fallbackValue = {}) {
   }
   if (actionType === COMMAND_ACTION_TYPES.WARN_MEMBER) {
     return normalizeWarnActionConfig(value, fallbackValue);
+  }
+  if (actionType === COMMAND_ACTION_TYPES.UNBAN_MEMBER) {
+    return normalizeReasonActionConfig(value, fallbackValue, false);
+  }
+  if (
+    actionType === COMMAND_ACTION_TYPES.ADD_ROLE
+    || actionType === COMMAND_ACTION_TYPES.REMOVE_ROLE
+    || actionType === COMMAND_ACTION_TYPES.SET_NICKNAME
+    || actionType === COMMAND_ACTION_TYPES.MOVE_MEMBER
+  ) {
+    return normalizeReasonActionConfig(value, fallbackValue, false);
+  }
+  if (actionType === COMMAND_ACTION_TYPES.LOCK_CHANNEL || actionType === COMMAND_ACTION_TYPES.UNLOCK_CHANNEL) {
+    return normalizeChannelActionConfig(value, fallbackValue, false);
+  }
+  if (actionType === COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL) {
+    return normalizeSlowmodeActionConfig(value, fallbackValue);
+  }
+  if (actionType === COMMAND_ACTION_TYPES.SAY_MESSAGE) {
+    return normalizeSayActionConfig(value, fallbackValue);
+  }
+  if (actionType === COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE) {
+    return normalizeAnnounceActionConfig(value, fallbackValue);
   }
   return {};
 }
@@ -357,6 +480,206 @@ function buildNativeActionDefaults(actionType, mode, currentCommand = null) {
       delete_trigger: false,
       cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
       action_config: normalizeWarnActionConfig({}, currentConfig),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.UNBAN_MEMBER) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Retire le ban d un utilisateur',
+      response: currentCommand?.response || 'Retire un bannissement avec raison optionnelle.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#22c55e',
+      mention_user: false,
+      usage_hint: '/unban user_id:123456789012345678 reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeReasonActionConfig({}, currentConfig, false),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.ADD_ROLE) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Ajoute un role a un membre',
+      response: currentCommand?.response || 'Ajoute un role au membre cible.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#60a5fa',
+      mention_user: false,
+      usage_hint: '/addrole user:@membre role:@role reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeReasonActionConfig({}, currentConfig, false),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.REMOVE_ROLE) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Retire un role a un membre',
+      response: currentCommand?.response || 'Retire un role du membre cible.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#38bdf8',
+      mention_user: false,
+      usage_hint: '/removerole user:@membre role:@role reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeReasonActionConfig({}, currentConfig, false),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.SET_NICKNAME) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Change le pseudo d un membre',
+      response: currentCommand?.response || 'Met a jour le pseudo du membre cible.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#a78bfa',
+      mention_user: false,
+      usage_hint: '/nick user:@membre nickname:"Nouveau pseudo" reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeReasonActionConfig({}, currentConfig, false),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.LOCK_CHANNEL) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Verrouille un salon texte',
+      response: currentCommand?.response || 'Bloque l envoi de messages dans le salon choisi.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#f97316',
+      mention_user: false,
+      usage_hint: '/lock channel:#general reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeChannelActionConfig({}, currentConfig, false),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.UNLOCK_CHANNEL) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Deverrouille un salon texte',
+      response: currentCommand?.response || 'Retablit l envoi de messages dans le salon choisi.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#22c55e',
+      mention_user: false,
+      usage_hint: '/unlock channel:#general reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeChannelActionConfig({}, currentConfig, false),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Regle le mode lent d un salon',
+      response: currentCommand?.response || 'Ajuste le slowmode du salon cible.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#f59e0b',
+      mention_user: false,
+      usage_hint: '/slowmode channel:#general seconds:30 reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeSlowmodeActionConfig({}, currentConfig),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.SAY_MESSAGE) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Fait parler le bot dans un salon',
+      response: currentCommand?.response || 'Publie un message brut dans le salon choisi.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#06b6d4',
+      mention_user: false,
+      usage_hint: '/say channel:#annonces message:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1200),
+      action_config: normalizeSayActionConfig({}, currentConfig),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Publie une annonce en embed',
+      response: currentCommand?.response || 'Publie une annonce mise en forme dans le salon choisi.',
+      response_mode: 'reply',
+      embed_enabled: true,
+      embed_title: currentCommand?.embed_title || 'Annonce',
+      embed_color: currentCommand?.embed_color || '#8b5cf6',
+      mention_user: false,
+      usage_hint: '/announce channel:#annonces title:"Annonce" message:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1200),
+      action_config: normalizeAnnounceActionConfig({}, currentConfig),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.MOVE_MEMBER) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Deplace un membre vers un vocal',
+      response: currentCommand?.response || 'Deplace un membre connecte vers un autre salon vocal.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#14b8a6',
+      mention_user: false,
+      usage_hint: '/move user:@membre channel:Vocal reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeReasonActionConfig({}, currentConfig, false),
     };
   }
 
@@ -1010,6 +1333,10 @@ function buildNativeAssistantReply(actionType, locale = 'fr', updated = false) {
   return copy[key]?.[actionType] || copy.fr[actionType] || 'Commande native preparee.';
 }
 
+function matchesIntentPattern(text = '', pattern) {
+  return pattern.test(String(text || '').toLowerCase());
+}
+
 function promptMatchesClearIntent(text = '') {
   return textContainsAny(text, [
     'clear',
@@ -1045,6 +1372,66 @@ function promptMatchesTicketIntent(text = '') {
   ]);
 }
 
+function promptMatchesUnbanIntent(text = '') {
+  return matchesIntentPattern(text, /\b(unban|deban)\b|retir(?:e|er)\s+un\s+ban|lever\s+un\s+ban/);
+}
+
+function promptMatchesBanIntent(text = '') {
+  return matchesIntentPattern(text, /(^|\s)ban(\s|$)|banni(?:r|t)|bannissement/);
+}
+
+function promptMatchesKickIntent(text = '') {
+  return matchesIntentPattern(text, /\bkick\b|expuls(?:e|er|ion)/);
+}
+
+function promptMatchesTimeoutIntent(text = '') {
+  return matchesIntentPattern(text, /\btimeout\b|\btempmute\b|mute\s+temporaire|mettre.*timeout/);
+}
+
+function promptMatchesUntimeoutIntent(text = '') {
+  return matchesIntentPattern(text, /\bunmute\b|retir(?:e|er).*timeout|lever.*mute|untimeout/);
+}
+
+function promptMatchesWarnIntent(text = '') {
+  return matchesIntentPattern(text, /\bwarn\b|avertissement|warning/);
+}
+
+function promptMatchesAddRoleIntent(text = '') {
+  return matchesIntentPattern(text, /\baddrole\b|ajout(?:e|er).*\brole\b|donn(?:e|er).*\brole\b|assign.*role/);
+}
+
+function promptMatchesRemoveRoleIntent(text = '') {
+  return matchesIntentPattern(text, /\bremoverole\b|retir(?:e|er).*\brole\b|enleve.*\brole\b|remove.*role/);
+}
+
+function promptMatchesNicknameIntent(text = '') {
+  return matchesIntentPattern(text, /\bnick\b|nickname|changer.*pseudo|change.*nickname/);
+}
+
+function promptMatchesLockIntent(text = '') {
+  return matchesIntentPattern(text, /\block\b|verrouill(?:e|er).*\bsalon\b|fermer.*\bsalon\b|close.*channel/);
+}
+
+function promptMatchesUnlockIntent(text = '') {
+  return matchesIntentPattern(text, /\bunlock\b|deverrouill(?:e|er).*\bsalon\b|ouvrir.*\bsalon\b|open.*channel/);
+}
+
+function promptMatchesSlowmodeIntent(text = '') {
+  return matchesIntentPattern(text, /\bslowmode\b|mode\s+lent|ralentir.*\bsalon\b/);
+}
+
+function promptMatchesSayIntent(text = '') {
+  return matchesIntentPattern(text, /\bsay\b|fait\s+parler\s+le\s+bot|envoy(?:e|er)\s+un\s+message\s+via\s+le\s+bot|make\s+the\s+bot\s+say/);
+}
+
+function promptMatchesAnnounceIntent(text = '') {
+  return matchesIntentPattern(text, /\bannounce\b|annonce|broadcast/);
+}
+
+function promptMatchesMoveIntent(text = '') {
+  return matchesIntentPattern(text, /\bmove\b|deplac(?:e|er).*\bmembre\b|move.*voice|deplac(?:e|er).*\bvocal\b/);
+}
+
 function extractPromptInteger(text = '', minimum = 1, maximum = 100) {
   const matches = String(text || '').match(/\b\d{1,4}\b/g) || [];
   const values = matches
@@ -1057,6 +1444,24 @@ function extractPromptInteger(text = '', minimum = 1, maximum = 100) {
 function buildNativeDraftFromIntent(actionType, { prompt, mode, requestedCommandName, currentCommand }) {
   const defaults = buildNativeActionDefaults(actionType, mode, currentCommand);
   if (!defaults) return null;
+  const slashOnlyActionTypes = new Set([
+    COMMAND_ACTION_TYPES.BAN_MEMBER,
+    COMMAND_ACTION_TYPES.KICK_MEMBER,
+    COMMAND_ACTION_TYPES.TIMEOUT_MEMBER,
+    COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER,
+    COMMAND_ACTION_TYPES.WARN_MEMBER,
+    COMMAND_ACTION_TYPES.UNBAN_MEMBER,
+    COMMAND_ACTION_TYPES.ADD_ROLE,
+    COMMAND_ACTION_TYPES.REMOVE_ROLE,
+    COMMAND_ACTION_TYPES.SET_NICKNAME,
+    COMMAND_ACTION_TYPES.LOCK_CHANNEL,
+    COMMAND_ACTION_TYPES.UNLOCK_CHANNEL,
+    COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL,
+    COMMAND_ACTION_TYPES.SAY_MESSAGE,
+    COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE,
+    COMMAND_ACTION_TYPES.MOVE_MEMBER,
+  ]);
+  if (mode !== 'slash' && slashOnlyActionTypes.has(actionType)) return null;
 
   const amountHint = extractPromptInteger(prompt, 1, 100);
   if (actionType === COMMAND_ACTION_TYPES.CLEAR_MESSAGES && amountHint) {
@@ -1066,7 +1471,26 @@ function buildNativeDraftFromIntent(actionType, { prompt, mode, requestedCommand
     }, defaults.action_config);
   }
 
-  const commandNameFallback = actionType === COMMAND_ACTION_TYPES.CLEAR_MESSAGES ? 'clear' : 'tickets';
+  const commandNameFallbackMap = {
+    [COMMAND_ACTION_TYPES.CLEAR_MESSAGES]: 'clear',
+    [COMMAND_ACTION_TYPES.TICKET_PANEL]: 'tickets',
+    [COMMAND_ACTION_TYPES.BAN_MEMBER]: 'ban',
+    [COMMAND_ACTION_TYPES.KICK_MEMBER]: 'kick',
+    [COMMAND_ACTION_TYPES.TIMEOUT_MEMBER]: 'tempmute',
+    [COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER]: 'unmute',
+    [COMMAND_ACTION_TYPES.WARN_MEMBER]: 'warn',
+    [COMMAND_ACTION_TYPES.UNBAN_MEMBER]: 'unban',
+    [COMMAND_ACTION_TYPES.ADD_ROLE]: 'addrole',
+    [COMMAND_ACTION_TYPES.REMOVE_ROLE]: 'removerole',
+    [COMMAND_ACTION_TYPES.SET_NICKNAME]: 'nick',
+    [COMMAND_ACTION_TYPES.LOCK_CHANNEL]: 'lock',
+    [COMMAND_ACTION_TYPES.UNLOCK_CHANNEL]: 'unlock',
+    [COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL]: 'slowmode',
+    [COMMAND_ACTION_TYPES.SAY_MESSAGE]: 'say',
+    [COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE]: 'announce',
+    [COMMAND_ACTION_TYPES.MOVE_MEMBER]: 'move',
+  };
+  const commandNameFallback = commandNameFallbackMap[actionType] || 'commande';
   const requestedName = sanitizeCommandName(requestedCommandName || currentCommand?.command_name || commandNameFallback, mode);
 
   return {
@@ -1077,26 +1501,7 @@ function buildNativeDraftFromIntent(actionType, { prompt, mode, requestedCommand
 
 function inferNativeActionDraft({ prompt, mode, requestedCommandName, currentCommand }) {
   if (currentCommand?.execution_mode === 'native' && currentCommand?.action_type) {
-    if (currentCommand.action_type === COMMAND_ACTION_TYPES.CLEAR_MESSAGES) {
-      return buildNativeDraftFromIntent(COMMAND_ACTION_TYPES.CLEAR_MESSAGES, {
-        prompt,
-        mode,
-        requestedCommandName,
-        currentCommand,
-      });
-    }
-    if (currentCommand.action_type === COMMAND_ACTION_TYPES.TICKET_PANEL) {
-      return buildNativeDraftFromIntent(COMMAND_ACTION_TYPES.TICKET_PANEL, {
-        prompt,
-        mode,
-        requestedCommandName,
-        currentCommand,
-      });
-    }
-  }
-
-  if (promptMatchesClearIntent(prompt)) {
-    return buildNativeDraftFromIntent(COMMAND_ACTION_TYPES.CLEAR_MESSAGES, {
+    return buildNativeDraftFromIntent(currentCommand.action_type, {
       prompt,
       mode,
       requestedCommandName,
@@ -1104,13 +1509,35 @@ function inferNativeActionDraft({ prompt, mode, requestedCommandName, currentCom
     });
   }
 
-  if (promptMatchesTicketIntent(prompt)) {
-    return buildNativeDraftFromIntent(COMMAND_ACTION_TYPES.TICKET_PANEL, {
+  const intentMatchers = [
+    [COMMAND_ACTION_TYPES.UNBAN_MEMBER, promptMatchesUnbanIntent],
+    [COMMAND_ACTION_TYPES.BAN_MEMBER, promptMatchesBanIntent],
+    [COMMAND_ACTION_TYPES.KICK_MEMBER, promptMatchesKickIntent],
+    [COMMAND_ACTION_TYPES.TIMEOUT_MEMBER, promptMatchesTimeoutIntent],
+    [COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER, promptMatchesUntimeoutIntent],
+    [COMMAND_ACTION_TYPES.WARN_MEMBER, promptMatchesWarnIntent],
+    [COMMAND_ACTION_TYPES.ADD_ROLE, promptMatchesAddRoleIntent],
+    [COMMAND_ACTION_TYPES.REMOVE_ROLE, promptMatchesRemoveRoleIntent],
+    [COMMAND_ACTION_TYPES.SET_NICKNAME, promptMatchesNicknameIntent],
+    [COMMAND_ACTION_TYPES.LOCK_CHANNEL, promptMatchesLockIntent],
+    [COMMAND_ACTION_TYPES.UNLOCK_CHANNEL, promptMatchesUnlockIntent],
+    [COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL, promptMatchesSlowmodeIntent],
+    [COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE, promptMatchesAnnounceIntent],
+    [COMMAND_ACTION_TYPES.SAY_MESSAGE, promptMatchesSayIntent],
+    [COMMAND_ACTION_TYPES.MOVE_MEMBER, promptMatchesMoveIntent],
+    [COMMAND_ACTION_TYPES.CLEAR_MESSAGES, promptMatchesClearIntent],
+    [COMMAND_ACTION_TYPES.TICKET_PANEL, promptMatchesTicketIntent],
+  ];
+
+  for (const [actionType, matcher] of intentMatchers) {
+    if (!matcher(prompt)) continue;
+    const draft = buildNativeDraftFromIntent(actionType, {
       prompt,
       mode,
       requestedCommandName,
       currentCommand,
     });
+    if (draft) return draft;
   }
 
   return null;
@@ -1203,6 +1630,19 @@ CAPACITES DU SYSTEME:
 - Mode "native": commande executee reellement par le bot
 - Action native clear_messages: supprime vraiment des messages, slash avec option amount, prefixe avec nombre en argument
 - Action native ticket_panel: publie vraiment un panel avec bouton et ouvre un salon ticket prive
+- Action native ban_member: bannit vraiment un membre avec raison
+- Action native kick_member: expulse vraiment un membre avec raison
+- Action native timeout_member: applique vraiment un timeout
+- Action native untimeout_member: retire vraiment un timeout
+- Action native warn_member: ajoute vraiment un avertissement
+- Action native unban_member: retire vraiment un ban via user_id
+- Action native add_role / remove_role: gere vraiment les roles d un membre
+- Action native set_nickname: change vraiment le pseudo d un membre
+- Action native lock_channel / unlock_channel: verrouille ou deverrouille vraiment un salon texte
+- Action native slowmode_channel: regle vraiment le slowmode d un salon
+- Action native say_message: fait vraiment parler le bot dans un salon
+- Action native announce_message: publie vraiment une annonce en embed
+- Action native move_member: deplace vraiment un membre vers un vocal
 - Contenu variable avec [[random: option1 || option2 || option3]]
 - Contenu combo avec [[combo: intro1 || intro2 :: corps1 || corps2 :: fin1 || fin2]]
 - Placeholders: {mention} {username} {server} {channel} {memberCount} {args} {arg1} {arg2}
@@ -1211,7 +1651,7 @@ CHAMPS JSON AUTORISES UNIQUEMENT:
 - command_name (string, obligatoire)
 - description (string, max 100 chars)
 - execution_mode ("response" | "native")
-- action_type ("" | "clear_messages" | "ticket_panel")
+- action_type ("" | "clear_messages" | "ticket_panel" | "ban_member" | "kick_member" | "timeout_member" | "untimeout_member" | "warn_member" | "unban_member" | "add_role" | "remove_role" | "set_nickname" | "lock_channel" | "unlock_channel" | "slowmode_channel" | "say_message" | "announce_message" | "move_member")
 - action_config (object)
 - response (string, max 2000 chars, obligatoire)
 - response_mode ("channel" | "reply" | "dm")
@@ -1250,7 +1690,9 @@ REGLES CRITIQUES:
 10. **UTILISE LE NATIF QUAND C'EST SUPPORTE**:
    - clear / purge / suppression de messages => execution_mode = "native", action_type = "clear_messages"
    - ticket / panel ticket / support => execution_mode = "native", action_type = "ticket_panel"
-   - NE REPONDS PAS "je ne peux pas" pour ces deux cas, ils sont supportes.
+   - ban / kick / tempmute / unmute / warn / unban => utilise les actions natives de moderation
+   - addrole / removerole / nick / lock / unlock / slowmode / say / announce / move => utilise les actions natives correspondantes
+   - NE REPONDS PAS "je ne peux pas" pour ces cas, ils sont supportes.
 
 11. **LANGUE**: Reponds dans la langue de l'utilisateur.
 
@@ -1493,6 +1935,7 @@ router.post('/assistant', validate(commandAssistantSchema), async (req, res, nex
     const saved = db.raw('SELECT * FROM custom_commands WHERE id = ?', [savedId])[0];
     scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
     const mappedSaved = mapCommandRow(saved);
+    notifyGuildCommandSync(req);
     logCommandSiteAction(req, currentCommand ? 'Commande modifiee par IA' : 'Commande creee par IA', mappedSaved, [
       `Declencheur : ${mappedSaved.display_trigger}`,
       `Mode : ${mappedSaved.command_type}`,
@@ -1527,6 +1970,7 @@ router.post('/', validate(customCommandSchema), async (req, res) => {
   const created = db.raw('SELECT * FROM custom_commands WHERE id = ?', [id])[0];
   scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   const mappedCreated = mapCommandRow(created);
+  notifyGuildCommandSync(req);
   logCommandSiteAction(req, 'Commande creee', mappedCreated, [
     `Declencheur : ${mappedCreated.display_trigger}`,
     `Mode : ${mappedCreated.command_type}`,
@@ -1559,6 +2003,7 @@ router.patch('/:id', validate(customCommandSchema.partial()), async (req, res) =
   const updated = db.raw('SELECT * FROM custom_commands WHERE id = ?', [row.id])[0];
   scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   const mappedUpdated = mapCommandRow(updated);
+  notifyGuildCommandSync(req);
   logCommandSiteAction(req, 'Commande modifiee', mappedUpdated, [
     `Declencheur : ${mappedUpdated.display_trigger}`,
     `Mode : ${mappedUpdated.command_type}`,
@@ -1584,6 +2029,7 @@ router.delete('/:id', async (req, res) => {
   if (!deleted) return res.status(404).json({ error: 'Command not found' });
 
   scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
+  notifyGuildCommandSync(req);
   if (existing) {
     const mappedExisting = mapCommandRow(existing);
     logCommandSiteAction(req, 'Commande supprimee', mappedExisting, [
@@ -1618,6 +2064,7 @@ router.patch('/:id/toggle', validate(commandToggleSchema), async (req, res) => {
   scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   const updated = db.raw('SELECT * FROM custom_commands WHERE id = ?', [cmd.id])[0];
   const mappedToggle = mapCommandRow(updated);
+  notifyGuildCommandSync(req);
   logCommandSiteAction(req, newState ? 'Commande activee' : 'Commande desactivee', mappedToggle, [
     `Declencheur : ${mappedToggle.display_trigger}`,
     `Mode : ${mappedToggle.command_type}`,
