@@ -105,7 +105,14 @@ const DEFAULT_CONFIG = {
   options: PRESETS.map((item) => ({ ...item, role_ids: [], ping_roles: true })),
 }
 
-const getErrorMessage = (error) => error?.response?.data?.error || error?.message || 'Erreur inattendue'
+const getErrorMessage = (error) => {
+  const responseData = error?.response?.data
+  if (responseData?.error === 'Validation failed' && Array.isArray(responseData.errors) && responseData.errors.length > 0) {
+    const first = responseData.errors[0]
+    return `Validation failed: ${first.field || 'champ'} ${first.message || ''}`.trim()
+  }
+  return responseData?.error || error?.message || 'Erreur inattendue'
+}
 const isTextChannel = (channel) => TEXT_CHANNEL_TYPES.has(Number(channel?.type))
 const sortChannels = (channels) => [...channels].sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
 const sortRoles = (roles) => [...roles].filter((role) => role?.name !== '@everyone').sort((a, b) => Number(b?.position || 0) - Number(a?.position || 0))
@@ -133,6 +140,14 @@ function writeStoredDraft(guildId, draft) {
   }
 }
 
+function clearStoredDraft(guildId) {
+  try {
+    window.localStorage.removeItem(getDraftStorageKey(guildId))
+  } catch {
+    // ignore storage errors
+  }
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -140,6 +155,48 @@ function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error('Lecture image impossible'))
     reader.readAsDataURL(file)
   })
+}
+
+function loadImageElement(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Image invalide'))
+    image.src = source
+  })
+}
+
+async function buildOptimizedImageAsset(file) {
+  const rawDataUrl = await readFileAsDataUrl(file)
+  if (rawDataUrl.length <= 1_100_000) return rawDataUrl
+  if (String(file.type || '').toLowerCase() === 'image/gif') {
+    throw new Error('GIF trop lourd. Choisis une image plus legere.')
+  }
+
+  const image = await loadImageElement(rawDataUrl)
+  let width = image.naturalWidth || image.width
+  let height = image.naturalHeight || image.height
+  let scale = Math.min(1, 1600 / Math.max(width, height))
+  let quality = 0.88
+  let output = rawDataUrl
+
+  while (output.length > 1_100_000 && scale > 0.35) {
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(width * scale))
+    canvas.height = Math.max(1, Math.round(height * scale))
+    const context = canvas.getContext('2d')
+    if (!context) break
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    output = canvas.toDataURL('image/webp', quality)
+    quality = Math.max(0.45, quality - 0.08)
+    scale *= 0.88
+  }
+
+  if (output.length > 1_100_000) {
+    throw new Error('Image trop lourde. Reduis sa taille avant envoi.')
+  }
+
+  return output
 }
 
 function mergeOptions(options = []) {
@@ -167,6 +224,52 @@ function mergeOptions(options = []) {
 }
 
 const normalizeConfig = (value = {}) => ({ ...DEFAULT_CONFIG, ...(value || {}), options: mergeOptions(value?.options) })
+
+function buildTicketSavePayload(value = {}) {
+  const source = normalizeConfig(value)
+  const optionsByKey = new Map((source.options || []).map((option) => [option.key, option]))
+
+  return {
+    enabled: Boolean(source.enabled),
+    panel_channel_id: String(source.panel_channel_id || '').trim(),
+    panel_message_id: String(source.panel_message_id || '').trim(),
+    panel_title: String(source.panel_title || DEFAULT_CONFIG.panel_title).trim(),
+    panel_description: String(source.panel_description || '').trim(),
+    panel_footer: String(source.panel_footer || DEFAULT_CONFIG.panel_footer).trim(),
+    menu_placeholder: String(source.menu_placeholder || DEFAULT_CONFIG.menu_placeholder).trim(),
+    panel_color: String(source.panel_color || DEFAULT_CONFIG.panel_color).trim(),
+    panel_thumbnail_url: String(source.panel_thumbnail_url || '').trim(),
+    panel_image_url: String(source.panel_image_url || '').trim(),
+    default_category_id: String(source.default_category_id || '').trim(),
+    ticket_name_template: String(source.ticket_name_template || DEFAULT_CONFIG.ticket_name_template).trim(),
+    ticket_topic_template: String(source.ticket_topic_template || DEFAULT_CONFIG.ticket_topic_template).trim(),
+    intro_message: String(source.intro_message || DEFAULT_CONFIG.intro_message).trim(),
+    claim_message: String(source.claim_message || DEFAULT_CONFIG.claim_message).trim(),
+    close_message: String(source.close_message || DEFAULT_CONFIG.close_message).trim(),
+    auto_ping_support: Boolean(source.auto_ping_support),
+    allow_user_close: Boolean(source.allow_user_close),
+    prevent_duplicates: Boolean(source.prevent_duplicates),
+    options: PRESETS.map((preset) => {
+      const current = optionsByKey.get(preset.key) || {}
+      return {
+        key: preset.key,
+        label: String(current.label || preset.label).trim(),
+        description: String(current.description || preset.description || '').trim(),
+        emoji: String(current.emoji || '').trim(),
+        category_id: String(current.category_id || '').trim(),
+        role_ids: [...new Set((Array.isArray(current.role_ids) ? current.role_ids : []).map((roleId) => String(roleId || '').trim()).filter(Boolean))],
+        ping_roles: Boolean(current.ping_roles),
+        question_label: String(current.question_label || preset.question_label).trim(),
+        question_placeholder: String(current.question_placeholder || preset.question_placeholder || '').trim(),
+        modal_title: String(current.modal_title || current.label || preset.label).trim(),
+        intro_message: String(current.intro_message || preset.intro_message).trim(),
+        ticket_name_template: String(current.ticket_name_template || preset.ticket_name_template).trim(),
+        ticket_topic_template: String(current.ticket_topic_template || preset.ticket_topic_template).trim(),
+        enabled: Boolean(current.enabled),
+      }
+    }),
+  }
+}
 
 function SelectField({ label, value, onChange, options, emptyLabel }) {
   return (
@@ -234,12 +337,16 @@ export default function TicketGeneratorPage() {
   const [loadError, setLoadError] = useState('')
   const thumbnailRef = useRef(null)
   const imageRef = useRef(null)
+  const autosaveBlockedFingerprintRef = useRef('')
+  const hasUserEditedRef = useRef(false)
 
   const textChannels = useMemo(() => sortChannels(channels.filter(isTextChannel)), [channels])
   const visibleRoles = useMemo(() => sortRoles(roles), [roles])
   const normalizedConfig = config ? normalizeConfig(config) : null
   const normalizedDraft = draft ? normalizeConfig(draft) : null
-  const draftDirty = JSON.stringify(normalizedConfig || {}) !== JSON.stringify(normalizedDraft || {})
+  const configFingerprint = useMemo(() => normalizedConfig ? JSON.stringify(buildTicketSavePayload(normalizedConfig)) : '', [normalizedConfig])
+  const draftFingerprint = useMemo(() => normalizedDraft ? JSON.stringify(buildTicketSavePayload(normalizedDraft)) : '', [normalizedDraft])
+  const draftDirty = configFingerprint !== draftFingerprint
   const activeOptions = (normalizedDraft?.options || []).filter((item) => item.enabled)
   const selectedRoleIds = useMemo(() => {
     const all = new Set()
@@ -252,7 +359,11 @@ export default function TicketGeneratorPage() {
   const applyOverview = (payload = {}, preserveDraft = false) => {
     const nextConfig = normalizeConfig(payload.config || {})
     setConfig(nextConfig)
-    if (!preserveDraft) setDraft(clone(nextConfig))
+    if (!preserveDraft) {
+      setDraft(clone(nextConfig))
+      autosaveBlockedFingerprintRef.current = ''
+      hasUserEditedRef.current = false
+    }
   }
 
   const loadAll = async (showToast = false, preserveDraft = false) => {
@@ -291,7 +402,7 @@ export default function TicketGeneratorPage() {
     }
     const storedDraft = readStoredDraft(selectedGuildId)
     if (storedDraft) {
-      setDraft(normalizeConfig(storedDraft))
+      setDraft(normalizeConfig(buildTicketSavePayload(storedDraft)))
     }
     void loadAll(false, !!storedDraft)
   }, [selectedGuildId])
@@ -319,18 +430,28 @@ export default function TicketGeneratorPage() {
 
   useEffect(() => {
     if (!selectedGuildId || !normalizedDraft) return
-    writeStoredDraft(selectedGuildId, normalizedDraft)
-  }, [selectedGuildId, normalizedDraft])
+    if (!draftDirty) {
+      clearStoredDraft(selectedGuildId)
+      return
+    }
+    writeStoredDraft(selectedGuildId, buildTicketSavePayload(normalizedDraft))
+  }, [selectedGuildId, normalizedDraft, draftDirty])
 
   useEffect(() => {
-    if (!selectedGuildId || !normalizedDraft || !draftDirty || saving || publishing) return undefined
+    if (!selectedGuildId || !normalizedDraft || !draftDirty || saving || publishing || !hasUserEditedRef.current) return undefined
+    if (autosaveBlockedFingerprintRef.current && autosaveBlockedFingerprintRef.current === draftFingerprint) return undefined
     const timer = window.setTimeout(() => {
-      void saveConfig({ silent: true, throwOnError: false })
+      void saveConfig({ silent: true, throwOnError: false, mode: 'autosave' })
     }, AUTOSAVE_DELAY_MS)
     return () => window.clearTimeout(timer)
-  }, [selectedGuildId, normalizedDraft, draftDirty, saving, publishing])
+  }, [selectedGuildId, normalizedDraft, draftDirty, draftFingerprint, saving, publishing])
 
-  const updateDraft = (patch) => setDraft((current) => normalizeConfig({ ...(current || {}), ...patch }))
+  const updateDraft = (patch) => {
+    hasUserEditedRef.current = true
+    autosaveBlockedFingerprintRef.current = ''
+    setLoadError('')
+    setDraft((current) => normalizeConfig({ ...(current || {}), ...patch }))
+  }
 
   const toggleOption = (key) => setDraft((current) => {
     const source = normalizeConfig(current || {})
@@ -360,17 +481,21 @@ export default function TicketGeneratorPage() {
     }
   })
 
-  const saveConfig = async ({ silent = false, throwOnError = true } = {}) => {
+  const saveConfig = async ({ silent = false, throwOnError = true, mode = 'manual' } = {}) => {
     if (!selectedGuildId || !normalizedDraft) return
+    const payload = buildTicketSavePayload(normalizedDraft)
     setSaving(true)
     try {
-      const response = await ticketGeneratorAPI.save(selectedGuildId, normalizedDraft)
+      const response = await ticketGeneratorAPI.save(selectedGuildId, payload)
       applyOverview(response.data, false)
       setLoadError('')
+      autosaveBlockedFingerprintRef.current = ''
+      hasUserEditedRef.current = false
       if (!silent) toast.success('Configuration tickets sauvegardee')
     } catch (error) {
       const message = getErrorMessage(error)
       setLoadError(message)
+      if (mode === 'autosave') autosaveBlockedFingerprintRef.current = draftFingerprint
       if (!silent) toast.error(message)
       if (throwOnError) throw error
     } finally {
@@ -398,7 +523,7 @@ export default function TicketGeneratorPage() {
     if (!file) return
     if (!String(file.type || '').startsWith('image/')) return toast.error('Choisis une image valide')
     try {
-      updateDraft({ [targetKey]: await readFileAsDataUrl(file) })
+      updateDraft({ [targetKey]: await buildOptimizedImageAsset(file) })
       toast.success('Image chargee')
     } catch (error) {
       toast.error(error?.message || 'Chargement impossible')
