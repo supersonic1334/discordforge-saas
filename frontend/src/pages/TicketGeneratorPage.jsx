@@ -8,6 +8,8 @@ import { useGuildStore } from '../stores'
 
 const TEXT_CHANNEL_TYPES = new Set([0, 5, 11, 12, 15])
 const AUTO_REFRESH_MS = 12000
+const AUTOSAVE_DELAY_MS = 1500
+const LOCAL_DRAFT_PREFIX = 'ticket-generator-draft:'
 
 const PRESETS = [
   {
@@ -108,6 +110,28 @@ const isTextChannel = (channel) => TEXT_CHANNEL_TYPES.has(Number(channel?.type))
 const sortChannels = (channels) => [...channels].sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
 const sortRoles = (roles) => [...roles].filter((role) => role?.name !== '@everyone').sort((a, b) => Number(b?.position || 0) - Number(a?.position || 0))
 const clone = (value) => JSON.parse(JSON.stringify(value || {}))
+
+function getDraftStorageKey(guildId) {
+  return `${LOCAL_DRAFT_PREFIX}${guildId || 'unknown'}`
+}
+
+function readStoredDraft(guildId) {
+  try {
+    const raw = window.localStorage.getItem(getDraftStorageKey(guildId))
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredDraft(guildId, draft) {
+  try {
+    window.localStorage.setItem(getDraftStorageKey(guildId), JSON.stringify(draft))
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -231,7 +255,7 @@ export default function TicketGeneratorPage() {
     if (!preserveDraft) setDraft(clone(nextConfig))
   }
 
-  const loadAll = async (showToast = false) => {
+  const loadAll = async (showToast = false, preserveDraft = false) => {
     if (!selectedGuildId) return
     setLoading(true)
     try {
@@ -240,7 +264,7 @@ export default function TicketGeneratorPage() {
         botAPI.channels(selectedGuildId),
         botAPI.roles(selectedGuildId),
       ])
-      applyOverview(overviewResponse.data, false)
+      applyOverview(overviewResponse.data, preserveDraft)
       setChannels(Array.isArray(channelsResponse.data?.channels) ? channelsResponse.data.channels : [])
       setRoles(Array.isArray(rolesResponse.data?.roles) ? rolesResponse.data.roles : [])
       setLoadError('')
@@ -265,18 +289,22 @@ export default function TicketGeneratorPage() {
       setLoading(false)
       return
     }
-    void loadAll(false)
+    const storedDraft = readStoredDraft(selectedGuildId)
+    if (storedDraft) {
+      setDraft(normalizeConfig(storedDraft))
+    }
+    void loadAll(false, !!storedDraft)
   }, [selectedGuildId])
 
   useEffect(() => {
     if (!selectedGuildId) return undefined
     const unsubscribe = wsService.on('tickets:updated', (payload = {}) => {
       if (String(payload.guildId || '') !== String(selectedGuildId)) return
-      applyOverview(payload, false)
+      applyOverview(payload, draftDirty)
       setLoadError('')
     })
     return () => unsubscribe()
-  }, [selectedGuildId])
+  }, [selectedGuildId, draftDirty])
 
   useEffect(() => {
     if (!selectedGuildId) return undefined
@@ -288,6 +316,19 @@ export default function TicketGeneratorPage() {
     }, AUTO_REFRESH_MS)
     return () => window.clearInterval(timer)
   }, [selectedGuildId, draftDirty])
+
+  useEffect(() => {
+    if (!selectedGuildId || !normalizedDraft) return
+    writeStoredDraft(selectedGuildId, normalizedDraft)
+  }, [selectedGuildId, normalizedDraft])
+
+  useEffect(() => {
+    if (!selectedGuildId || !normalizedDraft || !draftDirty || saving || publishing) return undefined
+    const timer = window.setTimeout(() => {
+      void saveConfig({ silent: true, throwOnError: false })
+    }, AUTOSAVE_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [selectedGuildId, normalizedDraft, draftDirty, saving, publishing])
 
   const updateDraft = (patch) => setDraft((current) => normalizeConfig({ ...(current || {}), ...patch }))
 
@@ -319,7 +360,7 @@ export default function TicketGeneratorPage() {
     }
   })
 
-  const saveConfig = async ({ silent = false } = {}) => {
+  const saveConfig = async ({ silent = false, throwOnError = true } = {}) => {
     if (!selectedGuildId || !normalizedDraft) return
     setSaving(true)
     try {
@@ -328,8 +369,10 @@ export default function TicketGeneratorPage() {
       setLoadError('')
       if (!silent) toast.success('Configuration tickets sauvegardee')
     } catch (error) {
-      toast.error(getErrorMessage(error))
-      throw error
+      const message = getErrorMessage(error)
+      setLoadError(message)
+      if (!silent) toast.error(message)
+      if (throwOnError) throw error
     } finally {
       setSaving(false)
     }

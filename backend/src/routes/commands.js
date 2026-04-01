@@ -1262,7 +1262,7 @@ function enableCommandsModule(internalGuildId) {
 
 async function syncCommandState(userId, discordGuildId) {
   botManager.invalidateModuleCache(userId, discordGuildId);
-  await botManager.syncCommandDefinitions(userId, discordGuildId).catch(() => {});
+  await botManager.syncCommandDefinitions(userId, discordGuildId);
 }
 
 function scheduleCommandSync(userId, discordGuildId) {
@@ -2032,6 +2032,7 @@ function saveCommand(guildId, payload, currentId = null) {
 
 router.get('/', (req, res) => {
   ensureDefaultCommandsForGuild(req.guild.id);
+  scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   const commands = db.raw(
     `SELECT * FROM custom_commands
      WHERE guild_id = ?

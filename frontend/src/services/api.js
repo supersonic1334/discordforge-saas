@@ -247,8 +247,8 @@ export const commandsAPI = {
 
 export const ticketGeneratorAPI = {
   get: (guildId) => api.get(`/bot/guilds/${guildId}/tickets`),
-  save: (guildId, data) => api.put(`/bot/guilds/${guildId}/tickets/config`, data),
-  publish: (guildId) => api.post(`/bot/guilds/${guildId}/tickets/publish`),
+  save: (guildId, data) => api.put(`/bot/guilds/${guildId}/tickets/config`, data, { timeout: 30000 }),
+  publish: (guildId) => api.post(`/bot/guilds/${guildId}/tickets/publish`, {}, { timeout: 60000 }),
 }
 
 // ── Logs ──────────────────────────────────────────────────────────────────────

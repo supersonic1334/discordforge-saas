@@ -7,6 +7,7 @@ const { requireAuth, requireBotToken, requireGuildOwner, validate } = require('.
 const { ticketGeneratorConfigSchema } = require('../validators/schemas');
 const botManager = require('../services/botManager');
 const guildAccessService = require('../services/guildAccessService');
+const logger = require('../utils/logger').child('TicketsRoutes');
 const wsServer = require('../websocket');
 const {
   getTicketOverview,
@@ -54,6 +55,27 @@ function broadcastTicketGeneratorUpdate(req, extra = {}) {
   }
 }
 
+function normalizeTicketRouteError(error) {
+  if (!error) return error;
+  if (error.status || error.statusCode) return error;
+
+  const message = String(error.message || '').toLowerCase();
+  if (
+    message.includes('desactive')
+    || message.includes('choisis un salon')
+    || message.includes('au moins un type')
+    || message.includes('salon texte')
+    || message.includes('permission')
+    || message.includes('introuvable')
+    || message.includes('doit etre en ligne')
+    || message.includes('ne peut pas')
+  ) {
+    error.status = 409;
+  }
+
+  return error;
+}
+
 router.get('/', (req, res) => {
   res.json(buildOverviewPayload(req));
 });
@@ -72,7 +94,12 @@ router.put('/config', validate(ticketGeneratorConfigSchema), async (req, res, ne
 
     res.json(payload);
   } catch (error) {
-    next(error);
+    logger.warn(`Ticket config save failed: ${error.message}`, {
+      guildId: req.guild?.id,
+      discordGuildId: req.guild?.guild_id,
+      userId: req.user?.id,
+    });
+    next(normalizeTicketRouteError(error));
   }
 });
 
@@ -99,7 +126,12 @@ router.post('/publish', async (req, res, next) => {
 
     res.json(payload);
   } catch (error) {
-    next(error);
+    logger.warn(`Ticket panel publish failed: ${error.message}`, {
+      guildId: req.guild?.id,
+      discordGuildId: req.guild?.guild_id,
+      userId: req.user?.id,
+    });
+    next(normalizeTicketRouteError(error));
   }
 });
 

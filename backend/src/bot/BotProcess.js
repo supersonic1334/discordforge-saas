@@ -16,6 +16,7 @@ const {
   TextInputStyle,
   ButtonBuilder,
   ButtonStyle,
+  AttachmentBuilder,
 } = require('discord.js');
 const EventEmitter = require('events');
 
@@ -81,6 +82,21 @@ function parseJsonObject(rawValue) {
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
+  }
+}
+
+function parseImageDataUrl(value) {
+  const match = String(value || '').match(/^data:image\/([a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i);
+  if (!match) return null;
+
+  const extension = String(match[1] || 'png').toLowerCase() === 'jpeg' ? 'jpg' : String(match[1] || 'png').toLowerCase();
+  try {
+    return {
+      extension,
+      buffer: Buffer.from(match[2], 'base64'),
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -1050,25 +1066,43 @@ class BotProcess extends EventEmitter {
       : [...this.client.guilds.cache.values()];
 
     const syncJobs = guilds.map(async (guild) => {
-      const guildRow = db.raw('SELECT id FROM guilds WHERE guild_id = ? AND user_id = ?', [guild.id, this.userId])[0];
-      if (!guildRow) return;
-      this._ensureSystemCommands(guildRow.id);
+      try {
+        const guildRow = db.raw('SELECT id FROM guilds WHERE guild_id = ? AND user_id = ?', [guild.id, this.userId])[0];
+        if (!guildRow) return { guildId: guild.id, synced: 0 };
+        this._ensureSystemCommands(guildRow.id);
 
-      const slashCommands = db.raw(
-        `SELECT * FROM custom_commands
-         WHERE guild_id = ? AND enabled = 1 AND command_type = 'slash'
-         ORDER BY created_at ASC`,
-        [guildRow.id]
-      ).map(normalizeCommandRow);
+        const slashCommands = db.raw(
+          `SELECT * FROM custom_commands
+           WHERE guild_id = ? AND enabled = 1 AND command_type = 'slash'
+           ORDER BY created_at ASC`,
+          [guildRow.id]
+        ).map(normalizeCommandRow);
 
-      const payloads = slashCommands
-        .filter((command) => command.command_name)
-        .map((command) => buildSlashCommandPayload(command));
+        const payloads = slashCommands
+          .filter((command) => command.command_name)
+          .map((command) => buildSlashCommandPayload(command));
 
-      await guild.commands.set(payloads);
+        await guild.commands.set(payloads);
+        logger.info(`Slash commands synced for guild ${guild.id}`, {
+          userId: this.userId,
+          guildId: guild.id,
+          count: payloads.length,
+        });
+        return { guildId: guild.id, synced: payloads.length };
+      } catch (error) {
+        logger.error(`Slash command sync failed for guild ${guild.id}: ${error.message}`, {
+          userId: this.userId,
+          guildId: guild.id,
+        });
+        throw error;
+      }
     });
 
-    await Promise.allSettled(syncJobs);
+    const results = await Promise.allSettled(syncJobs);
+    const rejected = results.filter((entry) => entry.status === 'rejected');
+    if (rejected.length > 0) {
+      throw new Error(`Slash command sync failed for ${rejected.length} guild(s)`);
+    }
   }
 
   _resolveInternalGuildId(discordGuildId) {
@@ -1106,12 +1140,50 @@ class BotProcess extends EventEmitter {
     return argsText ? argsText.split(/\s+/).filter(Boolean) : [];
   }
 
+  async _deferCommandInteraction(source, { ephemeral = true } = {}) {
+    if (!(typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand())) return false;
+    if (source.deferred || source.replied || typeof source.deferReply !== 'function') return false;
+    await source.deferReply({ ephemeral }).catch(() => {});
+    return true;
+  }
+
+  _buildDiscordAssetFile(assetValue, fileNamePrefix) {
+    const raw = String(assetValue || '').trim();
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) {
+      return { url: raw, file: null };
+    }
+
+    const parsed = parseImageDataUrl(raw);
+    if (!parsed?.buffer?.length) return null;
+
+    const fileName = `${fileNamePrefix}.${parsed.extension || 'png'}`;
+    return {
+      url: `attachment://${fileName}`,
+      file: new AttachmentBuilder(parsed.buffer, { name: fileName }),
+    };
+  }
+
+  _buildTicketGeneratorAssets(generator, prefix = 'ticket-panel') {
+    const thumbnail = this._buildDiscordAssetFile(generator?.panel_thumbnail_url, `${prefix}-thumbnail`);
+    const image = this._buildDiscordAssetFile(generator?.panel_image_url, `${prefix}-image`);
+    return {
+      thumbnail,
+      image,
+      files: [thumbnail?.file, image?.file].filter(Boolean),
+    };
+  }
+
   async _replyToNativeSource(source, content, { ephemeral = true, preferReply = true } = {}) {
     const payload = { content: String(content || '').slice(0, 2000) || 'Commande executee.' };
     if (typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()) {
-      const response = { ...payload, ephemeral };
-      if (source.deferred || source.replied) return source.followUp(response);
-      return source.reply(response);
+      if (source.deferred && !source.replied && typeof source.editReply === 'function') {
+        return source.editReply(payload);
+      }
+      if (source.replied && typeof source.followUp === 'function') {
+        return source.followUp({ ...payload, ephemeral });
+      }
+      return source.reply({ ...payload, ephemeral });
     }
 
     if (preferReply && typeof source?.reply === 'function') {
@@ -1248,6 +1320,7 @@ class BotProcess extends EventEmitter {
   }
 
   _buildTicketGeneratorPanelPayload(generator) {
+    const assets = this._buildTicketGeneratorAssets(generator, `ticket-panel-${generator?.id || 'default'}`);
     const embed = {
       title: String(generator.panel_title || 'Ticket Generator').slice(0, 256),
       description: String(generator.panel_description || 'Choisis une categorie de ticket puis remplis le formulaire.').slice(0, 4000),
@@ -1258,17 +1331,18 @@ class BotProcess extends EventEmitter {
       timestamp: new Date().toISOString(),
     };
 
-    if (generator.panel_thumbnail_url) {
-      embed.thumbnail = { url: String(generator.panel_thumbnail_url) };
+    if (assets.thumbnail?.url) {
+      embed.thumbnail = { url: assets.thumbnail.url };
     }
 
-    if (generator.panel_image_url) {
-      embed.image = { url: String(generator.panel_image_url) };
+    if (assets.image?.url) {
+      embed.image = { url: assets.image.url };
     }
 
     return {
       embeds: [embed],
       components: this._buildTicketGeneratorComponents(generator),
+      files: assets.files,
     };
   }
 
@@ -1306,8 +1380,14 @@ class BotProcess extends EventEmitter {
     }
 
     const botPermissions = channel.permissionsFor?.(guild.members.me);
+    if (!botPermissions?.has(PermissionFlagsBits.ViewChannel)) {
+      throw new Error('Le bot ne peut pas voir le salon tickets choisi');
+    }
     if (!botPermissions?.has(PermissionFlagsBits.SendMessages)) {
       throw new Error('Le bot ne peut pas envoyer de messages dans le salon tickets choisi');
+    }
+    if (!botPermissions?.has(PermissionFlagsBits.EmbedLinks)) {
+      throw new Error('Le bot doit avoir la permission d integrer des liens dans le salon tickets choisi');
     }
 
     const payload = this._buildTicketGeneratorPanelPayload(generator);
@@ -1316,7 +1396,10 @@ class BotProcess extends EventEmitter {
     if (generator.panel_message_id) {
       message = await channel.messages.fetch(generator.panel_message_id).catch(() => null);
       if (message?.editable) {
-        message = await message.edit(payload).catch(() => null);
+        message = await message.edit({
+          ...payload,
+          attachments: payload.files?.length ? [] : undefined,
+        }).catch(() => null);
       }
     }
 
@@ -1360,8 +1443,10 @@ class BotProcess extends EventEmitter {
   }
 
   async _handleTicketGeneratorSubmit(interaction, generator, option, internalGuildId) {
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
     if (!generator?.enabled || !option?.enabled) {
-      await interaction.reply({ content: 'Ce type de ticket est indisponible pour le moment.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Ce type de ticket est indisponible pour le moment.' }).catch(() => {});
       return true;
     }
 
@@ -1370,9 +1455,8 @@ class BotProcess extends EventEmitter {
       : null;
     if (duplicate) {
       const existingChannelLabel = duplicate.channel_id ? `<#${duplicate.channel_id}>` : `#${duplicate.ticket_number}`;
-      await interaction.reply({
+      await interaction.editReply({
         content: `Tu as deja un ticket ouvert pour cette categorie: ${existingChannelLabel}`,
-        ephemeral: true,
       }).catch(() => {});
       return true;
     }
@@ -1380,7 +1464,7 @@ class BotProcess extends EventEmitter {
     const guild = interaction.guild;
     const botMember = guild.members.me;
     if (!botMember) {
-      await interaction.reply({ content: 'Le bot est indisponible pour creer ce ticket.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Le bot est indisponible pour creer ce ticket.' }).catch(() => {});
       return true;
     }
 
@@ -1517,13 +1601,9 @@ class BotProcess extends EventEmitter {
       timestamp: new Date().toISOString(),
     };
 
-    if (generator.panel_thumbnail_url) {
-      openingEmbed.thumbnail = { url: String(generator.panel_thumbnail_url) };
-    }
-
-    if (generator.panel_image_url) {
-      openingEmbed.image = { url: String(generator.panel_image_url) };
-    }
+    const assets = this._buildTicketGeneratorAssets(generator, `ticket-opening-${entry.id}`);
+    if (assets.thumbnail?.url) openingEmbed.thumbnail = { url: assets.thumbnail.url };
+    if (assets.image?.url) openingEmbed.image = { url: assets.image.url };
 
     await channel.send({
       content: shouldPingRoles ? supportRoleIds.map((roleId) => `<@&${roleId}>`).join(' ') : '',
@@ -1533,42 +1613,43 @@ class BotProcess extends EventEmitter {
       },
       embeds: [openingEmbed],
       components: [new ActionRowBuilder().addComponents(claimButton, closeButton)],
+      files: assets.files,
     }).catch(() => {});
 
-    await interaction.reply({
+    await interaction.editReply({
       content: `Ticket cree: <#${channel.id}>`,
-      ephemeral: true,
     }).catch(() => {});
 
     return true;
   }
 
   async _handleTicketGeneratorClaim(interaction, entryId, internalGuildId) {
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
     const entry = getTicketEntryById(internalGuildId, entryId);
     if (!entry) {
-      await interaction.reply({ content: 'Ticket introuvable.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Ticket introuvable.' }).catch(() => {});
       return true;
     }
     if (entry.status === 'closed') {
-      await interaction.reply({ content: 'Ce ticket est deja ferme.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Ce ticket est deja ferme.' }).catch(() => {});
       return true;
     }
 
     const generator = getGuildTicketGeneratorById(entry.generator_id);
     const option = (generator?.options || []).find((item) => item.key === entry.option_key);
     if (!this._hasTicketSupportAccess(interaction.member, option)) {
-      await interaction.reply({ content: 'Tu n as pas acces a la prise en charge de ce ticket.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Tu n as pas acces a la prise en charge de ce ticket.' }).catch(() => {});
       return true;
     }
     if (entry.claimed_by_discord_user_id && entry.claimed_by_discord_user_id !== interaction.user.id) {
-      await interaction.reply({
+      await interaction.editReply({
         content: `Ce ticket est deja pris par ${entry.claimed_by_username || 'un autre membre du staff'}.`,
-        ephemeral: true,
       }).catch(() => {});
       return true;
     }
     if (entry.claimed_by_discord_user_id === interaction.user.id) {
-      await interaction.reply({ content: 'Tu as deja pris ce ticket.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Tu as deja pris ce ticket.' }).catch(() => {});
       return true;
     }
 
@@ -1592,7 +1673,7 @@ class BotProcess extends EventEmitter {
       values
     ).slice(0, 2000);
 
-    await interaction.reply({ content: 'Ticket pris en charge.', ephemeral: true }).catch(() => {});
+    await interaction.editReply({ content: 'Ticket pris en charge.' }).catch(() => {});
     if (interaction.channel?.isTextBased?.()) {
       await interaction.channel.send({
         content: claimMessage,
@@ -1604,13 +1685,15 @@ class BotProcess extends EventEmitter {
   }
 
   async _handleTicketGeneratorClose(interaction, entryId, internalGuildId) {
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
     const entry = getTicketEntryById(internalGuildId, entryId);
     if (!entry) {
-      await interaction.reply({ content: 'Ticket introuvable.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Ticket introuvable.' }).catch(() => {});
       return true;
     }
     if (entry.status === 'closed') {
-      await interaction.reply({ content: 'Ce ticket est deja ferme.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Ce ticket est deja ferme.' }).catch(() => {});
       return true;
     }
 
@@ -1619,7 +1702,7 @@ class BotProcess extends EventEmitter {
     const isSupport = this._hasTicketSupportAccess(interaction.member, option);
     const isCreator = String(entry.creator_discord_user_id) === String(interaction.user.id);
     if (!isSupport && !(generator?.allow_user_close && isCreator)) {
-      await interaction.reply({ content: 'Tu ne peux pas fermer ce ticket.', ephemeral: true }).catch(() => {});
+      await interaction.editReply({ content: 'Tu ne peux pas fermer ce ticket.' }).catch(() => {});
       return true;
     }
 
@@ -1653,7 +1736,7 @@ class BotProcess extends EventEmitter {
       values
     ).slice(0, 2000);
 
-    await interaction.reply({ content: 'Ticket ferme.', ephemeral: true }).catch(() => {});
+    await interaction.editReply({ content: 'Ticket ferme.' }).catch(() => {});
     if (interaction.channel?.isTextBased?.()) {
       await interaction.channel.send({
         content: closeMessage,
@@ -1725,6 +1808,11 @@ class BotProcess extends EventEmitter {
 
     const actionConfig = normalizeCommandActionConfig(COMMAND_ACTION_TYPES.CLEAR_MESSAGES, command.action_config);
     const isSlash = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand();
+    if (isSlash) {
+      await this._deferCommandInteraction(source, {
+        ephemeral: actionConfig.success_visibility !== 'public',
+      });
+    }
     const rawAmount = isSlash
       ? source.options.getInteger('amount')
       : this._extractNativeArgs(source, matchedTrigger)[0];
@@ -1785,6 +1873,7 @@ class BotProcess extends EventEmitter {
   async _executeNativeTicketPanel(source) {
     const guild = source?.guild;
     if (!guild) return false;
+    await this._deferCommandInteraction(source, { ephemeral: true });
 
     const memberPermissions = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()
       ? source.memberPermissions
@@ -1818,6 +1907,9 @@ class BotProcess extends EventEmitter {
     const moderatorName = source.user?.tag || source.user?.username || 'Moderateur';
     const permission = getDefaultNativePermission(command.action_type);
     const actionConfig = normalizeCommandActionConfig(command.action_type, command.action_config);
+    await this._deferCommandInteraction(source, {
+      ephemeral: actionConfig.success_visibility !== 'public',
+    });
     const reason = String(source.options.getString('reason') || '').trim();
     const requireReason = !!actionConfig.require_reason;
     const botMember = guild.members.me;
@@ -2533,11 +2625,9 @@ class BotProcess extends EventEmitter {
     if (!interaction.isChatInputCommand()) return;
 
     const guildId = interaction.guild.id;
-    const configs = await this._getEnabledModules(guildId);
-    if (!configs.CUSTOM_COMMANDS?.enabled) return;
-
     const guildRow = db.raw('SELECT id FROM guilds WHERE guild_id = ? AND user_id = ?', [guildId, this.userId])[0];
     if (!guildRow) return;
+    this._ensureSystemCommands(guildRow.id);
 
     const command = db.raw(
       `SELECT * FROM custom_commands
@@ -2546,7 +2636,14 @@ class BotProcess extends EventEmitter {
       [guildRow.id, interaction.commandName]
     )[0];
 
-    if (!command) return;
+    if (!command) {
+      await interaction.reply({
+        content: 'Cette commande est en cours de synchronisation. Reessaie dans quelques secondes.',
+        ephemeral: true,
+      }).catch(() => {});
+      await this._syncSlashCommands(guildId).catch(() => {});
+      return;
+    }
 
     const normalizedCommand = normalizeCommandRow(command);
 
