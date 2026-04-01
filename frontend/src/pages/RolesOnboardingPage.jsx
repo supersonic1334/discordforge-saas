@@ -206,6 +206,17 @@ export default function RolesOnboardingPage() {
   useEffect(() => {
     const handleRealtimeSync = (payload = {}) => {
       if (String(payload.guildId || '') !== String(selectedGuildIdRef.current || '')) return
+      const syncedModules = Array.isArray(payload.modules) ? payload.modules : []
+      const welcomeModule = syncedModules.find((module) => module?.type === 'WELCOME_MESSAGE')
+      const autoRoleModule = syncedModules.find((module) => module?.type === 'AUTO_ROLE')
+
+      if (welcomeModule) {
+        setWelcomeForm(normalizeWelcome(welcomeModule, resolvedLocale))
+      }
+      if (autoRoleModule) {
+        setAutoRoleForm(normalizeAutoRole(autoRoleModule))
+      }
+      if (welcomeModule || autoRoleModule) return
       if (payload.moduleType && !['WELCOME_MESSAGE', 'AUTO_ROLE'].includes(String(payload.moduleType))) return
       void loadData(false)
     }
@@ -220,7 +231,7 @@ export default function RolesOnboardingPage() {
       unsubscribeModules()
       unsubscribeSnapshots()
     }
-  }, [loadData])
+  }, [loadData, resolvedLocale])
 
   function toggleRole(roleId) {
     setAutoRoleForm((current) => ({

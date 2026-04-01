@@ -272,6 +272,11 @@ function runMigrations() {
   ensureColumn('custom_commands', 'command_type', "TEXT NOT NULL DEFAULT 'prefix'");
   ensureColumn('custom_commands', 'command_prefix', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('custom_commands', 'command_name', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('custom_commands', 'is_system', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('custom_commands', 'system_key', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('custom_commands', 'execution_mode', "TEXT NOT NULL DEFAULT 'response'");
+  ensureColumn('custom_commands', 'action_type', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('custom_commands', 'action_config', "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn('custom_commands', 'response_mode', "TEXT NOT NULL DEFAULT 'channel'");
   ensureColumn('custom_commands', 'allowed_channels', "TEXT DEFAULT '[]'");
   ensureColumn('custom_commands', 'aliases', "TEXT DEFAULT '[]'");
@@ -282,8 +287,15 @@ function runMigrations() {
   ensureColumn('custom_commands', 'mention_user', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn('custom_commands', 'require_args', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn('custom_commands', 'usage_hint', "TEXT NOT NULL DEFAULT ''");
+  db.exec("UPDATE custom_commands SET execution_mode = 'native' WHERE trim(COALESCE(action_type, '')) != ''");
+  db.exec("UPDATE custom_commands SET execution_mode = 'response' WHERE execution_mode NOT IN ('response','native') OR execution_mode IS NULL");
+  db.exec("UPDATE custom_commands SET action_type = '' WHERE action_type NOT IN ('','clear_messages','ticket_panel','ban_member','kick_member','timeout_member','untimeout_member','warn_member') OR action_type IS NULL");
+  db.exec("UPDATE custom_commands SET action_config = '{}' WHERE action_config IS NULL OR trim(action_config) = ''");
+  db.exec("UPDATE custom_commands SET is_system = 0 WHERE is_system IS NULL");
+  db.exec("UPDATE custom_commands SET system_key = '' WHERE system_key IS NULL");
   db.exec("UPDATE custom_commands SET response_mode = 'dm' WHERE reply_in_dm = 1 AND (response_mode IS NULL OR response_mode = '' OR response_mode = 'channel')");
   db.exec("UPDATE custom_commands SET response_mode = 'channel' WHERE response_mode NOT IN ('channel','reply','dm')");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_commands_system_key ON custom_commands(guild_id, system_key) WHERE system_key != ''");
   db.exec(`
     UPDATE custom_commands
     SET

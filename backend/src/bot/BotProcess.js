@@ -1,6 +1,6 @@
 'use strict';
 
-const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, PermissionFlagsBits, ApplicationCommandOptionType } = require('discord.js');
 const EventEmitter = require('events');
 
 const logger = require('../utils/logger').child('BotProcess');
@@ -13,8 +13,9 @@ const { handleAntiSpam } = require('./modules/antiSpam');
 const { handleAntiLink, handleAntiInvite, handleAntiMassMention, handleAntiBotJoin, handleAntiRaid, punishSecurityAction } = require('./modules/securityModules');
 const { activateLockdown, handleAntiAltAccount, handleAntiNukeEvent, handleAntiTokenScam, handleAutoSlowmode } = require('./modules/advancedProtection');
 const { handleWelcomeMessage, handleAutoRole, handleLogging, handleCustomCommand } = require('./modules/utilityModules');
-const { addWarning, checkEscalation, logBotEvent } = require('./utils/modHelpers');
+const { addWarning, checkEscalation, logBotEvent, recordModAction } = require('./utils/modHelpers');
 const { syncNativeAutoModRules, getManagedRuleKey, RULE_KEYS } = require('../services/discordAutoModService');
+const { COMMAND_ACTION_TYPES, DEFAULT_SYSTEM_COMMANDS } = require('../constants/systemCommands');
 const config = require('../config');
 
 // ── Status enum ───────────────────────────────────────────────────────────────
@@ -34,6 +35,255 @@ function parseJsonArray(rawValue) {
   } catch {
     return [];
   }
+}
+
+function parseJsonObject(rawValue) {
+  try {
+    const parsed = JSON.parse(rawValue || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function clampNumber(value, minimum, maximum, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.round(numeric)));
+}
+
+function clampDurationMs(value, minimum, maximum, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.round(numeric)));
+}
+
+function normalizeSnowflake(value, fallbackValue = '') {
+  const raw = String(value ?? fallbackValue ?? '').trim();
+  return /^\d+$/.test(raw) ? raw : '';
+}
+
+function normalizeVisibility(value, fallbackValue = 'ephemeral') {
+  return String(value || fallbackValue || '').trim().toLowerCase() === 'public'
+    ? 'public'
+    : 'ephemeral';
+}
+
+function normalizeBooleanFlag(value, fallbackValue = false) {
+  return (value ?? fallbackValue) ? 1 : 0;
+}
+
+const DEFAULT_ACTION_CONFIG_BY_TYPE = new Map(
+  DEFAULT_SYSTEM_COMMANDS.map((definition) => [definition.action_type, definition.action_config || {}])
+);
+
+function normalizeCommandActionConfig(actionType, rawValue = {}) {
+  const source = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue : {};
+  const fallback = DEFAULT_ACTION_CONFIG_BY_TYPE.get(actionType) || {};
+
+  switch (actionType) {
+    case COMMAND_ACTION_TYPES.CLEAR_MESSAGES:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        min_amount: clampNumber(source.min_amount ?? fallback.min_amount, 1, 100, 1),
+        max_amount: clampNumber(source.max_amount ?? fallback.max_amount, 1, 100, 100),
+        default_amount: clampNumber(source.default_amount ?? fallback.default_amount, 1, 100, 20),
+        success_message: String(source.success_message ?? fallback.success_message ?? '{count} messages supprimes dans {channel}.').trim().slice(0, 220),
+        empty_message: String(source.empty_message ?? fallback.empty_message ?? 'Aucun message recent a supprimer ici.').trim().slice(0, 220),
+        denied_message: String(source.denied_message ?? fallback.denied_message ?? 'Tu dois avoir la permission de gerer les messages pour utiliser cette commande.').trim().slice(0, 220),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.BAN_MEMBER:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
+        require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? true),
+        delete_message_seconds: clampNumber(source.delete_message_seconds ?? fallback.delete_message_seconds, 0, 604800, 0),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.KICK_MEMBER:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
+        require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? true),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.TIMEOUT_MEMBER:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
+        require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? true),
+        default_duration_ms: clampDurationMs(source.default_duration_ms ?? fallback.default_duration_ms, 60000, 2419200000, 600000),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? false),
+        require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? false),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.WARN_MEMBER:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
+        require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? true),
+        default_points: clampNumber(source.default_points ?? fallback.default_points, 1, 20, 1),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    default:
+      return source;
+  }
+}
+
+function getDefaultNativePermission(actionType) {
+  switch (actionType) {
+    case COMMAND_ACTION_TYPES.CLEAR_MESSAGES:
+      return PermissionFlagsBits.ManageMessages;
+    case COMMAND_ACTION_TYPES.BAN_MEMBER:
+      return PermissionFlagsBits.BanMembers;
+    case COMMAND_ACTION_TYPES.KICK_MEMBER:
+      return PermissionFlagsBits.KickMembers;
+    case COMMAND_ACTION_TYPES.TIMEOUT_MEMBER:
+    case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER:
+    case COMMAND_ACTION_TYPES.WARN_MEMBER:
+      return PermissionFlagsBits.ModerateMembers;
+    default:
+      return null;
+  }
+}
+
+function buildSlashCommandPayload(command) {
+  const actionType = String(command.action_type || '').trim();
+  const payload = {
+    name: command.command_name,
+    description: String(command.description || `Commande ${command.command_name}`).slice(0, 100),
+    dm_permission: false,
+  };
+  const permission = getDefaultNativePermission(actionType);
+  if (permission) {
+    payload.default_member_permissions = permission.toString();
+  }
+
+  switch (actionType) {
+    case COMMAND_ACTION_TYPES.CLEAR_MESSAGES:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.Integer,
+          name: 'amount',
+          description: 'Nombre de messages a supprimer',
+          required: false,
+          min_value: 1,
+          max_value: 100,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.BAN_MEMBER:
+    case COMMAND_ACTION_TYPES.KICK_MEMBER:
+    case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: true,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison de la sanction',
+          required: false,
+          max_length: 300,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.TIMEOUT_MEMBER:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: true,
+        },
+        {
+          type: ApplicationCommandOptionType.Integer,
+          name: 'minutes',
+          description: 'Duree du timeout en minutes',
+          required: false,
+          min_value: 1,
+          max_value: 40320,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison de la sanction',
+          required: false,
+          max_length: 300,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.WARN_MEMBER:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: true,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison de l avertissement',
+          required: false,
+          max_length: 300,
+        },
+        {
+          type: ApplicationCommandOptionType.Integer,
+          name: 'points',
+          description: 'Points a ajouter',
+          required: false,
+          min_value: 1,
+          max_value: 20,
+        },
+      ];
+      break;
+
+    default:
+      break;
+  }
+
+  return payload;
+}
+
+function parseDurationToMs(value, fallbackMs = 600000) {
+  if (value === null || value === undefined || value === '') return fallbackMs;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clampDurationMs(value * 60000, 60000, 2419200000, fallbackMs);
+  }
+
+  const raw = String(value || '').trim().toLowerCase();
+  const match = raw.match(/^(\d+)(s|m|h|d)?$/);
+  if (!match) return fallbackMs;
+
+  const amount = Number(match[1]);
+  const unit = match[2] || 'm';
+  const multiplier = unit === 's'
+    ? 1000
+    : unit === 'h'
+      ? 3600000
+      : unit === 'd'
+        ? 86400000
+        : 60000;
+  return clampDurationMs(amount * multiplier, 60000, 2419200000, fallbackMs);
 }
 
 const nativeExecutionCooldowns = new Map();
@@ -61,12 +311,18 @@ function normalizeCommandRow(row) {
   const commandType = row.command_type === 'slash' ? 'slash' : 'prefix';
   const commandPrefix = commandType === 'slash' ? '/' : String(row.command_prefix || '').trim();
   const commandName = String(row.command_name || '').trim();
+  const actionType = String(row.action_type || '').trim();
 
   return {
     ...row,
     command_type: commandType,
     command_prefix: commandPrefix,
     command_name: commandName,
+    is_system: !!row.is_system,
+    system_key: String(row.system_key || '').trim(),
+    execution_mode: String(row.execution_mode || '').trim() === 'native' ? 'native' : 'response',
+    action_type: actionType,
+    action_config: normalizeCommandActionConfig(actionType, parseJsonObject(row.action_config)),
     aliases: parseJsonArray(row.aliases),
     allowed_roles: parseJsonArray(row.allowed_roles),
     allowed_channels: parseJsonArray(row.allowed_channels),
@@ -286,6 +542,110 @@ class BotProcess extends EventEmitter {
     await Promise.allSettled(syncJobs);
   }
 
+  _ensureSystemCommands(guildRowId) {
+    if (!guildRowId) return;
+
+    const now = new Date().toISOString();
+    const existingRows = db.raw(
+      'SELECT * FROM custom_commands WHERE guild_id = ? AND is_system = 1',
+      [guildRowId]
+    );
+    const existingByKey = new Map(
+      existingRows.map((row) => [String(row.system_key || '').trim(), row])
+    );
+
+    for (const definition of DEFAULT_SYSTEM_COMMANDS) {
+      const trigger = `/${definition.command_name}`;
+      const existing = existingByKey.get(definition.system_key) || null;
+      const normalizedActionConfig = normalizeCommandActionConfig(
+        definition.action_type,
+        existing ? parseJsonObject(existing.action_config) : definition.action_config
+      );
+
+      if (existing) {
+        db.db.prepare(`
+          UPDATE custom_commands
+          SET trigger = ?,
+              command_type = ?,
+              command_prefix = ?,
+              command_name = ?,
+              is_system = 1,
+              system_key = ?,
+              execution_mode = 'native',
+              action_type = ?,
+              action_config = ?,
+              description = ?,
+              response = ?,
+              response_mode = ?,
+              embed_enabled = ?,
+              embed_title = ?,
+              embed_color = ?,
+              mention_user = ?,
+              require_args = ?,
+              delete_trigger = ?,
+              cooldown_ms = ?,
+              usage_hint = ?,
+              updated_at = ?
+          WHERE id = ?
+        `).run(
+          trigger,
+          definition.command_type,
+          definition.command_prefix,
+          definition.command_name,
+          definition.system_key,
+          definition.action_type,
+          JSON.stringify(normalizedActionConfig),
+          definition.description,
+          definition.response,
+          definition.response_mode,
+          definition.embed_enabled ? 1 : 0,
+          definition.embed_title,
+          definition.embed_color,
+          definition.mention_user ? 1 : 0,
+          definition.require_args ? 1 : 0,
+          definition.delete_trigger ? 1 : 0,
+          definition.cooldown_ms,
+          definition.usage_hint,
+          now,
+          existing.id
+        );
+        continue;
+      }
+
+      db.insert('custom_commands', {
+        guild_id: guildRowId,
+        trigger,
+        command_type: definition.command_type,
+        command_prefix: definition.command_prefix,
+        command_name: definition.command_name,
+        is_system: 1,
+        system_key: definition.system_key,
+        enabled: definition.enabled ? 1 : 0,
+        execution_mode: 'native',
+        action_type: definition.action_type,
+        action_config: JSON.stringify(normalizedActionConfig),
+        description: definition.description,
+        response: definition.response,
+        response_mode: definition.response_mode,
+        reply_in_dm: 0,
+        delete_trigger: definition.delete_trigger ? 1 : 0,
+        allowed_roles: '[]',
+        allowed_channels: '[]',
+        aliases: '[]',
+        cooldown_ms: definition.cooldown_ms,
+        delete_response_after_ms: 0,
+        embed_enabled: definition.embed_enabled ? 1 : 0,
+        embed_title: definition.embed_title,
+        embed_color: definition.embed_color,
+        mention_user: definition.mention_user ? 1 : 0,
+        require_args: definition.require_args ? 1 : 0,
+        usage_hint: definition.usage_hint,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+  }
+
   async _syncSlashCommands(discordGuildId = null) {
     if (!this.client?.guilds?.cache?.size) return;
 
@@ -296,6 +656,7 @@ class BotProcess extends EventEmitter {
     const syncJobs = guilds.map(async (guild) => {
       const guildRow = db.raw('SELECT id FROM guilds WHERE guild_id = ? AND user_id = ?', [guild.id, this.userId])[0];
       if (!guildRow) return;
+      this._ensureSystemCommands(guildRow.id);
 
       const slashCommands = db.raw(
         `SELECT * FROM custom_commands
@@ -306,10 +667,7 @@ class BotProcess extends EventEmitter {
 
       const payloads = slashCommands
         .filter((command) => command.command_name)
-        .map((command) => ({
-          name: command.command_name,
-          description: (command.description || `Commande ${command.command_name}`).slice(0, 100),
-        }));
+        .map((command) => buildSlashCommandPayload(command));
 
       await guild.commands.set(payloads);
     });
@@ -336,6 +694,344 @@ class BotProcess extends EventEmitter {
       ...payload,
       at: new Date().toISOString(),
     });
+  }
+
+  _extractNativeArgs(source, matchedTrigger = null) {
+    if (typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()) {
+      return [];
+    }
+
+    const content = String(source?.content || '').trim();
+    const prefix = String(matchedTrigger || '').trim();
+    const argsText = prefix && content.startsWith(prefix)
+      ? content.slice(prefix.length).trim()
+      : content;
+
+    return argsText ? argsText.split(/\s+/).filter(Boolean) : [];
+  }
+
+  async _replyToNativeSource(source, content, { ephemeral = true, preferReply = true } = {}) {
+    const payload = { content: String(content || '').slice(0, 2000) || 'Commande executee.' };
+    if (typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()) {
+      const response = { ...payload, ephemeral };
+      if (source.deferred || source.replied) return source.followUp(response);
+      return source.reply(response);
+    }
+
+    if (preferReply && typeof source?.reply === 'function') {
+      return source.reply({ ...payload, allowedMentions: { repliedUser: false } });
+    }
+    if (source?.channel?.isTextBased?.()) {
+      return source.channel.send(payload);
+    }
+    return null;
+  }
+
+  async _logNativeCommandToChannel(guild, channelId, title, lines = [], color = 0x22d3ee) {
+    const targetChannelId = normalizeSnowflake(channelId);
+    if (!guild || !targetChannelId) return;
+
+    const channel = guild.channels.cache.get(targetChannelId)
+      || await guild.channels.fetch(targetChannelId).catch(() => null);
+    if (!channel?.isTextBased?.()) return;
+
+    await channel.send({
+      embeds: [{
+        title: String(title || 'Journal de commande native').slice(0, 256),
+        description: lines.filter(Boolean).join('\n').slice(0, 4000),
+        color,
+        timestamp: new Date().toISOString(),
+      }],
+    }).catch(() => {});
+  }
+
+  async _executeNativeClear(source, command, matchedTrigger = null) {
+    const channel = source.channel;
+    const guild = source.guild;
+    if (!guild || !channel?.bulkDelete) return false;
+
+    const actionConfig = normalizeCommandActionConfig(COMMAND_ACTION_TYPES.CLEAR_MESSAGES, command.action_config);
+    const amount = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()
+      ? clampNumber(source.options.getInteger('amount') ?? actionConfig.default_amount, actionConfig.min_amount, actionConfig.max_amount, actionConfig.default_amount)
+      : clampNumber(this._extractNativeArgs(source, matchedTrigger)[0] ?? actionConfig.default_amount, actionConfig.min_amount, actionConfig.max_amount, actionConfig.default_amount);
+
+    const memberPermissions = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()
+      ? source.memberPermissions
+      : source.member?.permissions;
+    const botPermissions = channel.permissionsFor?.(guild.members.me);
+
+    if (!memberPermissions?.has(PermissionFlagsBits.ManageMessages) || !botPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+      await this._replyToNativeSource(source, actionConfig.denied_message, { ephemeral: true });
+      return true;
+    }
+
+    const deleted = await channel.bulkDelete(amount, true).catch(() => null);
+    const deletedCount = deleted?.size || 0;
+
+    if (deletedCount <= 0) {
+      await this._replyToNativeSource(source, actionConfig.empty_message, { ephemeral: true });
+      return true;
+    }
+
+    const successMessage = String(actionConfig.success_message || '{count} messages supprimes dans {channel}.')
+      .replace(/\{count\}/g, String(deletedCount))
+      .replace(/\{channel\}/g, `#${channel.name || 'salon'}`);
+
+    await this._replyToNativeSource(source, successMessage, {
+      ephemeral: actionConfig.success_visibility !== 'public',
+      preferReply: false,
+    });
+
+    await this._logNativeCommandToChannel(
+      guild,
+      actionConfig.log_channel_id,
+      'Clear execute',
+      [
+        `Commande: ${command.display_trigger}`,
+        `Salon: <#${channel.id}>`,
+        `Auteur: <@${source.user?.id || source.author?.id}>`,
+        `Messages supprimes: ${deletedCount}`,
+      ],
+      0x22d3ee
+    );
+
+    return true;
+  }
+
+  async _executeNativeModeration(source, command) {
+    if (!(typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand())) {
+      await this._replyToNativeSource(source, 'Cette commande native est disponible en slash uniquement.', { preferReply: true });
+      return true;
+    }
+
+    const guild = source.guild;
+    const targetUser = source.options.getUser('user', true);
+    const targetMember = source.options.getMember('user')
+      || await guild.members.fetch(targetUser.id).catch(() => null);
+    const moderatorName = source.user?.tag || source.user?.username || 'Moderateur';
+    const permission = getDefaultNativePermission(command.action_type);
+    const actionConfig = normalizeCommandActionConfig(command.action_type, command.action_config);
+    const reason = String(source.options.getString('reason') || '').trim();
+    const requireReason = !!actionConfig.require_reason;
+    const botMember = guild.members.me;
+
+    if (permission && !source.memberPermissions?.has(permission)) {
+      await this._replyToNativeSource(source, 'Tu n as pas la permission pour executer cette commande.', { ephemeral: true });
+      return true;
+    }
+    if (permission && !botMember?.permissions?.has(permission)) {
+      await this._replyToNativeSource(source, 'Le bot n a pas la permission requise pour executer cette commande.', { ephemeral: true });
+      return true;
+    }
+    if (requireReason && !reason) {
+      await this._replyToNativeSource(source, 'Une raison est obligatoire pour cette commande.', { ephemeral: true });
+      return true;
+    }
+
+    const effectiveReason = reason || 'Aucune raison precisee.';
+    const visibilityIsPublic = actionConfig.success_visibility === 'public';
+
+    switch (command.action_type) {
+      case COMMAND_ACTION_TYPES.BAN_MEMBER: {
+        if (targetMember && !targetMember.bannable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas bannir ce membre avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        if (actionConfig.dm_user) {
+          await safeSendModerationDm({
+            botToken: this.token,
+            guildId: guild.id,
+            guild,
+            actionType: 'ban',
+            targetUserId: targetUser.id,
+            reason: effectiveReason,
+            moderatorName,
+          }).catch(() => {});
+        }
+        await guild.members.ban(targetUser, {
+          reason: effectiveReason,
+          deleteMessageSeconds: clampNumber(actionConfig.delete_message_seconds, 0, 604800, 0),
+        });
+        await recordModAction(guild.id, 'ban', targetUser.id, targetUser.globalName || targetUser.username, source.user.id, moderatorName, effectiveReason, null, 'SYSTEM_COMMAND', {
+          command_id: command.id,
+          system_key: command.system_key,
+        });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Ban execute', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0xef4444);
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete banni.`, { ephemeral: !visibilityIsPublic });
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.KICK_MEMBER: {
+        if (!targetMember) {
+          await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.kickable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas expulser ce membre avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        if (actionConfig.dm_user) {
+          await safeSendModerationDm({
+            botToken: this.token,
+            guildId: guild.id,
+            guild,
+            actionType: 'kick',
+            targetUserId: targetUser.id,
+            reason: effectiveReason,
+            moderatorName,
+          }).catch(() => {});
+        }
+        await targetMember.kick(effectiveReason);
+        await recordModAction(guild.id, 'kick', targetUser.id, targetUser.globalName || targetUser.username, source.user.id, moderatorName, effectiveReason, null, 'SYSTEM_COMMAND', {
+          command_id: command.id,
+          system_key: command.system_key,
+        });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Kick execute', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0xf97316);
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete expulse.`, { ephemeral: !visibilityIsPublic });
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.TIMEOUT_MEMBER: {
+        if (!targetMember) {
+          await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.moderatable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas mettre ce membre en timeout avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        const requestedMinutes = source.options.getInteger('minutes');
+        const durationMs = requestedMinutes !== null
+          ? parseDurationToMs(requestedMinutes, Number(actionConfig.default_duration_ms || 600000))
+          : clampDurationMs(actionConfig.default_duration_ms, 60000, 2419200000, 600000);
+        if (actionConfig.dm_user) {
+          await safeSendModerationDm({
+            botToken: this.token,
+            guildId: guild.id,
+            guild,
+            actionType: 'timeout',
+            targetUserId: targetUser.id,
+            reason: effectiveReason,
+            durationMs,
+            moderatorName,
+          }).catch(() => {});
+        }
+        await targetMember.timeout(durationMs, effectiveReason);
+        await recordModAction(guild.id, 'timeout', targetUser.id, targetUser.globalName || targetUser.username, source.user.id, moderatorName, effectiveReason, durationMs, 'SYSTEM_COMMAND', {
+          command_id: command.id,
+          system_key: command.system_key,
+        });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Timeout execute', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Duree: ${Math.max(1, Math.round(durationMs / 60000))} minute(s)`,
+          `Raison: ${effectiveReason}`,
+        ], 0xf59e0b);
+        await this._replyToNativeSource(source, `<@${targetUser.id}> est en timeout pour ${Math.max(1, Math.round(durationMs / 60000))} minute(s).`, { ephemeral: !visibilityIsPublic });
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER: {
+        if (!targetMember) {
+          await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.moderatable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas retirer le timeout de ce membre avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        await targetMember.timeout(null, effectiveReason);
+        if (actionConfig.dm_user) {
+          await safeSendModerationDm({
+            botToken: this.token,
+            guildId: guild.id,
+            guild,
+            actionType: 'untimeout',
+            targetUserId: targetUser.id,
+            reason: effectiveReason,
+            moderatorName,
+          }).catch(() => {});
+        }
+        await recordModAction(guild.id, 'untimeout', targetUser.id, targetUser.globalName || targetUser.username, source.user.id, moderatorName, effectiveReason, null, 'SYSTEM_COMMAND', {
+          command_id: command.id,
+          system_key: command.system_key,
+        });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Untimeout execute', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0x22c55e);
+        await this._replyToNativeSource(source, `Le timeout de <@${targetUser.id}> a ete retire.`, { ephemeral: !visibilityIsPublic });
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.WARN_MEMBER: {
+        const points = clampNumber(source.options.getInteger('points') ?? actionConfig.default_points, 1, 20, 1);
+        const targetName = targetUser.globalName || targetUser.username || targetUser.id;
+        await addWarning(guild.id, targetUser.id, targetName, source.user.id, moderatorName, effectiveReason, points, {
+          command_id: command.id,
+          system_key: command.system_key,
+          moderator_discord_id: source.user.id,
+        });
+        await recordModAction(guild.id, 'warn', targetUser.id, targetName, source.user.id, moderatorName, effectiveReason, null, 'SYSTEM_COMMAND', {
+          command_id: command.id,
+          system_key: command.system_key,
+          points,
+        });
+        if (actionConfig.dm_user) {
+          await safeSendModerationDm({
+            botToken: this.token,
+            guildId: guild.id,
+            guild,
+            actionType: 'warn',
+            targetUserId: targetUser.id,
+            reason: effectiveReason,
+            points,
+            moderatorName,
+          }).catch(() => {});
+        }
+        await checkEscalation(guild.id, targetUser.id, targetName, this.token, guild).catch(() => {});
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Warn execute', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Points: ${points}`,
+          `Raison: ${effectiveReason}`,
+        ], 0xeab308);
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a recu ${points} point(s) d avertissement.`, { ephemeral: !visibilityIsPublic });
+        return true;
+      }
+
+      default:
+        return false;
+    }
+  }
+
+  async _executeNativeCommand(source, command, matchedTrigger = null) {
+    switch (command.action_type) {
+      case COMMAND_ACTION_TYPES.CLEAR_MESSAGES:
+        return this._executeNativeClear(source, command, matchedTrigger);
+      case COMMAND_ACTION_TYPES.BAN_MEMBER:
+      case COMMAND_ACTION_TYPES.KICK_MEMBER:
+      case COMMAND_ACTION_TYPES.TIMEOUT_MEMBER:
+      case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER:
+      case COMMAND_ACTION_TYPES.WARN_MEMBER:
+        return this._executeNativeModeration(source, command);
+      default:
+        return handleCustomCommand(source, command, matchedTrigger);
+    }
   }
 
   // ── Event Handlers ──────────────────────────────────────────────────────────
@@ -391,7 +1087,7 @@ class BotProcess extends EventEmitter {
 
           if (match?.command) {
             promises.push(
-              handleCustomCommand(message, match.command, match.matchedTrigger)
+              this._executeNativeCommand(message, match.command, match.matchedTrigger)
                 .then((executed) => {
                   if (executed) {
                     db.db.prepare('UPDATE custom_commands SET use_count = use_count + 1, updated_at = ? WHERE id = ?')
@@ -432,7 +1128,7 @@ class BotProcess extends EventEmitter {
     const normalizedCommand = normalizeCommandRow(command);
 
     try {
-      const executed = await handleCustomCommand(interaction, normalizedCommand, `/${interaction.commandName}`);
+      const executed = await this._executeNativeCommand(interaction, normalizedCommand, `/${interaction.commandName}`);
       if (executed) {
         db.db.prepare('UPDATE custom_commands SET use_count = use_count + 1, updated_at = ? WHERE id = ?')
           .run(new Date().toISOString(), normalizedCommand.id);

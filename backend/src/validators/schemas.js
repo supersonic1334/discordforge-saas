@@ -178,12 +178,24 @@ const collaborationAuditListSchema = z.object({
 const commandKeySchema = z.string().trim().min(1).max(50).regex(/^\S+$/, 'Trigger cannot contain spaces');
 const commandNameSchema = z.string().trim().min(1).max(32).regex(/^[\w-]+$/, 'Invalid command name');
 const commandPrefixSchema = z.string().trim().min(1).max(5).regex(/^\S+$/, 'Invalid prefix');
+const nativeActionTypeSchema = z.enum([
+  'clear_messages',
+  'ticket_panel',
+  'ban_member',
+  'kick_member',
+  'timeout_member',
+  'untimeout_member',
+  'warn_member',
+]);
 
 const customCommandSchema = z.object({
   trigger: commandKeySchema,
   command_type: z.enum(['prefix', 'slash']).optional().default('prefix'),
   command_prefix: commandPrefixSchema.optional().default('!'),
   command_name: commandNameSchema.optional(),
+  execution_mode: z.enum(['response', 'native']).optional().default('response'),
+  action_type: z.union([z.literal(''), nativeActionTypeSchema]).optional().default(''),
+  action_config: z.record(z.unknown()).optional().default({}),
   enabled: z.boolean().optional().default(true),
   description: z.string().trim().max(120).optional().default(''),
   aliases: z.array(commandKeySchema).max(15).optional().default([]),

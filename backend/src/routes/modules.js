@@ -703,6 +703,37 @@ function buildModuleResponse(type, definition, dbModule) {
   };
 }
 
+function buildModuleSnapshots(guildId, moduleTypes = MODULE_TYPES) {
+  const rowsByType = new Map(
+    db.findMany('modules', { guild_id: guildId }).map((row) => [row.module_type, row])
+  );
+
+  const uniqueTypes = [...new Set((Array.isArray(moduleTypes) ? moduleTypes : MODULE_TYPES)
+    .map((value) => String(value || '').trim().toUpperCase())
+    .filter((value) => MODULE_DEFINITIONS[value]))];
+
+  return uniqueTypes.map((type) => buildModuleResponse(
+    type,
+    MODULE_DEFINITIONS[type],
+    rowsByType.get(type) || null
+  ));
+}
+
+function getSyncedModuleTypes(type, { presetProfile = null, includeUltimateManaged = false } = {}) {
+  const types = new Set([type]);
+
+  if (type === 'PROTECTION_PRESETS') {
+    const preset = PROTECTION_PRESET_PROFILES[String(presetProfile || '').toLowerCase()] || PROTECTION_PRESET_PROFILES.balanced;
+    Object.keys(preset).forEach((moduleType) => types.add(moduleType));
+  }
+
+  if (type === 'ULTIMATE_PROTECTION' && includeUltimateManaged) {
+    ULTIMATE_PROTECTION_MANAGED_TYPES.forEach((moduleType) => types.add(moduleType));
+  }
+
+  return [...types];
+}
+
 async function syncGuildNativeRules(req) {
   try {
     const token = decrypt(req.botToken.encrypted_token);
@@ -735,16 +766,7 @@ router.use(requireAuth, requireBotToken, requireGuildOwner);
 
 // ── GET / — list all modules for a guild ─────────────────────────────────────
 router.get('/', (req, res) => {
-  const modules = db.findMany('modules', { guild_id: req.guild.id });
-
-  // Merge with definitions (ensures missing modules are shown with defaults)
-  const result = MODULE_TYPES.map((type) => {
-    const def = MODULE_DEFINITIONS[type];
-    const dbModule = modules.find((m) => m.module_type === type);
-    return buildModuleResponse(type, def, dbModule);
-  });
-
-  res.json({ modules: result });
+  res.json({ modules: buildModuleSnapshots(req.guild.id) });
 });
 
 // ── GET /:moduleType — single module ─────────────────────────────────────────
@@ -771,6 +793,9 @@ router.patch('/:moduleType/toggle', validate(moduleToggleSchema), async (req, re
   const moduleName = MODULE_DEFINITIONS[type]?.name || type;
   const { enabled } = req.body;
   const now = new Date().toISOString();
+  const syncTypes = getSyncedModuleTypes(type, {
+    includeUltimateManaged: type === 'ULTIMATE_PROTECTION',
+  });
 
   const existing = db.raw(
     'SELECT id FROM modules WHERE guild_id = ? AND module_type = ?',
@@ -812,10 +837,12 @@ router.patch('/:moduleType/toggle', validate(moduleToggleSchema), async (req, re
   // Invalidate bot's in-memory module cache
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  const syncedModules = buildModuleSnapshots(req.guild.id, syncTypes);
   notifyGuildModuleSync(req, {
     action: 'toggle',
     moduleType: type,
     enabled: Boolean(enabled),
+    modules: syncedModules,
     updatedAt: now,
   });
   logModuleSiteAction(req, enabled ? 'Module active' : 'Module desactive', type, moduleName, [
@@ -824,7 +851,12 @@ router.patch('/:moduleType/toggle', validate(moduleToggleSchema), async (req, re
     `Serveur : ${req.guild.name || req.guild.guild_id}`,
   ]);
 
-  res.json({ type, enabled, message: `Module ${enabled ? 'enabled' : 'disabled'}` });
+  res.json({
+    type,
+    enabled,
+    modules: syncedModules,
+    message: `Module ${enabled ? 'enabled' : 'disabled'}`,
+  });
 });
 
 // ── PATCH /:moduleType/config — update simple + advanced config ───────────────
@@ -876,11 +908,18 @@ router.patch('/:moduleType/config', validate(moduleConfigSchema), async (req, re
     applyUltimateProtection(req.guild.id, newSimple, newAdvanced, now);
   }
 
+  const syncTypes = getSyncedModuleTypes(type, {
+    presetProfile: type === 'PROTECTION_PRESETS' ? newSimple.profile : null,
+    includeUltimateManaged: type === 'ULTIMATE_PROTECTION' && !!existing?.enabled,
+  });
+
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  const syncedModules = buildModuleSnapshots(req.guild.id, syncTypes);
   notifyGuildModuleSync(req, {
     action: 'config',
     moduleType: type,
+    modules: syncedModules,
     updatedAt: now,
   });
   const changedSimpleKeys = Object.keys(req.body.simple_config || {});
@@ -896,6 +935,7 @@ router.patch('/:moduleType/config', validate(moduleConfigSchema), async (req, re
     type,
     simple_config: newSimple,
     advanced_config: newAdvanced,
+    modules: syncedModules,
     message: 'Configuration updated',
   });
 });
@@ -909,6 +949,9 @@ router.post('/:moduleType/reset', async (req, res) => {
   const def = MODULE_DEFINITIONS[type];
   const moduleName = def?.name || type;
   const now = new Date().toISOString();
+  const syncTypes = getSyncedModuleTypes(type, {
+    includeUltimateManaged: type === 'ULTIMATE_PROTECTION',
+  });
 
   const existing = db.raw(
     'SELECT id FROM modules WHERE guild_id = ? AND module_type = ?',
@@ -938,10 +981,12 @@ router.post('/:moduleType/reset', async (req, res) => {
 
   botManager.invalidateModuleCache(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
   await syncGuildNativeRules(req);
+  const syncedModules = buildModuleSnapshots(req.guild.id, syncTypes);
   notifyGuildModuleSync(req, {
     action: 'reset',
     moduleType: type,
     enabled: false,
+    modules: syncedModules,
     updatedAt: now,
   });
   logModuleSiteAction(req, 'Module reinitialise', type, moduleName, [
@@ -949,7 +994,11 @@ router.post('/:moduleType/reset', async (req, res) => {
     'Etat : desactive',
     'Configuration remise par defaut',
   ]);
-  res.json({ message: 'Module reset to defaults', type });
+  res.json({
+    message: 'Module reset to defaults',
+    type,
+    modules: syncedModules,
+  });
 });
 
 module.exports = router;

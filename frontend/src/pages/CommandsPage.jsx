@@ -9,7 +9,9 @@ import {
   Mic,
   Plus,
   RefreshCw,
+  Save,
   Send,
+  Shield,
   Slash,
   Sparkles,
   Square,
@@ -20,7 +22,7 @@ import {
   Wand2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { aiAPI, commandsAPI } from '../services/api'
+import { aiAPI, botAPI, commandsAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { useSpeechToText } from '../hooks/useSpeechToText'
@@ -749,6 +751,28 @@ function getCommandsCopy(locale) {
       active: 'Online',
       slash: 'Slash',
       dynamic: 'Varied',
+      systemSectionTitle: 'Built-in Discord commands',
+      systemSectionText: 'These commands are provisioned by default, cannot be deleted, and run natively on Discord.',
+      customSectionTitle: 'AI and custom commands',
+      customSectionText: 'These commands remain fully editable with the assistant.',
+      systemBadge: 'Built-in',
+      systemConfigTitle: 'Native settings',
+      systemSave: 'Save settings',
+      systemSaving: 'Saving...',
+      logChannel: 'Log channel',
+      noLogChannel: 'No log channel',
+      dmUser: 'Send DM to user',
+      requireReason: 'Require reason',
+      deleteMessageSeconds: 'Delete message history (seconds)',
+      defaultTimeoutMinutes: 'Default timeout (minutes)',
+      defaultPoints: 'Default warning points',
+      defaultAmount: 'Default amount',
+      minAmount: 'Minimum',
+      maxAmount: 'Maximum',
+      visibilityLabel: 'Success visibility',
+      visibilityEphemeral: 'Private',
+      visibilityPublic: 'Public',
+      builtInLocked: 'The trigger and native action are locked. You can only toggle and configure this command.',
       stepOne: '1. Trigger',
       stepTwo: '2. Prompt',
       stepThree: '3. Generate',
@@ -788,6 +812,28 @@ function getCommandsCopy(locale) {
       active: 'Activos',
       slash: 'Slash',
       dynamic: 'Variables',
+      systemSectionTitle: 'Comandos Discord integrados',
+      systemSectionText: 'Estos comandos se crean por defecto, no se pueden borrar y se ejecutan de forma nativa en Discord.',
+      customSectionTitle: 'Comandos IA y personalizados',
+      customSectionText: 'Estos comandos siguen siendo editables con el asistente.',
+      systemBadge: 'Integrado',
+      systemConfigTitle: 'Ajustes nativos',
+      systemSave: 'Guardar ajustes',
+      systemSaving: 'Guardando...',
+      logChannel: 'Canal de logs',
+      noLogChannel: 'Sin canal de logs',
+      dmUser: 'Enviar DM al usuario',
+      requireReason: 'Exigir motivo',
+      deleteMessageSeconds: 'Borrar historial (segundos)',
+      defaultTimeoutMinutes: 'Timeout por defecto (minutos)',
+      defaultPoints: 'Puntos por defecto',
+      defaultAmount: 'Cantidad por defecto',
+      minAmount: 'Minimo',
+      maxAmount: 'Maximo',
+      visibilityLabel: 'Visibilidad del exito',
+      visibilityEphemeral: 'Privado',
+      visibilityPublic: 'Publico',
+      builtInLocked: 'El trigger y la accion nativa estan bloqueados. Solo puedes activar o configurar este comando.',
       stepOne: '1. Trigger',
       stepTwo: '2. Pedido',
       stepThree: '3. Generar',
@@ -826,6 +872,28 @@ function getCommandsCopy(locale) {
     active: 'Actives',
     slash: 'Slash',
     dynamic: 'Variables',
+    systemSectionTitle: 'Commandes Discord par defaut',
+    systemSectionText: 'Ces commandes sont creees automatiquement, non supprimables, et executees nativement sur Discord.',
+    customSectionTitle: 'Commandes IA et personnalisees',
+    customSectionText: 'Ces commandes restent modifiables librement avec l assistant.',
+    systemBadge: 'Defaut',
+    systemConfigTitle: 'Reglages natifs',
+    systemSave: 'Sauvegarder',
+    systemSaving: 'Sauvegarde...',
+    logChannel: 'Salon de logs',
+    noLogChannel: 'Aucun salon de logs',
+    dmUser: 'Envoyer un DM au membre',
+    requireReason: 'Raison obligatoire',
+    deleteMessageSeconds: 'Historique a effacer (secondes)',
+    defaultTimeoutMinutes: 'Timeout par defaut (minutes)',
+    defaultPoints: 'Points par defaut',
+    defaultAmount: 'Quantite par defaut',
+    minAmount: 'Minimum',
+    maxAmount: 'Maximum',
+    visibilityLabel: 'Visibilite du succes',
+    visibilityEphemeral: 'Prive',
+    visibilityPublic: 'Public',
+    builtInLocked: 'Le declencheur et l action native sont verrouilles. Tu peux seulement activer ou configurer cette commande.',
     stepOne: '1. Declencheur',
     stepTwo: '2. Demande',
     stepThree: '3. Generer',
@@ -876,6 +944,93 @@ function isDynamicCommand(command) {
   return String(command?.response || '').includes('[[random:')
 }
 
+function isTextLikeChannel(channel) {
+  return [0, 5, 11, 12, 15].includes(Number(channel?.type))
+}
+
+function buildSystemDraft(command) {
+  const config = command?.action_config || {}
+  return {
+    log_channel_id: config.log_channel_id || '',
+    dm_user: Boolean(config.dm_user),
+    require_reason: Boolean(config.require_reason),
+    delete_message_seconds: String(config.delete_message_seconds ?? 0),
+    default_timeout_minutes: String(Math.max(1, Math.round(Number(config.default_duration_ms || 600000) / 60000))),
+    default_points: String(config.default_points ?? 1),
+    default_amount: String(config.default_amount ?? 20),
+    min_amount: String(config.min_amount ?? 1),
+    max_amount: String(config.max_amount ?? 100),
+    success_visibility: config.success_visibility === 'public' ? 'public' : 'ephemeral',
+  }
+}
+
+function clampIntegerString(value, min, max, fallback) {
+  const numeric = Number.parseInt(String(value ?? ''), 10)
+  if (!Number.isFinite(numeric)) return fallback
+  return Math.min(max, Math.max(min, numeric))
+}
+
+function buildSystemActionConfig(command, draft) {
+  const currentConfig = command?.action_config || {}
+  const base = {
+    log_channel_id: String(draft?.log_channel_id || '').trim(),
+    success_visibility: draft?.success_visibility === 'public' ? 'public' : 'ephemeral',
+  }
+
+  switch (command?.action_type) {
+    case 'clear_messages':
+      return {
+        ...currentConfig,
+        ...base,
+        min_amount: clampIntegerString(draft?.min_amount, 1, 100, Number(currentConfig.min_amount || 1)),
+        max_amount: clampIntegerString(draft?.max_amount, 1, 100, Number(currentConfig.max_amount || 100)),
+        default_amount: clampIntegerString(draft?.default_amount, 1, 100, Number(currentConfig.default_amount || 20)),
+      }
+
+    case 'ban_member':
+      return {
+        ...currentConfig,
+        ...base,
+        dm_user: Boolean(draft?.dm_user),
+        require_reason: Boolean(draft?.require_reason),
+        delete_message_seconds: clampIntegerString(draft?.delete_message_seconds, 0, 604800, Number(currentConfig.delete_message_seconds || 0)),
+      }
+
+    case 'kick_member':
+    case 'untimeout_member':
+      return {
+        ...currentConfig,
+        ...base,
+        dm_user: Boolean(draft?.dm_user),
+        require_reason: Boolean(draft?.require_reason),
+      }
+
+    case 'timeout_member':
+      return {
+        ...currentConfig,
+        ...base,
+        dm_user: Boolean(draft?.dm_user),
+        require_reason: Boolean(draft?.require_reason),
+        default_duration_ms: clampIntegerString(draft?.default_timeout_minutes, 1, 40320, Math.max(1, Math.round(Number(currentConfig.default_duration_ms || 600000) / 60000))) * 60000,
+      }
+
+    case 'warn_member':
+      return {
+        ...currentConfig,
+        ...base,
+        dm_user: Boolean(draft?.dm_user),
+        require_reason: Boolean(draft?.require_reason),
+        default_points: clampIntegerString(draft?.default_points, 1, 20, Number(currentConfig.default_points || 1)),
+      }
+
+    default:
+      return {
+        ...currentConfig,
+        ...base,
+      }
+  }
+}
+
 export default function CommandsPage() {
   const { locale } = useI18n()
   const ui = getUi(locale)
@@ -885,6 +1040,7 @@ export default function CommandsPage() {
   const { guilds, selectedGuildId } = useGuildStore()
   const guild = guilds.find((entry) => entry.id === selectedGuildId)
   const [commands, setCommands] = useState([])
+  const [channels, setChannels] = useState([])
   const [loading, setLoading] = useState(false)
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [commandInput, setCommandInput] = useState('')
@@ -893,6 +1049,8 @@ export default function CommandsPage() {
   const [editingCommand, setEditingCommand] = useState(null)
   const [quota, setQuota] = useState(null)
   const [togglingCommandIds, setTogglingCommandIds] = useState({})
+  const [systemDrafts, setSystemDrafts] = useState({})
+  const [savingSystemIds, setSavingSystemIds] = useState({})
   const toggleDesiredRef = useRef(new Map())
   const toggleRunningRef = useRef(new Set())
   const assistantCardRef = useRef(null)
@@ -933,6 +1091,18 @@ export default function CommandsPage() {
     [commandInput, editingCommand]
   )
   const mode = directEditMeta.command_type
+  const systemCommands = useMemo(
+    () => commands.filter((entry) => entry.is_system),
+    [commands]
+  )
+  const customCommands = useMemo(
+    () => commands.filter((entry) => !entry.is_system),
+    [commands]
+  )
+  const textChannels = useMemo(
+    () => channels.filter((channel) => isTextLikeChannel(channel)),
+    [channels]
+  )
   const commandStats = useMemo(() => ({
     total: commands.length,
     active: commands.filter((entry) => entry.enabled).length,
@@ -941,7 +1111,12 @@ export default function CommandsPage() {
   }), [commands])
 
   useEffect(() => {
-    if (!selectedGuildId) return
+    if (!selectedGuildId) {
+      setCommands([])
+      setChannels([])
+      setSystemDrafts({})
+      return
+    }
     loadCommands()
   }, [selectedGuildId])
 
@@ -960,8 +1135,20 @@ export default function CommandsPage() {
     if (!selectedGuildId) return
     setLoading(true)
     try {
-      const response = await commandsAPI.list(selectedGuildId)
-      setCommands(response.data.commands || [])
+      const [commandsResponse, channelsResponse] = await Promise.all([
+        commandsAPI.list(selectedGuildId),
+        botAPI.channels(selectedGuildId),
+      ])
+      const nextCommands = commandsResponse.data.commands || []
+      setCommands(nextCommands)
+      setChannels(channelsResponse.data.channels || [])
+      setSystemDrafts(
+        Object.fromEntries(
+          nextCommands
+            .filter((command) => command.is_system)
+            .map((command) => [command.id, buildSystemDraft(command)])
+        )
+      )
       if (showToast) toast.success(ui.refresh)
     } catch (error) {
       if (showToast) toast.error(getErrorMessage(error))
@@ -978,6 +1165,7 @@ export default function CommandsPage() {
   }
 
   function openEdit(command) {
+    if (command?.is_system) return
     setEditingCommand(command)
     setCommandInput(getCommandInputValue(command))
     setPrompt('')
@@ -1187,6 +1375,337 @@ export default function CommandsPage() {
     }
   }
 
+  function updateSystemDraft(commandId, patch) {
+    setSystemDrafts((current) => ({
+      ...current,
+      [commandId]: {
+        ...(current[commandId] || {}),
+        ...patch,
+      },
+    }))
+  }
+
+  async function saveSystemCommand(command) {
+    if (!selectedGuildId || !command?.is_system) return
+
+    const draft = systemDrafts[command.id] || buildSystemDraft(command)
+    setSavingSystemIds((current) => ({ ...current, [command.id]: true }))
+
+    try {
+      const response = await commandsAPI.update(selectedGuildId, command.id, {
+        action_config: buildSystemActionConfig(command, draft),
+      })
+      const nextCommand = response.data.command
+      setCommands((current) => current.map((entry) => (entry.id === nextCommand.id ? nextCommand : entry)))
+      setEditingCommand((current) => (current?.id === nextCommand.id ? nextCommand : current))
+      setSystemDrafts((current) => ({ ...current, [nextCommand.id]: buildSystemDraft(nextCommand) }))
+      toast.success(ui.updated)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSavingSystemIds((current) => {
+        const next = { ...current }
+        delete next[command.id]
+        return next
+      })
+    }
+  }
+
+  function renderSystemConfig(command) {
+    if (!command?.is_system) return null
+    const draft = systemDrafts[command.id] || buildSystemDraft(command)
+
+    return (
+      <div className="rounded-[24px] border border-amber-400/15 bg-amber-500/[0.04] p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-amber-200/75">{pageCopy.systemConfigTitle}</p>
+            <p className="mt-2 text-xs leading-5 text-white/45">{pageCopy.builtInLocked}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => saveSystemCommand(command)}
+            disabled={Boolean(savingSystemIds[command.id])}
+            className="inline-flex items-center gap-2 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-2 text-xs font-mono text-amber-100 transition-all hover:border-amber-300/35 hover:bg-amber-400/16 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <Save className={`h-4 w-4 ${savingSystemIds[command.id] ? 'animate-pulse' : ''}`} />
+            {savingSystemIds[command.id] ? pageCopy.systemSaving : pageCopy.systemSave}
+          </button>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.logChannel}</span>
+            <select
+              className="input-field"
+              value={draft.log_channel_id}
+              onChange={(event) => updateSystemDraft(command.id, { log_channel_id: event.target.value })}
+            >
+              <option value="">{pageCopy.noLogChannel}</option>
+              {textChannels.map((channel) => (
+                <option key={channel.id} value={channel.id}>
+                  #{channel.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.visibilityLabel}</span>
+            <select
+              className="input-field"
+              value={draft.success_visibility}
+              onChange={(event) => updateSystemDraft(command.id, { success_visibility: event.target.value })}
+            >
+              <option value="ephemeral">{pageCopy.visibilityEphemeral}</option>
+              <option value="public">{pageCopy.visibilityPublic}</option>
+            </select>
+          </label>
+        </div>
+
+        {['ban_member', 'kick_member', 'timeout_member', 'untimeout_member', 'warn_member'].includes(command.action_type) && (
+          <div className="flex flex-wrap gap-3">
+            <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/72">
+              <input
+                type="checkbox"
+                checked={draft.dm_user}
+                onChange={(event) => updateSystemDraft(command.id, { dm_user: event.target.checked })}
+              />
+              {pageCopy.dmUser}
+            </label>
+
+            <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/72">
+              <input
+                type="checkbox"
+                checked={draft.require_reason}
+                onChange={(event) => updateSystemDraft(command.id, { require_reason: event.target.checked })}
+              />
+              {pageCopy.requireReason}
+            </label>
+          </div>
+        )}
+
+        {command.action_type === 'ban_member' && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.deleteMessageSeconds}</span>
+              <input
+                className="input-field"
+                type="number"
+                min="0"
+                max="604800"
+                value={draft.delete_message_seconds}
+                onChange={(event) => updateSystemDraft(command.id, { delete_message_seconds: event.target.value })}
+              />
+            </label>
+          </div>
+        )}
+
+        {command.action_type === 'timeout_member' && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.defaultTimeoutMinutes}</span>
+              <input
+                className="input-field"
+                type="number"
+                min="1"
+                max="40320"
+                value={draft.default_timeout_minutes}
+                onChange={(event) => updateSystemDraft(command.id, { default_timeout_minutes: event.target.value })}
+              />
+            </label>
+          </div>
+        )}
+
+        {command.action_type === 'warn_member' && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.defaultPoints}</span>
+              <input
+                className="input-field"
+                type="number"
+                min="1"
+                max="20"
+                value={draft.default_points}
+                onChange={(event) => updateSystemDraft(command.id, { default_points: event.target.value })}
+              />
+            </label>
+          </div>
+        )}
+
+        {command.action_type === 'clear_messages' && (
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.minAmount}</span>
+              <input
+                className="input-field"
+                type="number"
+                min="1"
+                max="100"
+                value={draft.min_amount}
+                onChange={(event) => updateSystemDraft(command.id, { min_amount: event.target.value })}
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.defaultAmount}</span>
+              <input
+                className="input-field"
+                type="number"
+                min="1"
+                max="100"
+                value={draft.default_amount}
+                onChange={(event) => updateSystemDraft(command.id, { default_amount: event.target.value })}
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.maxAmount}</span>
+              <input
+                className="input-field"
+                type="number"
+                min="1"
+                max="100"
+                value={draft.max_amount}
+                onChange={(event) => updateSystemDraft(command.id, { max_amount: event.target.value })}
+              />
+            </label>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function renderCommandCard(command) {
+    const dynamic = isDynamicCommand(command)
+    const isSystem = Boolean(command.is_system)
+
+    return (
+      <motion.div
+        key={command.id}
+        layout
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={`group relative overflow-hidden rounded-[28px] border p-5 transition-all ${
+          editingCommand?.id === command.id
+            ? 'border-neon-cyan/32 bg-[linear-gradient(135deg,rgba(8,24,36,0.9),rgba(20,18,36,0.96))] shadow-[0_18px_60px_rgba(34,211,238,0.1)]'
+            : isSystem
+              ? 'border-amber-300/16 bg-[linear-gradient(135deg,rgba(28,24,16,0.88),rgba(22,20,30,0.96))] hover:-translate-y-0.5 hover:border-amber-300/28 hover:shadow-[0_18px_50px_rgba(245,158,11,0.08)]'
+              : 'border-white/10 bg-[linear-gradient(135deg,rgba(17,24,39,0.9),rgba(20,20,32,0.96))] hover:-translate-y-0.5 hover:border-neon-violet/20 hover:shadow-[0_18px_50px_rgba(124,58,237,0.08)]'
+        } ${!command.enabled ? 'opacity-65' : ''}`}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.1),transparent_38%),radial-gradient(circle_at_top_right,rgba(139,92,246,0.12),transparent_32%)] opacity-80" />
+        <div className="relative flex items-start gap-4">
+          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${
+            isSystem
+              ? 'border-amber-400/20 bg-amber-400/10 text-amber-200'
+              : command.command_type === 'slash'
+                ? 'border-violet-500/20 bg-violet-500/12 text-violet-300'
+                : 'border-cyan-500/20 bg-cyan-500/12 text-cyan-300'
+          }`}>
+            {isSystem ? <Shield className="h-5 w-5" /> : command.command_type === 'slash' ? <Slash className="h-5 w-5" /> : <Terminal className="h-5 w-5" />}
+          </div>
+
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="break-all font-mono text-sm text-white">{command.display_trigger}</p>
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${
+                    command.command_type === 'slash'
+                      ? 'border-violet-500/20 bg-violet-500/10 text-violet-300'
+                      : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300'
+                  }`}>
+                    {command.command_type === 'slash' ? ui.slashBadge : ui.prefixBadge}
+                  </span>
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${
+                    command.enabled
+                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                      : 'border-white/10 bg-white/[0.03] text-white/45'
+                  }`}>
+                    {command.enabled ? ui.active : ui.disabled}
+                  </span>
+                  {isSystem && (
+                    <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[11px] font-mono text-amber-100">
+                      {pageCopy.systemBadge}
+                    </span>
+                  )}
+                  {dynamic && (
+                    <span className="rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-mono text-fuchsia-200">
+                      {pageCopy.dynamicBadge}
+                    </span>
+                  )}
+                  {command.embed_enabled && (
+                    <span className="rounded-full border border-neon-violet/20 bg-neon-violet/10 px-2.5 py-1 text-[11px] font-mono text-violet-200">
+                      {pageCopy.embedBadge}
+                    </span>
+                  )}
+                  {command.require_args && (
+                    <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-mono text-amber-200">
+                      {pageCopy.argsBadge}
+                    </span>
+                  )}
+                  {command.delete_trigger && (
+                    <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[11px] font-mono text-red-200">
+                      {pageCopy.deleteBadge}
+                    </span>
+                  )}
+                  {command.cooldown_ms > 0 && (
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono text-white/60">
+                      {formatCooldownLabel(command.cooldown_ms)}
+                    </span>
+                  )}
+                </div>
+                {command.description ? <p className="text-sm text-white/58">{command.description}</p> : null}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {!isSystem && (
+                  <button onClick={() => openEdit(command)} className="rounded-xl p-2 text-white/35 transition-all hover:bg-neon-cyan/10 hover:text-neon-cyan" title={ui.edit}>
+                    <Wand2 className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => toggleCommand(command)}
+                  className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-[11px] font-mono transition-all ${
+                    command.enabled
+                      ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/18'
+                      : 'border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/18'
+                  } ${togglingCommandIds[command.id] ? 'animate-pulse' : ''}`}
+                >
+                  {command.enabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                  <span>{command.enabled ? ui.active : ui.disabled}</span>
+                </button>
+                {!isSystem && (
+                  <button onClick={() => deleteCommand(command.id)} className="rounded-xl p-2 text-white/35 transition-all hover:bg-red-500/10 hover:text-red-400">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-white/8 bg-black/20 p-4">
+              <p className="mb-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{pageCopy.responseLabel}</p>
+              <p className="whitespace-pre-wrap break-words text-sm text-white/78">{command.response}</p>
+            </div>
+
+            {command.usage_hint ? (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{pageCopy.usageLabel}</p>
+                <p className="mt-2 text-sm text-white/68">{command.usage_hint}</p>
+              </div>
+            ) : null}
+
+            {isSystem ? renderSystemConfig(command) : null}
+
+            <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-white/36">
+              <span>{ui.uses}: {command.use_count || 0}</span>
+              <span>{ui.botReady}</span>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
   if (!selectedGuildId) {
     return (
       <div className="px-4 pt-20 pb-5 sm:p-6 sm:pt-24 max-w-3xl mx-auto">
@@ -1257,121 +1776,25 @@ export default function CommandsPage() {
             </div>
           )}
 
-          {commands.map((command) => {
-            const dynamic = isDynamicCommand(command)
+          {systemCommands.length > 0 && (
+            <div className="space-y-3">
+              <div className="rounded-[26px] border border-amber-300/12 bg-[linear-gradient(135deg,rgba(39,27,12,0.88),rgba(26,22,34,0.96))] p-5">
+                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-amber-200/80">{pageCopy.systemSectionTitle}</p>
+                <p className="mt-3 text-sm leading-6 text-white/55">{pageCopy.systemSectionText}</p>
+              </div>
+              {systemCommands.map(renderCommandCard)}
+            </div>
+          )}
 
-            return (
-              <motion.div
-                key={command.id}
-                layout
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`group relative overflow-hidden rounded-[28px] border p-5 transition-all ${
-                  editingCommand?.id === command.id
-                    ? 'border-neon-cyan/32 bg-[linear-gradient(135deg,rgba(8,24,36,0.9),rgba(20,18,36,0.96))] shadow-[0_18px_60px_rgba(34,211,238,0.1)]'
-                    : 'border-white/10 bg-[linear-gradient(135deg,rgba(17,24,39,0.9),rgba(20,20,32,0.96))] hover:-translate-y-0.5 hover:border-neon-violet/20 hover:shadow-[0_18px_50px_rgba(124,58,237,0.08)]'
-                } ${!command.enabled ? 'opacity-65' : ''}`}
-              >
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.1),transparent_38%),radial-gradient(circle_at_top_right,rgba(139,92,246,0.12),transparent_32%)] opacity-80" />
-                <div className="relative flex items-start gap-4">
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${
-                    command.command_type === 'slash'
-                      ? 'border-violet-500/20 bg-violet-500/12 text-violet-300'
-                      : 'border-cyan-500/20 bg-cyan-500/12 text-cyan-300'
-                  }`}>
-                    {command.command_type === 'slash' ? <Slash className="h-5 w-5" /> : <Terminal className="h-5 w-5" />}
-                  </div>
-
-                  <div className="min-w-0 flex-1 space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="break-all font-mono text-sm text-white">{command.display_trigger}</p>
-                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${
-                            command.command_type === 'slash'
-                              ? 'border-violet-500/20 bg-violet-500/10 text-violet-300'
-                              : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300'
-                          }`}>
-                            {command.command_type === 'slash' ? ui.slashBadge : ui.prefixBadge}
-                          </span>
-                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${
-                            command.enabled
-                              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                              : 'border-white/10 bg-white/[0.03] text-white/45'
-                          }`}>
-                            {command.enabled ? ui.active : ui.disabled}
-                          </span>
-                          {dynamic && (
-                            <span className="rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-mono text-fuchsia-200">
-                              {pageCopy.dynamicBadge}
-                            </span>
-                          )}
-                          {command.embed_enabled && (
-                            <span className="rounded-full border border-neon-violet/20 bg-neon-violet/10 px-2.5 py-1 text-[11px] font-mono text-violet-200">
-                              {pageCopy.embedBadge}
-                            </span>
-                          )}
-                          {command.require_args && (
-                            <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-mono text-amber-200">
-                              {pageCopy.argsBadge}
-                            </span>
-                          )}
-                          {command.delete_trigger && (
-                            <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[11px] font-mono text-red-200">
-                              {pageCopy.deleteBadge}
-                            </span>
-                          )}
-                          {command.cooldown_ms > 0 && (
-                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono text-white/60">
-                              {formatCooldownLabel(command.cooldown_ms)}
-                            </span>
-                          )}
-                        </div>
-                        {command.description ? <p className="text-sm text-white/58">{command.description}</p> : null}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => openEdit(command)} className="rounded-xl p-2 text-white/35 transition-all hover:bg-neon-cyan/10 hover:text-neon-cyan" title={ui.edit}>
-                          <Wand2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => toggleCommand(command)}
-                          className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-[11px] font-mono transition-all ${
-                            command.enabled
-                              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/18'
-                              : 'border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/18'
-                          } ${togglingCommandIds[command.id] ? 'animate-pulse' : ''}`}
-                        >
-                          {command.enabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-                          <span>{command.enabled ? ui.active : ui.disabled}</span>
-                        </button>
-                        <button onClick={() => deleteCommand(command.id)} className="rounded-xl p-2 text-white/35 transition-all hover:bg-red-500/10 hover:text-red-400">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-white/8 bg-black/20 p-4">
-                      <p className="mb-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{pageCopy.responseLabel}</p>
-                      <p className="whitespace-pre-wrap break-words text-sm text-white/78">{command.response}</p>
-                    </div>
-
-                    {command.usage_hint ? (
-                      <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                        <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{pageCopy.usageLabel}</p>
-                        <p className="mt-2 text-sm text-white/68">{command.usage_hint}</p>
-                      </div>
-                    ) : null}
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-white/36">
-                      <span>{ui.uses}: {command.use_count || 0}</span>
-                      <span>{ui.botReady}</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )
-          })}
+          {customCommands.length > 0 && (
+            <div className="space-y-3">
+              <div className="rounded-[26px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.82),rgba(30,24,45,0.94))] p-5">
+                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan/80">{pageCopy.customSectionTitle}</p>
+                <p className="mt-3 text-sm leading-6 text-white/55">{pageCopy.customSectionText}</p>
+              </div>
+              {customCommands.map(renderCommandCard)}
+            </div>
+          )}
         </div>
 
         <div ref={assistantCardRef} className="sticky top-24 h-fit overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(160deg,rgba(15,23,42,0.94),rgba(24,18,38,0.98))] p-5 shadow-[0_20px_60px_rgba(2,8,23,0.35)]">

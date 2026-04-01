@@ -17,6 +17,19 @@ const categoryColors = {
   utility: { bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400', dot: 'bg-blue-400' },
 }
 
+function mergeModuleSnapshots(previousModules, incomingModules) {
+  if (!Array.isArray(incomingModules) || incomingModules.length === 0) {
+    return previousModules
+  }
+
+  const nextModules = new Map((Array.isArray(previousModules) ? previousModules : []).map((module) => [module.type, module]))
+  for (const module of incomingModules) {
+    if (!module?.type) continue
+    nextModules.set(module.type, module)
+  }
+  return [...nextModules.values()]
+}
+
 function getErrorMessage(error) {
   return error?.response?.data?.error || error?.message || 'Unexpected error'
 }
@@ -57,6 +70,10 @@ function ModuleCard({ module, guildId, locale, t, onUpdate }) {
   const [config, setConfig] = useState(module.simple_config)
   const colors = categoryColors[module.category] || categoryColors.utility
   const moduleCopy = getModuleCopy(module.type, locale, module)
+
+  useEffect(() => {
+    setConfig(module.simple_config || {})
+  }, [module.simple_config])
 
   const toggle = async () => {
     setLoading(true)
@@ -217,6 +234,10 @@ export default function ServerDetail() {
   useEffect(() => {
     const handleRealtimeSync = (payload = {}) => {
       if (String(payload.guildId || '') !== String(guildId || '')) return
+      if (Array.isArray(payload.modules) && payload.modules.length > 0) {
+        setModules((previous) => mergeModuleSnapshots(previous, payload.modules))
+        return
+      }
       void loadModules()
     }
 

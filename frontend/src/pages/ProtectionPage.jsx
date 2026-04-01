@@ -86,6 +86,47 @@ const LOG_EVENT_KEYS = [
 
 const PROTECTION_LOAD_TOAST_ID = 'protection-load-error'
 
+const LIVE_SYNC_COPY = {
+  fr: {
+    idle: 'Synchro live active',
+    dirty: 'Modifs en attente...',
+    saving: 'Synchronisation...',
+    saved: 'Synchronise',
+    error: 'Erreur de synchro',
+  },
+  en: {
+    idle: 'Live sync ready',
+    dirty: 'Pending changes...',
+    saving: 'Syncing...',
+    saved: 'Synced',
+    error: 'Sync error',
+  },
+  es: {
+    idle: 'Sync activa',
+    dirty: 'Cambios pendientes...',
+    saving: 'Sincronizando...',
+    saved: 'Sincronizado',
+    error: 'Error de sync',
+  },
+}
+
+function getLiveSyncCopy(locale) {
+  return LIVE_SYNC_COPY[locale] || LIVE_SYNC_COPY.fr
+}
+
+function mergeModuleSnapshots(previousModules, incomingModules) {
+  if (!Array.isArray(incomingModules) || incomingModules.length === 0) {
+    return previousModules
+  }
+
+  const nextModules = new Map((Array.isArray(previousModules) ? previousModules : []).map((module) => [module.type, module]))
+  for (const module of incomingModules) {
+    if (!module?.type) continue
+    nextModules.set(module.type, module)
+  }
+  return [...nextModules.values()]
+}
+
 const UI = {
   fr: {
     title: 'Protection',
@@ -1223,18 +1264,81 @@ function ModuleCard({ module, ui, locale, roles, channels, guilds, currentGuild,
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [toggling, setToggling] = useState(false)
+  const [syncState, setSyncState] = useState('idle')
   const fieldDefs = useMemo(() => getFieldDefs(ui)[module.type] || [], [ui, module.type])
   const [formState, setFormState] = useState(() => buildFormState(module, fieldDefs))
+  const liveSyncCopy = getLiveSyncCopy(locale)
+  const autoSaveTimerRef = useRef(null)
+  const lastPersistedPayloadRef = useRef('')
 
   useEffect(() => {
-    setFormState(buildFormState(module, fieldDefs))
+    const nextFormState = buildFormState(module, fieldDefs)
+    setFormState(nextFormState)
+    lastPersistedPayloadRef.current = JSON.stringify(buildPayload(module.type, nextFormState, fieldDefs))
+    setSyncState('idle')
   }, [module, fieldDefs])
+
+  useEffect(() => () => {
+    clearTimeout(autoSaveTimerRef.current)
+  }, [])
 
   const colors = CATEGORY_STYLES[module.category] || CATEGORY_STYLES.utility
   const moduleCopy = getModuleCopy(module.type, locale, module)
   const Icon = MODULE_ICONS[module.type] || Shield
   const visibleFields = fieldDefs.filter((field) => !field.when || field.when(formState))
   const note = getModuleNote(module.type, formState, ui)
+  const payload = useMemo(() => buildPayload(module.type, formState, fieldDefs), [fieldDefs, formState, module.type])
+  const serializedPayload = useMemo(() => JSON.stringify(payload), [payload])
+
+  const persistConfig = useCallback(async ({ silent = false, force = false } = {}) => {
+    if (!force && serializedPayload === lastPersistedPayloadRef.current) {
+      setSyncState('saved')
+      return false
+    }
+
+    clearTimeout(autoSaveTimerRef.current)
+    setSaving(true)
+    setSyncState('saving')
+
+    try {
+      await onSave(module.type, payload)
+      lastPersistedPayloadRef.current = serializedPayload
+      setSyncState('saved')
+      if (!silent) {
+        toast.success(ui.saved)
+      }
+      return true
+    } catch (error) {
+      setSyncState('error')
+      if (!silent) {
+        toast.error(getErrorMessage(error))
+      }
+      throw error
+    } finally {
+      setSaving(false)
+    }
+  }, [module.type, onSave, payload, serializedPayload, ui.saved])
+
+  useEffect(() => {
+    clearTimeout(autoSaveTimerRef.current)
+
+    if (!expanded) {
+      return undefined
+    }
+
+    if (serializedPayload === lastPersistedPayloadRef.current) {
+      return undefined
+    }
+
+    setSyncState('dirty')
+    autoSaveTimerRef.current = setTimeout(() => {
+      void persistConfig({ silent: true }).catch(() => {})
+    }, 650)
+
+    return () => {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+  }, [expanded, persistConfig, serializedPayload])
 
   const handleToggle = async () => {
     setToggling(true)
@@ -1246,21 +1350,17 @@ function ModuleCard({ module, ui, locale, roles, channels, guilds, currentGuild,
   }
 
   const handleSave = async () => {
-    setSaving(true)
     try {
-      await onSave(module.type, buildPayload(module.type, formState, fieldDefs))
-      toast.success(ui.saved)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    } finally {
-      setSaving(false)
-    }
+      await persistConfig({ force: true })
+    } catch { /* handled in persistConfig */ }
   }
 
   const handleReset = async () => {
+    clearTimeout(autoSaveTimerRef.current)
     setResetting(true)
     try {
       await onReset(module.type)
+      setSyncState('idle')
       toast.success(ui.resetDone)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -1333,23 +1433,37 @@ function ModuleCard({ module, ui, locale, roles, channels, guilds, currentGuild,
             ))}
           </div>
 
-          <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/15 transition-colors disabled:opacity-60"
-            >
-              {saving ? ui.saving : ui.save}
-            </button>
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={resetting}
-              className="px-4 py-2 rounded-xl border border-white/[0.08] text-white/55 hover:text-white hover:border-white/20 transition-colors disabled:opacity-60"
-            >
-              {ui.reset}
-            </button>
+          <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className={`text-xs font-mono ${
+              syncState === 'error'
+                ? 'text-red-300'
+                : syncState === 'saved'
+                  ? 'text-emerald-300'
+                  : syncState === 'saving'
+                    ? 'text-neon-cyan'
+                    : 'text-white/45'
+            }`}>
+              {liveSyncCopy[syncState] || liveSyncCopy.idle}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/15 transition-colors disabled:opacity-60"
+              >
+                {saving ? ui.saving : ui.save}
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={resetting}
+                className="px-4 py-2 rounded-xl border border-white/[0.08] text-white/55 hover:text-white hover:border-white/20 transition-colors disabled:opacity-60"
+              >
+                {ui.reset}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1392,6 +1506,17 @@ export default function ProtectionPage() {
   useEffect(() => {
     selectedGuildIdRef.current = selectedGuildId
   }, [selectedGuildId])
+
+  const applyModuleSnapshots = useCallback((incomingModules = []) => {
+    if (!Array.isArray(incomingModules) || incomingModules.length === 0) {
+      return false
+    }
+
+    setModules((previous) => mergeModuleSnapshots(previous, incomingModules))
+    setLoadError('')
+    toast.dismiss(PROTECTION_LOAD_TOAST_ID)
+    return true
+  }, [])
 
   const loadAll = useCallback(async (initial = false) => {
     if (!selectedGuildIdRef.current) return
@@ -1460,6 +1585,7 @@ export default function ProtectionPage() {
   useEffect(() => {
     const handleModulesRefresh = (payload = {}) => {
       if (String(payload.guildId || '') !== String(selectedGuildIdRef.current || '')) return
+      if (applyModuleSnapshots(payload.modules)) return
       void loadAll(false)
     }
 
@@ -1470,21 +1596,27 @@ export default function ProtectionPage() {
       unsubscribeModules()
       unsubscribeSnapshots()
     }
-  }, [loadAll])
+  }, [applyModuleSnapshots, loadAll])
 
   const toggleModule = async (type, enabled) => {
-    await modulesAPI.toggle(selectedGuildId, type, enabled)
-    await loadAll(false)
+    const response = await modulesAPI.toggle(selectedGuildId, type, enabled)
+    if (!applyModuleSnapshots(response?.data?.modules)) {
+      await loadAll(false)
+    }
   }
 
   const saveModule = async (type, payload) => {
-    await modulesAPI.config(selectedGuildId, type, payload)
-    await loadAll(false)
+    const response = await modulesAPI.config(selectedGuildId, type, payload)
+    if (!applyModuleSnapshots(response?.data?.modules)) {
+      await loadAll(false)
+    }
   }
 
   const resetModule = async (type) => {
-    await modulesAPI.reset(selectedGuildId, type)
-    await loadAll(false)
+    const response = await modulesAPI.reset(selectedGuildId, type)
+    if (!applyModuleSnapshots(response?.data?.modules)) {
+      await loadAll(false)
+    }
   }
 
   if (!selectedGuildId) {
