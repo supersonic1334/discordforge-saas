@@ -379,11 +379,21 @@ function buildFeaturedResults(siteResults) {
       return right.confidence - left.confidence;
     })[0];
 
+    const details = [];
+    if (selected?.siteName) details.push(selected.siteName);
+    if (selected?.domain) details.push(selected.domain);
+
     accumulator[platform.id] = {
       found: Boolean(selected?.found),
       confidence: selected?.confidence ?? 0,
-      info: selected?.info || (platform.aliases.length ? 'Aucun profil public detecte dans le sweep.' : 'Plateforme absente du corpus actuel.'),
+      info: selected?.found
+        ? `Profil public detecte sur ${selected.siteName || platform.name}.`
+        : (platform.aliases.length ? 'Aucun profil public detecte dans le sweep.' : 'Plateforme absente du corpus actuel.'),
       site_name: selected?.siteName || platform.name,
+      profile_url: selected?.profileUrl || '',
+      main_url: selected?.mainUrl || '',
+      domain: selected?.domain || '',
+      details,
       supported: platform.aliases.length > 0,
     };
 

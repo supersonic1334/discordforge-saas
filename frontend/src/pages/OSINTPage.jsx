@@ -51,8 +51,18 @@ const CONFIDENCE_TONE = {
 }
 
 function getErrorPayload(error) {
+  const rawMessage = error?.response?.data?.error || error?.message || 'Une erreur est survenue'
+  if (String(rawMessage).toLowerCase().includes('ia non configuree')) {
+    return {
+      message: "Configure une IA vision avant de lancer la geolocalisation.",
+      raw: '',
+      actionLabel: "Configurer l'IA",
+      actionHref: '/dashboard/ai',
+    }
+  }
+
   return {
-    message: error?.response?.data?.error || error?.message || 'Une erreur est survenue',
+    message: rawMessage,
     raw: typeof error?.response?.data?.raw === 'string' ? error.response.data.raw : '',
   }
 }
@@ -75,14 +85,31 @@ function ErrorPanel({ error, onRetry }) {
             </pre>
           ) : null}
           {onRetry ? (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-mono text-red-100 transition-all hover:bg-red-300/15"
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center gap-2 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-mono text-red-100 transition-all hover:bg-red-300/15"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Reessayer
+              </button>
+              {error.actionHref ? (
+                <a
+                  href={error.actionHref}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-mono text-white/80 transition-all hover:border-white/20 hover:text-white"
+                >
+                  {error.actionLabel || 'Ouvrir'}
+                </a>
+              ) : null}
+            </div>
+          ) : error.actionHref ? (
+            <a
+              href={error.actionHref}
+              className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-mono text-white/80 transition-all hover:border-white/20 hover:text-white"
             >
-              <RefreshCw className="h-4 w-4" />
-              Reessayer
-            </button>
+              {error.actionLabel || 'Ouvrir'}
+            </a>
           ) : null}
         </div>
       </div>
@@ -157,29 +184,29 @@ function statusBadge(result, loading) {
 
 function UsernameTracker({ status }) {
   const categories = useMemo(() => ['Tous', ...new Set(PLATFORMS.map((platform) => platform.cat))], [])
-  const sweepFilters = useMemo(() => [
-    { id: 'found', label: 'Trouves' },
-    { id: 'unknown', label: 'Ambigus' },
-    { id: 'all', label: 'Tous' },
-  ], [])
   const [input, setInput] = useState('')
   const [username, setUsername] = useState('')
   const [filter, setFilter] = useState('Tous')
-  const [sweepFilter, setSweepFilter] = useState('found')
   const [phase, setPhase] = useState('idle')
   const [scanData, setScanData] = useState(null)
   const [error, setError] = useState(null)
 
   const results = scanData?.results || {}
-  const filteredPlatforms = PLATFORMS.filter((platform) => filter === 'Tous' || platform.cat === filter)
-  const foundPlatforms = PLATFORMS.filter((platform) => results[platform.id]?.found)
-  const highConfidence = foundPlatforms.filter((platform) => Number(results[platform.id]?.confidence || 0) >= 70)
-  const sweepRows = useMemo(() => {
-    const rows = scanData?.sites || []
-    if (sweepFilter === 'found') return rows.filter((entry) => entry.status === 'found').slice(0, 120)
-    if (sweepFilter === 'unknown') return rows.filter((entry) => entry.status === 'unknown').slice(0, 120)
-    return rows.slice(0, 120)
-  }, [scanData, sweepFilter])
+  const scanInput = scanData?.input || null
+  const resolvedUsername = scanInput?.username || username
+  const foundPlatforms = useMemo(
+    () => PLATFORMS.filter((platform) => results[platform.id]?.found),
+    [results],
+  )
+  const filteredPlatforms = useMemo(
+    () => foundPlatforms.filter((platform) => filter === 'Tous' || platform.cat === filter),
+    [filter, foundPlatforms],
+  )
+  const foundRows = useMemo(
+    () => (scanData?.sites || []).filter((entry) => entry.status === 'found'),
+    [scanData],
+  )
+  const totalFound = Number(scanData?.summary?.found || foundRows.length || foundPlatforms.length || 0)
 
   async function handleScan() {
     const cleaned = input.trim().replace(/^@+/, '')
@@ -217,7 +244,7 @@ function UsernameTracker({ status }) {
                     void handleScan()
                   }
                 }}
-                placeholder="Pseudo, handle, alias..."
+                placeholder="Pseudo, alias ou ID Discord..."
                 className="input-field pl-11"
                 disabled={phase === 'loading' || status.loading}
               />
@@ -242,7 +269,6 @@ function UsernameTracker({ status }) {
                   setScanData(null)
                   setError(null)
                   setFilter('Tous')
-                  setSweepFilter('found')
                   setPhase('idle')
                 }}
                 className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:text-white"
@@ -277,14 +303,52 @@ function UsernameTracker({ status }) {
 
       {phase === 'done' || phase === 'error' ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricTile label="Hits" value={scanData?.summary?.found ?? foundPlatforms.length} hint="profils detectes" tone="border-neon-cyan/18 bg-neon-cyan/[0.08]" />
-            <MetricTile label="Confiance forte" value={highConfidence.length} hint="score 70+" tone="border-emerald-400/20 bg-emerald-400/10 text-emerald-100" />
-            <MetricTile label="Ambigus" value={scanData?.summary?.unknown ?? Math.max(0, foundPlatforms.length - highConfidence.length)} hint="rate limit ou doute" tone="border-amber-400/20 bg-amber-400/10 text-amber-100" />
-            <MetricTile label="Corpus" value={scanData?.summary?.checked ?? status.usernameSiteCount ?? PLATFORMS.length} hint={username ? `pour @${username}` : 'plateformes'} />
-            <MetricTile label="Duree" value={formatDuration(scanData?.summary?.durationMs)} hint="probe complet" tone="border-violet-400/18 bg-violet-400/10 text-violet-100" />
+          <div className="spotlight-card p-5 sm:p-6">
+            <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Profils detectes</p>
+                <p className="mt-2 font-display text-3xl font-800 text-white">{totalFound}</p>
+                {resolvedUsername ? (
+                  <p className="mt-2 text-sm text-white/55">
+                    Recherche active sur <span className="text-white">@{resolvedUsername}</span>
+                  </p>
+                ) : null}
+                {scanInput?.type === 'discord_id' && scanInput?.discord_user ? (
+                  <p className="mt-1 text-sm text-white/45">
+                    ID Discord resolu vers <span className="text-neon-cyan">@{scanInput.discord_user.username}</span>
+                  </p>
+                ) : null}
+              </div>
+
+              {scanInput?.discord_user ? (
+                <div className="rounded-[22px] border border-neon-cyan/18 bg-neon-cyan/[0.06] px-4 py-4">
+                  <div className="flex items-center gap-3">
+                    {scanInput.discord_user.avatar_url ? (
+                      <img
+                        src={scanInput.discord_user.avatar_url}
+                        alt={scanInput.discord_user.username}
+                        className="h-14 w-14 rounded-[18px] border border-white/10 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] font-mono text-xs uppercase tracking-[0.18em] text-white/65">
+                        {(scanInput.discord_user.username || '?').slice(0, 2)}
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-display text-lg font-700 text-white">
+                        {scanInput.discord_user.display_name || scanInput.discord_user.global_name || scanInput.discord_user.username}
+                      </p>
+                      <p className="mt-1 text-xs font-mono uppercase tracking-[0.18em] text-white/45">
+                        {scanInput.discord_user.username} {scanInput.discord_user.id ? `- ${scanInput.discord_user.id}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
 
+          {foundPlatforms.length ? (
           <div className="spotlight-card p-4">
             <div className="relative z-[1] flex flex-wrap gap-2">
               {categories.map((category) => (
@@ -305,7 +369,13 @@ function UsernameTracker({ status }) {
                 <button
                   type="button"
                   onClick={() => {
-                    foundPlatforms.forEach((platform) => window.open(platform.url(username), '_blank', 'noopener,noreferrer'))
+                    foundPlatforms.forEach((platform) => {
+                      const result = results[platform.id]
+                      const href = result?.profile_url || result?.main_url || platform.url(resolvedUsername || username)
+                      if (href) {
+                        window.open(href, '_blank', 'noopener,noreferrer')
+                      }
+                    })
                   }}
                   className="ml-auto inline-flex items-center gap-2 rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-neon-cyan transition-all hover:bg-neon-cyan/15"
                 >
@@ -315,44 +385,43 @@ function UsernameTracker({ status }) {
               ) : null}
             </div>
           </div>
+          ) : null}
 
+          {filteredPlatforms.length ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredPlatforms.map((platform) => {
               const result = results[platform.id]
-              const badge = statusBadge(result, phase === 'loading')
+              const href = result?.profile_url || result?.main_url || platform.url(resolvedUsername || username)
               return (
-                <div key={platform.id} className={`spotlight-card p-4 ${result?.found ? 'border-neon-cyan/18 bg-neon-cyan/[0.05]' : ''}`}>
+                <div key={platform.id} className="spotlight-card border-neon-cyan/18 bg-neon-cyan/[0.05] p-4">
                   <div className="relative z-[1] flex h-full flex-col gap-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-display text-base font-700 text-white">{platform.name}</p>
                         <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{platform.cat}</p>
                       </div>
-                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] ${badge.tone}`}>
-                        {badge.label}
+                      <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-emerald-200">
+                        Trouve
                       </span>
-                    </div>
-
-                    <div className="rounded-[18px] border border-white/8 bg-black/15 px-3 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">Confiance</p>
-                        <p className="font-display text-xl font-800 text-white">{result?.confidence ?? 0}</p>
-                      </div>
-                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-                        <div
-                          className={`h-full rounded-full bg-gradient-to-r ${result?.found ? 'from-neon-cyan via-cyan-400 to-violet-400' : 'from-red-400 via-amber-300 to-white/40'}`}
-                          style={{ width: `${Math.max(6, Math.min(100, Number(result?.confidence || 0)))}%` }}
-                        />
-                      </div>
                     </div>
 
                     <div className="min-h-[74px] rounded-[18px] border border-white/8 bg-black/15 px-3 py-3 text-sm leading-6 text-white/60">
                       {result?.info || 'Aucune conclusion detaillee pour le moment.'}
                     </div>
 
-                    {result?.found ? (
+                    {result?.details?.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {result.details.map((detail) => (
+                          <span key={detail} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">
+                            {detail}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {href ? (
                       <a
-                        href={platform.url(username)}
+                        href={href}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-auto inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15"
@@ -366,67 +435,41 @@ function UsernameTracker({ status }) {
               )
             })}
           </div>
+          ) : phase === 'done' ? (
+            <div className="spotlight-card p-8 text-center">
+              <div className="relative z-[1]">
+                <Fingerprint className="mx-auto h-12 w-12 text-white/10" />
+                <p className="mt-4 font-display text-xl font-700 text-white">Aucun profil detecte</p>
+                <p className="mt-2 text-sm leading-6 text-white/45">
+                  Aucun profil public relie a cette recherche n a ete remonte dans le corpus actuel.
+                </p>
+              </div>
+            </div>
+          ) : null}
 
-          {scanData?.sites?.length ? (
+          {foundRows.length ? (
             <div className="spotlight-card p-5 sm:p-6">
               <div className="relative z-[1] space-y-5">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                  <div>
-                    <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Sweep etendu</p>
-                    <p className="mt-2 text-sm leading-6 text-white/55">
-                      Affichage de {sweepRows.length} ligne{sweepRows.length > 1 ? 's' : ''} sur {scanData.summary?.checked || scanData.sites.length} verifications.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {sweepFilters.map((entry) => (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        onClick={() => setSweepFilter(entry.id)}
-                        className={`rounded-full border px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] transition-all ${
-                          sweepFilter === entry.id
-                            ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan'
-                            : 'border-white/10 bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/80'
-                        }`}
-                      >
-                        {entry.label}
-                      </button>
-                    ))}
-                  </div>
+                <div>
+                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Profils trouves</p>
+                  <p className="mt-2 text-sm leading-6 text-white/55">
+                    {foundRows.length} resultat{foundRows.length > 1 ? 's' : ''} public{foundRows.length > 1 ? 's' : ''} trouve{foundRows.length > 1 ? 's' : ''}.
+                  </p>
                 </div>
 
                 <div className="grid gap-4">
-                  {sweepRows.length ? sweepRows.map((entry) => {
-                    const badge = entry.status === 'found'
-                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
-                      : entry.status === 'unknown'
-                        ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
-                        : 'border-white/10 bg-white/[0.04] text-white/45'
-
-                    const label = entry.status === 'found' ? 'Trouve' : entry.status === 'unknown' ? 'Ambigu' : 'Absent'
-
-                    return (
-                      <div key={`${entry.id}-${entry.profileUrl || entry.mainUrl || entry.siteName}`} className={`rounded-[22px] border p-4 ${entry.status === 'found' ? 'border-emerald-400/18 bg-emerald-400/[0.07]' : entry.status === 'unknown' ? 'border-amber-400/18 bg-amber-400/[0.06]' : 'border-white/8 bg-black/15'}`}>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-display text-lg font-700 text-white">{entry.siteName}</p>
-                              <span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] ${badge}`}>{label}</span>
-                              {entry.category ? <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/45">{entry.category}</span> : null}
-                            </div>
-                            <p className="mt-1 text-xs font-mono uppercase tracking-[0.2em] text-white/30">{entry.domain || 'profil public'}</p>
+                  {foundRows.slice(0, 120).map((entry) => (
+                    <div key={`${entry.id}-${entry.profileUrl || entry.mainUrl || entry.siteName}`} className="rounded-[22px] border border-emerald-400/18 bg-emerald-400/[0.07] p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-display text-lg font-700 text-white">{entry.siteName}</p>
+                            {entry.category ? <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/45">{entry.category}</span> : null}
                           </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">Score {entry.confidence}</span>
-                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">{formatDuration(entry.durationMs)}</span>
-                          </div>
+                          {entry.domain ? <p className="mt-1 text-xs font-mono uppercase tracking-[0.2em] text-white/30">{entry.domain}</p> : null}
                         </div>
 
-                        <p className="mt-4 text-sm leading-6 text-white/65">{entry.info}</p>
-
-                        <div className="mt-4 flex flex-wrap gap-3">
+                        <div className="flex flex-wrap gap-3">
                           {entry.profileUrl ? (
                             <a
                               href={entry.profileUrl}
@@ -438,25 +481,23 @@ function UsernameTracker({ status }) {
                               <ExternalLink className="h-4 w-4" />
                             </a>
                           ) : null}
-                          {entry.mainUrl ? (
+                          {!entry.profileUrl && entry.mainUrl ? (
                             <a
                               href={entry.mainUrl}
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:text-white"
                             >
-                              Site
+                              Ouvrir
                               <ExternalLink className="h-4 w-4" />
                             </a>
                           ) : null}
                         </div>
                       </div>
-                    )
-                  }) : (
-                    <div className="rounded-[24px] border border-white/8 bg-black/15 px-5 py-6 text-sm text-white/50">
-                      Aucun resultat a afficher avec ce filtre.
+
+                      <p className="mt-4 text-sm leading-6 text-white/65">{entry.info}</p>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
@@ -540,7 +581,15 @@ function ImageGeolocator({ status }) {
   }
 
   async function analyze() {
-    if (!imagePayload || phase === 'loading' || !status.imageConfigured) return
+    if (!imagePayload || phase === 'loading') return
+
+    if (!status.imageConfigured) {
+      const nextError = getErrorPayload({ response: { data: { error: 'IA non configuree' } } })
+      setError(nextError)
+      setPhase('error')
+      toast.error(nextError.message)
+      return
+    }
 
     setPhase('loading')
     setResult(null)
@@ -627,7 +676,7 @@ function ImageGeolocator({ status }) {
             <button
               type="button"
               onClick={() => void analyze()}
-              disabled={!imagePayload || phase === 'loading' || status.loading || !status.imageConfigured}
+              disabled={!imagePayload || phase === 'loading' || status.loading}
               className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-35"
             >
               <Compass className="h-4 w-4" />
@@ -651,14 +700,6 @@ function ImageGeolocator({ status }) {
           </div>
         </div>
       </div>
-
-      {!status.imageConfigured ? (
-        <StatusBanner
-          active={false}
-          title="Analyse image en attente"
-          detail="Tu peux deja charger et previsualiser une image. La geolocalisation se debloquera des qu une cle IA vision sera configuree cote serveur."
-        />
-      ) : null}
 
       <ErrorPanel error={error} onRetry={phase === 'error' ? () => void analyze() : null} />
 
@@ -829,50 +870,11 @@ export default function OSINTPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-4 py-5 sm:px-5 sm:py-6">
-      <div className="feature-hero p-6 sm:p-7">
-        <div className="relative z-[1] flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <span className="feature-chip"><Compass className="h-3.5 w-3.5" />osint</span>
-              <span className="feature-chip"><Fingerprint className="h-3.5 w-3.5" />username sweep</span>
-              <span className="feature-chip"><Image className="h-3.5 w-3.5" />image geolocator</span>
-              <span className="feature-chip"><ShieldCheck className="h-3.5 w-3.5" />discord intel</span>
-            </div>
-            <div>
-              <h1 className="font-display text-3xl font-800 text-white sm:text-4xl">OSINT</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/55 sm:text-[15px]">
-                Module de recherche multi-plateformes, Discord Intel serveur et geolocalisation d image, integre au cockpit avec la meme logique visuelle que le reste du site.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid min-w-[300px] gap-3">
-            <StatusBanner
-              active={status.usernameConfigured}
-              title="Sweep username"
-              detail={status.usernameConfigured ? `${status.usernameSiteCount || 0} sites publics charges dans le moteur.` : 'Moteur de sweep indisponible.'}
-            />
-            <StatusBanner
-              active={status.imageConfigured}
-              title="Analyse image"
-              detail={status.imageConfigured ? `Vision active via ${status.provider || 'IA'}${status.model ? ` - ${status.model}` : ''}.` : 'Une cle IA vision est necessaire pour lancer la geolocalisation.'}
-            />
-          </div>
-        </div>
-
-        <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricTile label="Corpus" value={status.usernameSiteCount || '--'} hint="sites publics cibles" />
-          <MetricTile label="Outils" value="3" hint="username + discord + geoloc" tone="border-neon-cyan/18 bg-neon-cyan/[0.08]" />
-          <MetricTile label="Theme" value="Cockpit" hint="meme shell, memes animations" tone="border-violet-400/18 bg-violet-400/10 text-violet-100" />
-          <MetricTile label="Mode" value="Server" hint="proxy backend, serveur gere, pas de cle front" tone="border-emerald-400/20 bg-emerald-400/10 text-emerald-100" />
-        </div>
-      </div>
-
       <div className="spotlight-card p-2 sm:p-3">
         <div className="relative z-[1] grid gap-2 md:grid-cols-3">
           {[
             { id: 'username', label: 'Username Tracker', icon: Fingerprint },
-            { id: 'discord', label: 'Discord Intel', icon: ShieldCheck },
+            { id: 'discord', label: 'Discord Panel', icon: ShieldCheck },
             { id: 'image', label: 'Image Geolocator', icon: Sparkles },
           ].map((entry) => {
             const Icon = entry.icon

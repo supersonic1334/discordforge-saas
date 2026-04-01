@@ -301,7 +301,7 @@ export default function DiscordIntelPanel() {
     return (
       <SelectGuildState
         title="Aucun serveur disponible"
-        body="Discord Intel utilise uniquement les serveurs que ton bot gere deja. Synchronise ou ajoute un serveur pour debloquer ce module."
+        body="Discord Panel utilise uniquement les serveurs que ton bot gere deja. Synchronise ou ajoute un serveur pour debloquer ce module."
         actionLabel="Ouvrir les serveurs"
       />
     )
@@ -309,24 +309,17 @@ export default function DiscordIntelPanel() {
 
   return (
     <div className="space-y-5">
-      <div className="feature-hero p-6 sm:p-7">
-        <div className="relative z-[1] flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <span className="feature-chip"><Server className="h-3.5 w-3.5" />discord intel</span>
-              <span className="feature-chip"><ShieldCheck className="h-3.5 w-3.5" />serveurs geres</span>
-              <span className="feature-chip"><Sparkles className="h-3.5 w-3.5" />profil + scan</span>
-            </div>
-            <div>
-              <h2 className="font-display text-3xl font-800 text-white">Discord Intel</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/55 sm:text-[15px]">
-                Audit Discord integre au panneau OSINT, limite aux donnees visibles par ton bot et ton staff sur les serveurs que tu geres.
-              </p>
-            </div>
+      <div className="spotlight-card p-5 sm:p-6">
+        <div className="relative z-[1] flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h2 className="font-display text-3xl font-800 text-white">Discord Panel</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/55 sm:text-[15px]">
+              Recherche un membre par ID, mention ou pseudo pour afficher sa fiche, ses roles et son historique visible.
+            </p>
           </div>
 
           <div className="w-full max-w-xl rounded-[26px] border border-white/10 bg-black/15 p-4 sm:p-5">
-            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Serveur cible</p>
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Serveur</p>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row">
               <select
                 value={selectedGuildId || ''}
@@ -350,17 +343,7 @@ export default function DiscordIntelPanel() {
                 Sync
               </button>
             </div>
-            <p className="mt-3 text-sm leading-6 text-white/45">
-              Recherche par ID, mention, pseudo ou global name. Les donnees privees externes au serveur ne sont pas aspirees.
-            </p>
           </div>
-        </div>
-
-        <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <IntelMetric label="Serveurs" value={guilds.length} hint="accessibles dans le cockpit" />
-          <IntelMetric label="Cible" value={selectedGuild?.name || '--'} hint={selectedGuild ? 'serveur actif' : 'selection requise'} tone="border-neon-cyan/18 bg-neon-cyan/[0.08]" />
-          <IntelMetric label="Scope" value="Safe" hint="profil, roles, sanctions, scan" tone="border-violet-400/18 bg-violet-400/10 text-violet-100" />
-          <IntelMetric label="Source" value="Bot" hint="donnees visibles par ton instance" tone="border-emerald-400/20 bg-emerald-400/10 text-emerald-100" />
         </div>
       </div>
 
@@ -373,7 +356,7 @@ export default function DiscordIntelPanel() {
             <div>
               <p className="font-display text-xl font-700 text-white">Selectionne un serveur</p>
               <p className="mt-2 text-sm leading-7 text-white/55">
-                Le panneau Discord Intel a besoin d un serveur actif pour interroger les membres, bans, roles, logs staff et signaux de scan visibles.
+                Le panneau Discord a besoin d un serveur actif pour interroger les membres, bans, roles et historique visible.
               </p>
             </div>
           </div>
@@ -410,7 +393,7 @@ export default function DiscordIntelPanel() {
               </div>
 
               <p className="text-sm leading-6 text-white/45">
-                Fiche enrichie: avatar, banniere, roles, sanctions internes, historique staff et signaux du snapshot de scan du serveur.
+                Fiche enrichie: avatar, banniere, roles, sanctions internes et historique staff.
               </p>
             </div>
           </div>
@@ -733,7 +716,7 @@ export default function DiscordIntelPanel() {
                 <div className="spotlight-card p-8 sm:p-10">
                   <div className="relative z-[1] text-center">
                     <Search className="mx-auto h-12 w-12 text-white/10" />
-                    <p className="mt-4 font-display text-xl font-700 text-white">Discord Intel pret</p>
+                    <p className="mt-4 font-display text-xl font-700 text-white">Discord Panel pret</p>
                     <p className="mt-2 text-sm leading-6 text-white/45">
                       Recherche un membre ou un ID Discord pour afficher sa fiche serveur, son historique staff et ses signaux de scan.
                     </p>

@@ -3,8 +3,11 @@
 const aiService = require('./aiService');
 const aiProviderKeyService = require('./aiProviderKeyService');
 const usernameProbeService = require('./usernameProbeService');
+const discordService = require('./discordService');
+const db = require('../database');
 const logger = require('../utils/logger').child('OSINTService');
 const { getProviderCatalog } = require('../config/aiCatalog');
+const { decrypt } = require('./encryptionService');
 
 const fetch = global.fetch ? global.fetch.bind(globalThis) : require('node-fetch');
 
@@ -546,9 +549,48 @@ function normalizeGeolocationResult(rawResult) {
 
 async function scanUsername(userId, username) {
   const cleanedUsername = String(username || '').trim().replace(/^@+/, '').slice(0, 60);
+  let resolvedInput = {
+    query: cleanedUsername,
+    type: 'username',
+    username: cleanedUsername,
+    discord_user: null,
+  };
 
   try {
-    return await usernameProbeService.scanUsername(cleanedUsername);
+    if (/^\d{16,22}$/.test(cleanedUsername)) {
+      const tokenRow = db.findOne('bot_tokens', { user_id: userId });
+      if (tokenRow?.encrypted_token) {
+        try {
+          const token = decrypt(tokenRow.encrypted_token);
+          const discordUser = await discordService.getUser(token, cleanedUsername);
+          const resolvedUsername = String(discordUser?.username || '').trim() || cleanedUsername;
+          resolvedInput = {
+            query: cleanedUsername,
+            type: 'discord_id',
+            username: resolvedUsername,
+            discord_user: discordUser ? {
+              id: discordUser.id,
+              username: discordUser.username || null,
+              global_name: discordUser.global_name || null,
+              display_name: discordUser.global_name || discordUser.username || discordUser.id,
+              avatar_url: discordService.getAvatarUrl(discordUser.id, discordUser.avatar, 128, discordUser.discriminator),
+            } : null,
+          };
+        } catch (resolutionError) {
+          logger.debug?.('Discord ID resolution failed for OSINT username scan', {
+            userId,
+            query: cleanedUsername,
+            message: resolutionError?.message || 'resolution_failed',
+          });
+        }
+      }
+    }
+
+    const payload = await usernameProbeService.scanUsername(resolvedInput.username);
+    return {
+      ...payload,
+      input: resolvedInput,
+    };
   } catch (error) {
     logger.warn('Username OSINT scan failed', {
       userId,
