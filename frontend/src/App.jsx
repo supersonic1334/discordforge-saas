@@ -24,6 +24,7 @@ import NotificationsPage from './pages/NotificationsPage'
 import AccessControlPage from './pages/AccessControlPage'
 import CommandsPage from './pages/CommandsPage'
 import NativeCommandsPage from './pages/NativeCommandsPage'
+import TicketGeneratorPage from './pages/TicketGeneratorPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import IncidentsPage from './pages/IncidentsPage'
 import ReviewsPage from './pages/ReviewsPage'
@@ -570,6 +571,7 @@ function AppRoot() {
           <Route path="blocked" element={<PageTransition><AccessControlPage /></PageTransition>} />
           <Route path="commands" element={<PageTransition><NativeCommandsPage /></PageTransition>} />
           <Route path="commands-ai" element={<PageTransition><CommandsPage /></PageTransition>} />
+          <Route path="tickets" element={<PageTransition><TicketGeneratorPage /></PageTransition>} />
           <Route path="analytics" element={<PageTransition><AnalyticsPage /></PageTransition>} />
           <Route path="reviews" element={<PageTransition><ReviewsPage /></PageTransition>} />
           <Route path="support" element={<PageTransition><SupportPage /></PageTransition>} />

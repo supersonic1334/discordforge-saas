@@ -1,12 +1,33 @@
 'use strict';
 
-const { Client, GatewayIntentBits, Partials, Events, PermissionFlagsBits, ApplicationCommandOptionType } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  Events,
+  PermissionFlagsBits,
+  ApplicationCommandOptionType,
+  ChannelType,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ButtonBuilder,
+  ButtonStyle,
+} = require('discord.js');
 const EventEmitter = require('events');
 
 const logger = require('../utils/logger').child('BotProcess');
 const db = require('../database');
 const { decrypt } = require('../services/encryptionService');
-const { enforceBlacklistOnJoin } = require('../services/botBlacklistService');
+const {
+  banUserAcrossBotNetwork,
+  enforceBlacklistOnJoin,
+  getBlacklistEntry,
+  removeBlacklistEntry,
+} = require('../services/botBlacklistService');
 const { safeSendModerationDm } = require('../services/moderationDmService');
 const { MODULE_DEFINITIONS } = require('./modules/definitions');
 const { handleAntiSpam } = require('./modules/antiSpam');
@@ -16,6 +37,20 @@ const { handleWelcomeMessage, handleAutoRole, handleLogging, handleCustomCommand
 const { addWarning, checkEscalation, logBotEvent, recordModAction } = require('./utils/modHelpers');
 const { syncNativeAutoModRules, getManagedRuleKey, RULE_KEYS } = require('../services/discordAutoModService');
 const { COMMAND_ACTION_TYPES, DEFAULT_SYSTEM_COMMANDS } = require('../constants/systemCommands');
+const {
+  getGuildTicketGeneratorForDiscord,
+  getGuildTicketGeneratorById,
+  getTicketEntryById,
+  getOpenTicketByChannelId,
+  findDuplicateOpenTicket,
+  createTicketEntry,
+  claimTicketEntry,
+  closeTicketEntry,
+  recordPublishedPanel,
+  getNextTicketNumber,
+  replaceTicketTemplate,
+  buildTicketChannelName,
+} = require('../services/ticketGeneratorService');
 const config = require('../config');
 
 // ── Status enum ───────────────────────────────────────────────────────────────
@@ -27,6 +62,9 @@ const BotStatus = {
   ERROR:         'error',
   RECONNECTING:  'reconnecting',
 };
+
+const TICKET_GENERATOR_PREFIX = 'ticketgen';
+const TICKET_REASON_INPUT_ID = 'reason';
 
 function parseJsonArray(rawValue) {
   try {
@@ -95,6 +133,8 @@ function normalizeCommandActionConfig(actionType, rawValue = {}) {
       };
 
     case COMMAND_ACTION_TYPES.BAN_MEMBER:
+    case COMMAND_ACTION_TYPES.BLACKLIST_MEMBER:
+    case COMMAND_ACTION_TYPES.SOFTBAN_MEMBER:
       return {
         log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
         dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
@@ -137,6 +177,53 @@ function normalizeCommandActionConfig(actionType, rawValue = {}) {
         success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
       };
 
+    case COMMAND_ACTION_TYPES.UNBAN_MEMBER:
+    case COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER:
+    case COMMAND_ACTION_TYPES.ADD_ROLE:
+    case COMMAND_ACTION_TYPES.REMOVE_ROLE:
+    case COMMAND_ACTION_TYPES.SET_NICKNAME:
+    case COMMAND_ACTION_TYPES.MOVE_MEMBER:
+    case COMMAND_ACTION_TYPES.DISCONNECT_MEMBER:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? false),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.LOCK_CHANNEL:
+    case COMMAND_ACTION_TYPES.UNLOCK_CHANNEL:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        default_channel_id: normalizeSnowflake(source.default_channel_id, fallback.default_channel_id),
+        require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? false),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        default_channel_id: normalizeSnowflake(source.default_channel_id, fallback.default_channel_id),
+        require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? false),
+        default_seconds: clampNumber(source.default_seconds ?? fallback.default_seconds, 0, 21600, 30),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.SAY_MESSAGE:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        default_channel_id: normalizeSnowflake(source.default_channel_id, fallback.default_channel_id),
+        allow_mentions: normalizeBooleanFlag(source.allow_mentions, fallback.allow_mentions ?? false),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
+    case COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE:
+      return {
+        log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
+        default_channel_id: normalizeSnowflake(source.default_channel_id, fallback.default_channel_id),
+        ping_everyone: normalizeBooleanFlag(source.ping_everyone, fallback.ping_everyone ?? false),
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
     default:
       return source;
   }
@@ -146,7 +233,13 @@ function getDefaultNativePermission(actionType) {
   switch (actionType) {
     case COMMAND_ACTION_TYPES.CLEAR_MESSAGES:
       return PermissionFlagsBits.ManageMessages;
+    case COMMAND_ACTION_TYPES.TICKET_PANEL:
+      return PermissionFlagsBits.ManageChannels;
     case COMMAND_ACTION_TYPES.BAN_MEMBER:
+    case COMMAND_ACTION_TYPES.BLACKLIST_MEMBER:
+    case COMMAND_ACTION_TYPES.SOFTBAN_MEMBER:
+    case COMMAND_ACTION_TYPES.UNBAN_MEMBER:
+    case COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER:
       return PermissionFlagsBits.BanMembers;
     case COMMAND_ACTION_TYPES.KICK_MEMBER:
       return PermissionFlagsBits.KickMembers;
@@ -154,6 +247,21 @@ function getDefaultNativePermission(actionType) {
     case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER:
     case COMMAND_ACTION_TYPES.WARN_MEMBER:
       return PermissionFlagsBits.ModerateMembers;
+    case COMMAND_ACTION_TYPES.ADD_ROLE:
+    case COMMAND_ACTION_TYPES.REMOVE_ROLE:
+      return PermissionFlagsBits.ManageRoles;
+    case COMMAND_ACTION_TYPES.SET_NICKNAME:
+      return PermissionFlagsBits.ManageNicknames;
+    case COMMAND_ACTION_TYPES.LOCK_CHANNEL:
+    case COMMAND_ACTION_TYPES.UNLOCK_CHANNEL:
+    case COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL:
+      return PermissionFlagsBits.ManageChannels;
+    case COMMAND_ACTION_TYPES.SAY_MESSAGE:
+    case COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE:
+      return PermissionFlagsBits.ManageMessages;
+    case COMMAND_ACTION_TYPES.MOVE_MEMBER:
+    case COMMAND_ACTION_TYPES.DISCONNECT_MEMBER:
+      return PermissionFlagsBits.MoveMembers;
     default:
       return null;
   }
@@ -186,8 +294,11 @@ function buildSlashCommandPayload(command) {
       break;
 
     case COMMAND_ACTION_TYPES.BAN_MEMBER:
+    case COMMAND_ACTION_TYPES.BLACKLIST_MEMBER:
     case COMMAND_ACTION_TYPES.KICK_MEMBER:
+    case COMMAND_ACTION_TYPES.SOFTBAN_MEMBER:
     case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER:
+    case COMMAND_ACTION_TYPES.DISCONNECT_MEMBER:
       payload.options = [
         {
           type: ApplicationCommandOptionType.User,
@@ -253,6 +364,231 @@ function buildSlashCommandPayload(command) {
           required: false,
           min_value: 1,
           max_value: 20,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.UNBAN_MEMBER:
+    case COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'user_id',
+          description: 'Identifiant Discord de l utilisateur banni',
+          required: true,
+          min_length: 17,
+          max_length: 20,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison du retrait de ban',
+          required: false,
+          max_length: 300,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.ADD_ROLE:
+    case COMMAND_ACTION_TYPES.REMOVE_ROLE:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: true,
+        },
+        {
+          type: ApplicationCommandOptionType.Role,
+          name: 'role',
+          description: 'Role a gerer',
+          required: true,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison de la modification',
+          required: false,
+          max_length: 300,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.SET_NICKNAME:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: true,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'nickname',
+          description: 'Nouveau pseudo',
+          required: true,
+          min_length: 1,
+          max_length: 32,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison de la modification',
+          required: false,
+          max_length: 300,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.LOCK_CHANNEL:
+    case COMMAND_ACTION_TYPES.UNLOCK_CHANNEL:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.Channel,
+          name: 'channel',
+          description: 'Salon texte cible',
+          required: false,
+          channel_types: [
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement,
+          ],
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison de la modification',
+          required: false,
+          max_length: 300,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.Channel,
+          name: 'channel',
+          description: 'Salon texte cible',
+          required: false,
+          channel_types: [
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement,
+            ChannelType.PublicThread,
+            ChannelType.PrivateThread,
+            ChannelType.AnnouncementThread,
+          ],
+        },
+        {
+          type: ApplicationCommandOptionType.Integer,
+          name: 'seconds',
+          description: 'Slowmode en secondes',
+          required: false,
+          min_value: 0,
+          max_value: 21600,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison de la modification',
+          required: false,
+          max_length: 300,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.SAY_MESSAGE:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.Channel,
+          name: 'channel',
+          description: 'Salon de destination',
+          required: false,
+          channel_types: [
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement,
+            ChannelType.PublicThread,
+            ChannelType.PrivateThread,
+            ChannelType.AnnouncementThread,
+          ],
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'message',
+          description: 'Message a envoyer',
+          required: true,
+          max_length: 2000,
+        },
+        {
+          type: ApplicationCommandOptionType.Boolean,
+          name: 'allow_mentions',
+          description: 'Autoriser les mentions',
+          required: false,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.Channel,
+          name: 'channel',
+          description: 'Salon de destination',
+          required: false,
+          channel_types: [
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement,
+            ChannelType.PublicThread,
+            ChannelType.PrivateThread,
+            ChannelType.AnnouncementThread,
+          ],
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'title',
+          description: 'Titre de l annonce',
+          required: false,
+          max_length: 120,
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'message',
+          description: 'Contenu de l annonce',
+          required: true,
+          max_length: 2000,
+        },
+        {
+          type: ApplicationCommandOptionType.Boolean,
+          name: 'ping_everyone',
+          description: 'Ajouter un @everyone',
+          required: false,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.MOVE_MEMBER:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: true,
+        },
+        {
+          type: ApplicationCommandOptionType.Channel,
+          name: 'channel',
+          description: 'Salon vocal de destination',
+          required: true,
+          channel_types: [
+            ChannelType.GuildVoice,
+            ChannelType.GuildStageVoice,
+          ],
+        },
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'reason',
+          description: 'Raison du deplacement',
+          required: false,
+          max_length: 300,
         },
       ];
       break;
@@ -740,9 +1076,544 @@ class BotProcess extends EventEmitter {
         title: String(title || 'Journal de commande native').slice(0, 256),
         description: lines.filter(Boolean).join('\n').slice(0, 4000),
         color,
-        timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
       }],
     }).catch(() => {});
+  }
+
+  _hexColorToInt(value, fallback = 0x22d3ee) {
+    const normalized = String(value || '').trim().replace(/^#/, '');
+    return /^[0-9a-fA-F]{6}$/.test(normalized) ? Number.parseInt(normalized, 16) : fallback;
+  }
+
+  async _resolveTextChannel(source, actionConfig = {}, optionName = 'channel') {
+    const guild = source?.guild;
+    if (!guild) return null;
+
+    const fromOption = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()
+      ? source.options.getChannel(optionName)
+      : null;
+    if (fromOption?.isTextBased?.()) return fromOption;
+
+    const defaultChannelId = normalizeSnowflake(actionConfig.default_channel_id);
+    if (defaultChannelId) {
+      const defaultChannel = guild.channels.cache.get(defaultChannelId)
+        || await guild.channels.fetch(defaultChannelId).catch(() => null);
+      if (defaultChannel?.isTextBased?.()) return defaultChannel;
+    }
+
+    return source?.channel?.isTextBased?.() ? source.channel : null;
+  }
+
+  async _resolveVoiceChannel(source, optionName = 'channel') {
+    const guild = source?.guild;
+    if (!guild || !(typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand())) return null;
+
+    const channel = source.options.getChannel(optionName);
+    if (!channel) return null;
+    return channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice
+      ? channel
+      : null;
+  }
+
+  _buildTicketGeneratorCustomId(type, ...parts) {
+    return [TICKET_GENERATOR_PREFIX, type, ...parts.map((part) => String(part || '').trim())]
+      .filter(Boolean)
+      .join(':')
+      .slice(0, 100);
+  }
+
+  _parseTicketGeneratorCustomId(customId) {
+    const parts = String(customId || '').split(':');
+    if (parts[0] !== TICKET_GENERATOR_PREFIX || parts.length < 3) return null;
+    return {
+      type: parts[1],
+      args: parts.slice(2),
+    };
+  }
+
+  _getTicketTemplateValues({ user, option, ticketNumber, reason = '', channelId = '', claimer = '', closer = '' }) {
+    const username = String(user?.username || user?.globalName || user?.id || 'user')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 32) || 'user';
+    const userTag = String(user?.tag || user?.username || user?.globalName || user?.id || 'Utilisateur').trim();
+
+    return {
+      number: String(ticketNumber || ''),
+      label: String(option?.label || ''),
+      option_key: String(option?.key || ''),
+      mention: user?.id ? `<@${user.id}>` : '',
+      user_id: String(user?.id || ''),
+      user_tag: userTag,
+      username,
+      reason: String(reason || '').trim(),
+      channel: channelId ? `<#${channelId}>` : '',
+      claimer: String(claimer || ''),
+      closer: String(closer || ''),
+    };
+  }
+
+  _buildTicketGeneratorComponents(generator) {
+    const enabledOptions = (generator?.options || []).filter((option) => option.enabled).slice(0, 10);
+    if (enabledOptions.length === 0) return [];
+
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(this._buildTicketGeneratorCustomId('open', generator.id))
+      .setPlaceholder(String(generator.menu_placeholder || 'Choisis une categorie de ticket').slice(0, 120))
+      .setMinValues(1)
+      .setMaxValues(1);
+
+    for (const option of enabledOptions) {
+      const item = new StringSelectMenuOptionBuilder()
+        .setLabel(String(option.label || 'Ticket').slice(0, 100))
+        .setValue(option.key)
+        .setDescription(String(option.description || 'Ouvrir ce ticket').slice(0, 100));
+
+      if (option.emoji) {
+        try {
+          item.setEmoji(option.emoji);
+        } catch {
+          // Ignore invalid emoji configuration.
+        }
+      }
+
+      menu.addOptions(item);
+    }
+
+    return [new ActionRowBuilder().addComponents(menu)];
+  }
+
+  _buildTicketGeneratorPanelPayload(generator) {
+    return {
+      embeds: [{
+        title: String(generator.panel_title || 'Ticket Generator').slice(0, 256),
+        description: String(generator.panel_description || 'Choisis une categorie de ticket puis remplis le formulaire.').slice(0, 4000),
+        color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
+        footer: generator.panel_footer
+          ? { text: String(generator.panel_footer).slice(0, 2048) }
+          : undefined,
+        timestamp: new Date().toISOString(),
+      }],
+      components: this._buildTicketGeneratorComponents(generator),
+    };
+  }
+
+  async publishTicketGeneratorPanel(discordGuildId) {
+    const guild = this.client?.guilds?.cache?.get(discordGuildId)
+      || await this.client?.guilds?.fetch?.(discordGuildId).catch(() => null);
+    if (!guild) {
+      throw new Error('Serveur Discord introuvable pour publier le panel tickets');
+    }
+
+    const internalGuildId = this._resolveInternalGuildId(discordGuildId);
+    if (!internalGuildId) {
+      throw new Error('Serveur interne introuvable pour ce generateur de tickets');
+    }
+
+    const generator = getGuildTicketGeneratorForDiscord(this.userId, discordGuildId);
+    if (!generator?.id || !generator.enabled) {
+      throw new Error('Le generateur de tickets est desactive');
+    }
+
+    const enabledOptions = (generator.options || []).filter((option) => option.enabled);
+    if (enabledOptions.length === 0) {
+      throw new Error('Ajoute au moins un type de ticket actif avant la publication');
+    }
+
+    const targetChannelId = normalizeSnowflake(generator.panel_channel_id);
+    if (!targetChannelId) {
+      throw new Error('Choisis un salon de publication pour le panel tickets');
+    }
+
+    const channel = guild.channels.cache.get(targetChannelId)
+      || await guild.channels.fetch(targetChannelId).catch(() => null);
+    if (!channel?.isTextBased?.()) {
+      throw new Error('Le salon de publication tickets doit etre un salon texte');
+    }
+
+    const botPermissions = channel.permissionsFor?.(guild.members.me);
+    if (!botPermissions?.has(PermissionFlagsBits.SendMessages)) {
+      throw new Error('Le bot ne peut pas envoyer de messages dans le salon tickets choisi');
+    }
+
+    const payload = this._buildTicketGeneratorPanelPayload(generator);
+    let message = null;
+
+    if (generator.panel_message_id) {
+      message = await channel.messages.fetch(generator.panel_message_id).catch(() => null);
+      if (message?.editable) {
+        message = await message.edit(payload).catch(() => null);
+      }
+    }
+
+    if (!message) {
+      message = await channel.send(payload);
+    }
+
+    recordPublishedPanel(internalGuildId, channel.id, message.id);
+
+    return {
+      channel_id: channel.id,
+      message_id: message.id,
+      url: `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}`,
+    };
+  }
+
+  _hasTicketSupportAccess(member, option) {
+    if (!member) return false;
+    if (member.permissions?.has(PermissionFlagsBits.Administrator)) return true;
+    if (member.permissions?.has(PermissionFlagsBits.ManageChannels)) return true;
+    const memberRoleIds = new Set(Array.from(member.roles?.cache?.keys?.() || []));
+    return (option?.role_ids || []).some((roleId) => memberRoleIds.has(roleId));
+  }
+
+  async _showTicketGeneratorModal(interaction, generator, option) {
+    const modal = new ModalBuilder()
+      .setCustomId(this._buildTicketGeneratorCustomId('submit', generator.id, option.key))
+      .setTitle(String(option.modal_title || option.label || 'Nouveau ticket').slice(0, 45));
+
+    const input = new TextInputBuilder()
+      .setCustomId(TICKET_REASON_INPUT_ID)
+      .setLabel(String(option.question_label || 'Pourquoi veux-tu ouvrir ce ticket ?').slice(0, 45))
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder(String(option.question_placeholder || 'Explique ta demande...').slice(0, 100))
+      .setRequired(true)
+      .setMinLength(4)
+      .setMaxLength(1000);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    await interaction.showModal(modal);
+  }
+
+  async _handleTicketGeneratorSubmit(interaction, generator, option, internalGuildId) {
+    if (!generator?.enabled || !option?.enabled) {
+      await interaction.reply({ content: 'Ce type de ticket est indisponible pour le moment.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const duplicate = generator.prevent_duplicates
+      ? findDuplicateOpenTicket(internalGuildId, interaction.user.id, option.key)
+      : null;
+    if (duplicate) {
+      const existingChannelLabel = duplicate.channel_id ? `<#${duplicate.channel_id}>` : `#${duplicate.ticket_number}`;
+      await interaction.reply({
+        content: `Tu as deja un ticket ouvert pour cette categorie: ${existingChannelLabel}`,
+        ephemeral: true,
+      }).catch(() => {});
+      return true;
+    }
+
+    const guild = interaction.guild;
+    const botMember = guild.members.me;
+    if (!botMember) {
+      await interaction.reply({ content: 'Le bot est indisponible pour creer ce ticket.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const reason = String(interaction.fields.getTextInputValue(TICKET_REASON_INPUT_ID) || '').trim();
+    const ticketNumber = getNextTicketNumber(internalGuildId);
+    const ticketValues = this._getTicketTemplateValues({
+      user: interaction.user,
+      option,
+      ticketNumber,
+      reason,
+    });
+    const topicBase = replaceTicketTemplate(option.ticket_topic_template || generator.ticket_topic_template, ticketValues).trim();
+    const topic = [topicBase, reason].filter(Boolean).join(' | ').slice(0, 1024);
+
+    const desiredName = buildTicketChannelName(option.ticket_name_template || generator.ticket_name_template, ticketValues);
+    const existingNames = new Set(guild.channels.cache.map((channel) => String(channel?.name || '').toLowerCase()));
+    let finalName = desiredName;
+    let suffix = 1;
+    while (existingNames.has(finalName.toLowerCase())) {
+      finalName = `${desiredName}-${suffix}`.slice(0, 90);
+      suffix += 1;
+    }
+
+    const parentId = normalizeSnowflake(option.category_id || generator.default_category_id);
+    const parentChannel = parentId
+      ? (guild.channels.cache.get(parentId) || await guild.channels.fetch(parentId).catch(() => null))
+      : null;
+    const supportRoleIds = (option.role_ids || []).filter((roleId) => guild.roles.cache.has(roleId));
+
+    const permissionOverwrites = [
+      {
+        id: guild.roles.everyone.id,
+        deny: [PermissionFlagsBits.ViewChannel],
+      },
+      {
+        id: botMember.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.ManageMessages,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.EmbedLinks,
+        ],
+      },
+      {
+        id: interaction.user.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.EmbedLinks,
+        ],
+      },
+      ...supportRoleIds.map((roleId) => ({
+        id: roleId,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.EmbedLinks,
+        ],
+      })),
+    ];
+
+    const channel = await guild.channels.create({
+      name: finalName,
+      type: ChannelType.GuildText,
+      topic,
+      parent: parentChannel?.type === ChannelType.GuildCategory ? parentChannel.id : undefined,
+      permissionOverwrites,
+      reason: `Ticket ${option.label} ouvert par ${interaction.user.tag || interaction.user.username || interaction.user.id}`,
+    });
+
+    const entry = createTicketEntry({
+      internalGuildId,
+      generatorId: generator.id,
+      optionKey: option.key,
+      ticketNumber,
+      channelId: channel.id,
+      creatorDiscordUserId: interaction.user.id,
+      creatorUsername: interaction.user.tag || interaction.user.username || interaction.user.id,
+      reason,
+      subject: `${option.label}: ${reason}`.slice(0, 240),
+    });
+
+    const fullValues = this._getTicketTemplateValues({
+      user: interaction.user,
+      option,
+      ticketNumber: entry.ticket_number,
+      reason,
+      channelId: channel.id,
+    });
+    const introMessage = replaceTicketTemplate(
+      option.intro_message || generator.intro_message || 'Bonjour {mention}, ton ticket est ouvert.',
+      fullValues
+    ).slice(0, 1800);
+    const shouldPingRoles = !!generator.auto_ping_support && !!option.ping_roles && supportRoleIds.length > 0;
+    const claimButton = new ButtonBuilder()
+      .setCustomId(this._buildTicketGeneratorCustomId('claim', entry.id))
+      .setLabel('Claim')
+      .setStyle(ButtonStyle.Primary);
+    const closeButton = new ButtonBuilder()
+      .setCustomId(this._buildTicketGeneratorCustomId('close', entry.id))
+      .setLabel('Fermer')
+      .setStyle(ButtonStyle.Danger);
+
+    await channel.send({
+      content: [
+        shouldPingRoles ? supportRoleIds.map((roleId) => `<@&${roleId}>`).join(' ') : '',
+        introMessage,
+      ].filter(Boolean).join('\n\n'),
+      allowedMentions: {
+        roles: shouldPingRoles ? supportRoleIds : [],
+        users: interaction.user.id ? [interaction.user.id] : [],
+      },
+      components: [new ActionRowBuilder().addComponents(claimButton, closeButton)],
+    }).catch(() => {});
+
+    await interaction.reply({
+      content: `Ticket cree: <#${channel.id}>`,
+      ephemeral: true,
+    }).catch(() => {});
+
+    return true;
+  }
+
+  async _handleTicketGeneratorClaim(interaction, entryId, internalGuildId) {
+    const entry = getTicketEntryById(internalGuildId, entryId);
+    if (!entry) {
+      await interaction.reply({ content: 'Ticket introuvable.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    if (entry.status === 'closed') {
+      await interaction.reply({ content: 'Ce ticket est deja ferme.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const generator = getGuildTicketGeneratorById(entry.generator_id);
+    const option = (generator?.options || []).find((item) => item.key === entry.option_key);
+    if (!this._hasTicketSupportAccess(interaction.member, option)) {
+      await interaction.reply({ content: 'Tu n as pas acces a la prise en charge de ce ticket.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    if (entry.claimed_by_discord_user_id && entry.claimed_by_discord_user_id !== interaction.user.id) {
+      await interaction.reply({
+        content: `Ce ticket est deja pris par ${entry.claimed_by_username || 'un autre membre du staff'}.`,
+        ephemeral: true,
+      }).catch(() => {});
+      return true;
+    }
+    if (entry.claimed_by_discord_user_id === interaction.user.id) {
+      await interaction.reply({ content: 'Tu as deja pris ce ticket.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    claimTicketEntry(
+      internalGuildId,
+      entry.id,
+      interaction.user.id,
+      interaction.user.tag || interaction.user.username || interaction.user.id
+    );
+
+    const values = this._getTicketTemplateValues({
+      user: interaction.user,
+      option,
+      ticketNumber: entry.ticket_number,
+      reason: entry.reason,
+      channelId: entry.channel_id,
+      claimer: `<@${interaction.user.id}>`,
+    });
+    const claimMessage = replaceTicketTemplate(
+      generator?.claim_message || 'Ticket pris en charge par {claimer}.',
+      values
+    ).slice(0, 2000);
+
+    await interaction.reply({ content: 'Ticket pris en charge.', ephemeral: true }).catch(() => {});
+    if (interaction.channel?.isTextBased?.()) {
+      await interaction.channel.send({
+        content: claimMessage,
+        allowedMentions: { users: [interaction.user.id] },
+      }).catch(() => {});
+    }
+
+    return true;
+  }
+
+  async _handleTicketGeneratorClose(interaction, entryId, internalGuildId) {
+    const entry = getTicketEntryById(internalGuildId, entryId);
+    if (!entry) {
+      await interaction.reply({ content: 'Ticket introuvable.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    if (entry.status === 'closed') {
+      await interaction.reply({ content: 'Ce ticket est deja ferme.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const generator = getGuildTicketGeneratorById(entry.generator_id);
+    const option = (generator?.options || []).find((item) => item.key === entry.option_key);
+    const isSupport = this._hasTicketSupportAccess(interaction.member, option);
+    const isCreator = String(entry.creator_discord_user_id) === String(interaction.user.id);
+    if (!isSupport && !(generator?.allow_user_close && isCreator)) {
+      await interaction.reply({ content: 'Tu ne peux pas fermer ce ticket.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    closeTicketEntry(
+      internalGuildId,
+      entry.id,
+      interaction.user.id,
+      interaction.user.tag || interaction.user.username || interaction.user.id
+    );
+
+    if (interaction.channel?.permissionOverwrites?.edit && entry.creator_discord_user_id) {
+      await interaction.channel.permissionOverwrites.edit(entry.creator_discord_user_id, {
+        SendMessages: false,
+        AddReactions: false,
+        AttachFiles: false,
+      }, {
+        reason: `Ticket ferme par ${interaction.user.tag || interaction.user.username || interaction.user.id}`,
+      }).catch(() => {});
+    }
+
+    const values = this._getTicketTemplateValues({
+      user: interaction.user,
+      option,
+      ticketNumber: entry.ticket_number,
+      reason: entry.reason,
+      channelId: entry.channel_id,
+      closer: `<@${interaction.user.id}>`,
+    });
+    const closeMessage = replaceTicketTemplate(
+      generator?.close_message || 'Ticket ferme par {closer}.',
+      values
+    ).slice(0, 2000);
+
+    await interaction.reply({ content: 'Ticket ferme.', ephemeral: true }).catch(() => {});
+    if (interaction.channel?.isTextBased?.()) {
+      await interaction.channel.send({
+        content: closeMessage,
+        allowedMentions: { users: [interaction.user.id] },
+      }).catch(() => {});
+    }
+
+    return true;
+  }
+
+  async _handleTicketGeneratorInteraction(interaction) {
+    const parsed = this._parseTicketGeneratorCustomId(interaction?.customId);
+    if (!parsed || !interaction?.guild) return false;
+
+    const internalGuildId = this._resolveInternalGuildId(interaction.guild.id);
+    if (!internalGuildId) {
+      if (typeof interaction.reply === 'function') {
+        await interaction.reply({ content: 'Serveur tickets introuvable.', ephemeral: true }).catch(() => {});
+      }
+      return true;
+    }
+
+    try {
+      if (interaction.isStringSelectMenu() && parsed.type === 'open') {
+        const generator = getGuildTicketGeneratorById(parsed.args[0]);
+        const option = (generator?.options || []).find((item) => item.key === interaction.values?.[0] && item.enabled);
+        if (!generator?.id || generator.guild_id !== internalGuildId || !option) {
+          await interaction.reply({ content: 'Ce ticket est indisponible.', ephemeral: true }).catch(() => {});
+          return true;
+        }
+        await this._showTicketGeneratorModal(interaction, generator, option);
+        return true;
+      }
+
+      if (interaction.isModalSubmit() && parsed.type === 'submit') {
+        const generator = getGuildTicketGeneratorById(parsed.args[0]);
+        const option = (generator?.options || []).find((item) => item.key === parsed.args[1] && item.enabled);
+        if (!generator?.id || generator.guild_id !== internalGuildId || !option) {
+          await interaction.reply({ content: 'Ce ticket est indisponible.', ephemeral: true }).catch(() => {});
+          return true;
+        }
+        return this._handleTicketGeneratorSubmit(interaction, generator, option, internalGuildId);
+      }
+
+      if (interaction.isButton() && parsed.type === 'claim') {
+        return this._handleTicketGeneratorClaim(interaction, parsed.args[0], internalGuildId);
+      }
+
+      if (interaction.isButton() && parsed.type === 'close') {
+        return this._handleTicketGeneratorClose(interaction, parsed.args[0], internalGuildId);
+      }
+    } catch (error) {
+      logger.error(`Ticket interaction error: ${error.message}`);
+      if (!interaction.replied && !interaction.deferred && typeof interaction.reply === 'function') {
+        await interaction.reply({ content: 'Impossible de traiter ce ticket pour le moment.', ephemeral: true }).catch(() => {});
+      } else if (typeof interaction.followUp === 'function') {
+        await interaction.followUp({ content: 'Impossible de traiter ce ticket pour le moment.', ephemeral: true }).catch(() => {});
+      }
+      return true;
+    }
+
+    return false;
   }
 
   async _executeNativeClear(source, command, matchedTrigger = null) {
@@ -798,6 +1669,32 @@ class BotProcess extends EventEmitter {
     return true;
   }
 
+  async _executeNativeTicketPanel(source) {
+    const guild = source?.guild;
+    if (!guild) return false;
+
+    const memberPermissions = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()
+      ? source.memberPermissions
+      : source.member?.permissions;
+    const botPermissions = guild.members.me?.permissions;
+
+    if (!memberPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+      await this._replyToNativeSource(source, 'Tu dois avoir la permission de gerer les salons pour publier le panel tickets.', { ephemeral: true });
+      return true;
+    }
+    if (!botPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+      await this._replyToNativeSource(source, 'Le bot doit avoir la permission de gerer les salons pour publier le panel tickets.', { ephemeral: true });
+      return true;
+    }
+
+    const panel = await this.publishTicketGeneratorPanel(guild.id);
+    await this._replyToNativeSource(source, `Panel tickets publie dans <#${panel.channel_id}>.`, {
+      ephemeral: true,
+      preferReply: false,
+    });
+    return true;
+  }
+
   async _executeNativeModeration(source, command) {
     if (!(typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand())) {
       await this._replyToNativeSource(source, 'Cette commande native est disponible en slash uniquement.', { preferReply: true });
@@ -805,9 +1702,6 @@ class BotProcess extends EventEmitter {
     }
 
     const guild = source.guild;
-    const targetUser = source.options.getUser('user', true);
-    const targetMember = source.options.getMember('user')
-      || await guild.members.fetch(targetUser.id).catch(() => null);
     const moderatorName = source.user?.tag || source.user?.username || 'Moderateur';
     const permission = getDefaultNativePermission(command.action_type);
     const actionConfig = normalizeCommandActionConfig(command.action_type, command.action_config);
@@ -830,9 +1724,17 @@ class BotProcess extends EventEmitter {
 
     const effectiveReason = reason || 'Aucune raison precisee.';
     const visibilityIsPublic = actionConfig.success_visibility === 'public';
+    const replyOptions = { ephemeral: !visibilityIsPublic };
+    const resolveTargetMember = async () => {
+      const user = source.options.getUser('user', true);
+      const member = source.options.getMember('user')
+        || await guild.members.fetch(user.id).catch(() => null);
+      return { user, member };
+    };
 
     switch (command.action_type) {
       case COMMAND_ACTION_TYPES.BAN_MEMBER: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
         if (targetMember && !targetMember.bannable) {
           await this._replyToNativeSource(source, 'Je ne peux pas bannir ce membre avec la hierarchie actuelle.', { ephemeral: true });
           return true;
@@ -862,11 +1764,48 @@ class BotProcess extends EventEmitter {
           `Moderateur: <@${source.user.id}>`,
           `Raison: ${effectiveReason}`,
         ], 0xef4444);
-        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete banni.`, { ephemeral: !visibilityIsPublic });
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete banni.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.BLACKLIST_MEMBER: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
+        if (targetMember && !targetMember.bannable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas blacklist ce membre avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        if (actionConfig.dm_user) {
+          await safeSendModerationDm({
+            botToken: this.token,
+            guildId: guild.id,
+            guild,
+            actionType: 'blacklist',
+            targetUserId: targetUser.id,
+            reason: effectiveReason,
+            moderatorName,
+          }).catch(() => {});
+        }
+        await banUserAcrossBotNetwork(
+          this.userId,
+          targetUser.id,
+          targetUser.globalName || targetUser.username || targetUser.id,
+          this.token,
+          effectiveReason,
+          'SYSTEM_COMMAND',
+          clampNumber(actionConfig.delete_message_seconds, 0, 604800, 0)
+        );
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Blacklist executee', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0xdc2626);
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete ajoute a la blacklist reseau.`, replyOptions);
         return true;
       }
 
       case COMMAND_ACTION_TYPES.KICK_MEMBER: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
         if (!targetMember) {
           await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
           return true;
@@ -897,11 +1836,56 @@ class BotProcess extends EventEmitter {
           `Moderateur: <@${source.user.id}>`,
           `Raison: ${effectiveReason}`,
         ], 0xf97316);
-        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete expulse.`, { ephemeral: !visibilityIsPublic });
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete expulse.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.SOFTBAN_MEMBER: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
+        if (targetMember && !targetMember.bannable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas softban ce membre avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        if (actionConfig.dm_user) {
+          await safeSendModerationDm({
+            botToken: this.token,
+            guildId: guild.id,
+            guild,
+            actionType: 'ban',
+            targetUserId: targetUser.id,
+            reason: effectiveReason,
+            moderatorName,
+          }).catch(() => {});
+        }
+        await guild.members.ban(targetUser, {
+          reason: effectiveReason,
+          deleteMessageSeconds: clampNumber(actionConfig.delete_message_seconds, 0, 604800, 0),
+        });
+        try {
+          await guild.members.unban(targetUser.id, `Softban release: ${effectiveReason}`);
+        } catch (error) {
+          logger.warn(`Softban rollback failed for ${targetUser.id}: ${error.message}`);
+          await this._replyToNativeSource(source, `Le membre <@${targetUser.id}> a ete banni, mais le deban automatique a echoue.`, { ephemeral: true });
+          return true;
+        }
+        await recordModAction(guild.id, 'ban', targetUser.id, targetUser.globalName || targetUser.username, source.user.id, moderatorName, effectiveReason, null, 'SYSTEM_COMMAND', {
+          command_id: command.id,
+          system_key: command.system_key,
+          variant: 'softban',
+        });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Softban execute', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Historique supprime: ${clampNumber(actionConfig.delete_message_seconds, 0, 604800, 0)} seconde(s)`,
+          `Raison: ${effectiveReason}`,
+        ], 0xfb7185);
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete softban puis debanni.`, replyOptions);
         return true;
       }
 
       case COMMAND_ACTION_TYPES.TIMEOUT_MEMBER: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
         if (!targetMember) {
           await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
           return true;
@@ -938,11 +1922,12 @@ class BotProcess extends EventEmitter {
           `Duree: ${Math.max(1, Math.round(durationMs / 60000))} minute(s)`,
           `Raison: ${effectiveReason}`,
         ], 0xf59e0b);
-        await this._replyToNativeSource(source, `<@${targetUser.id}> est en timeout pour ${Math.max(1, Math.round(durationMs / 60000))} minute(s).`, { ephemeral: !visibilityIsPublic });
+        await this._replyToNativeSource(source, `<@${targetUser.id}> est en timeout pour ${Math.max(1, Math.round(durationMs / 60000))} minute(s).`, replyOptions);
         return true;
       }
 
       case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
         if (!targetMember) {
           await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
           return true;
@@ -973,11 +1958,12 @@ class BotProcess extends EventEmitter {
           `Moderateur: <@${source.user.id}>`,
           `Raison: ${effectiveReason}`,
         ], 0x22c55e);
-        await this._replyToNativeSource(source, `Le timeout de <@${targetUser.id}> a ete retire.`, { ephemeral: !visibilityIsPublic });
+        await this._replyToNativeSource(source, `Le timeout de <@${targetUser.id}> a ete retire.`, replyOptions);
         return true;
       }
 
       case COMMAND_ACTION_TYPES.WARN_MEMBER: {
+        const { user: targetUser } = await resolveTargetMember();
         const points = clampNumber(source.options.getInteger('points') ?? actionConfig.default_points, 1, 20, 1);
         const targetName = targetUser.globalName || targetUser.username || targetUser.id;
         await addWarning(guild.id, targetUser.id, targetName, source.user.id, moderatorName, effectiveReason, points, {
@@ -1010,7 +1996,309 @@ class BotProcess extends EventEmitter {
           `Points: ${points}`,
           `Raison: ${effectiveReason}`,
         ], 0xeab308);
-        await this._replyToNativeSource(source, `<@${targetUser.id}> a recu ${points} point(s) d avertissement.`, { ephemeral: !visibilityIsPublic });
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a recu ${points} point(s) d avertissement.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.UNBAN_MEMBER: {
+        const targetUserId = normalizeSnowflake(source.options.getString('user_id', true));
+        if (!targetUserId) {
+          await this._replyToNativeSource(source, 'L identifiant Discord fourni est invalide.', { ephemeral: true });
+          return true;
+        }
+        const banEntry = await guild.bans.fetch(targetUserId).catch(() => null);
+        if (!banEntry?.user) {
+          await this._replyToNativeSource(source, 'Aucun ban actif trouve pour cet utilisateur.', { ephemeral: true });
+          return true;
+        }
+        await guild.members.unban(targetUserId, effectiveReason);
+        await recordModAction(guild.id, 'unban', targetUserId, banEntry.user.globalName || banEntry.user.username || targetUserId, source.user.id, moderatorName, effectiveReason, null, 'SYSTEM_COMMAND', {
+          command_id: command.id,
+          system_key: command.system_key,
+        });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Unban execute', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUserId}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0x22c55e);
+        await this._replyToNativeSource(source, `<@${targetUserId}> a ete debanni.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER: {
+        const targetUserId = normalizeSnowflake(source.options.getString('user_id', true));
+        if (!targetUserId) {
+          await this._replyToNativeSource(source, 'L identifiant Discord fourni est invalide.', { ephemeral: true });
+          return true;
+        }
+        const currentEntry = getBlacklistEntry(this.userId, targetUserId);
+        if (!currentEntry) {
+          await this._replyToNativeSource(source, 'Aucune entree de blacklist reseau trouvee pour cet utilisateur.', { ephemeral: true });
+          return true;
+        }
+        const removed = removeBlacklistEntry(this.userId, targetUserId);
+        if (!removed) {
+          await this._replyToNativeSource(source, 'Impossible de retirer cette entree de blacklist pour le moment.', { ephemeral: true });
+          return true;
+        }
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Blacklist retiree', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUserId}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0x10b981);
+        await this._replyToNativeSource(source, `<@${targetUserId}> a ete retire de la blacklist reseau.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.ADD_ROLE: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
+        const role = source.options.getRole('role', true);
+        if (!targetMember) {
+          await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.manageable || !role?.editable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas gerer ce role ou ce membre avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        if (targetMember.roles.cache.has(role.id)) {
+          await this._replyToNativeSource(source, 'Ce membre possede deja ce role.', { ephemeral: true });
+          return true;
+        }
+        await targetMember.roles.add(role, effectiveReason);
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Role ajoute', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Role: <@&${role.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0x60a5fa);
+        await this._replyToNativeSource(source, `<@&${role.id}> a ete ajoute a <@${targetUser.id}>.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.REMOVE_ROLE: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
+        const role = source.options.getRole('role', true);
+        if (!targetMember) {
+          await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.manageable || !role?.editable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas gerer ce role ou ce membre avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.roles.cache.has(role.id)) {
+          await this._replyToNativeSource(source, 'Ce membre ne possede pas ce role.', { ephemeral: true });
+          return true;
+        }
+        await targetMember.roles.remove(role, effectiveReason);
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Role retire', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Role: <@&${role.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0x38bdf8);
+        await this._replyToNativeSource(source, `<@&${role.id}> a ete retire a <@${targetUser.id}>.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.SET_NICKNAME: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
+        const nickname = String(source.options.getString('nickname', true) || '').trim();
+        if (!targetMember) {
+          await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.manageable) {
+          await this._replyToNativeSource(source, 'Je ne peux pas modifier le pseudo de ce membre avec la hierarchie actuelle.', { ephemeral: true });
+          return true;
+        }
+        await targetMember.setNickname(nickname, effectiveReason);
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Pseudo modifie', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Nouveau pseudo: ${nickname}`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0xa78bfa);
+        await this._replyToNativeSource(source, `Le pseudo de <@${targetUser.id}> est maintenant "${nickname}".`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.LOCK_CHANNEL:
+      case COMMAND_ACTION_TYPES.UNLOCK_CHANNEL: {
+        const channel = await this._resolveTextChannel(source, actionConfig);
+        if (!channel || channel.isThread?.() || !channel.permissionOverwrites?.edit) {
+          await this._replyToNativeSource(source, 'Choisis un salon texte standard pour cette commande.', { ephemeral: true });
+          return true;
+        }
+        const channelBotPermissions = channel.permissionsFor(botMember);
+        if (!channelBotPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+          await this._replyToNativeSource(source, 'Le bot n a pas la permission de gerer ce salon.', { ephemeral: true });
+          return true;
+        }
+        const shouldLock = command.action_type === COMMAND_ACTION_TYPES.LOCK_CHANNEL;
+        await channel.permissionOverwrites.edit(guild.roles.everyone.id, {
+          SendMessages: shouldLock ? false : null,
+          AddReactions: shouldLock ? false : null,
+        }, { reason: effectiveReason });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, shouldLock ? 'Salon verrouille' : 'Salon deverrouille', [
+          `Commande: ${command.display_trigger}`,
+          `Salon: <#${channel.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], shouldLock ? 0xf97316 : 0x22c55e);
+        await this._replyToNativeSource(source, `Le salon <#${channel.id}> est maintenant ${shouldLock ? 'verrouille' : 'deverrouille'}.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL: {
+        const channel = await this._resolveTextChannel(source, actionConfig);
+        if (!channel || typeof channel.setRateLimitPerUser !== 'function') {
+          await this._replyToNativeSource(source, 'Ce salon ne prend pas en charge le slowmode.', { ephemeral: true });
+          return true;
+        }
+        const channelBotPermissions = channel.permissionsFor(botMember);
+        if (!channelBotPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+          await this._replyToNativeSource(source, 'Le bot n a pas la permission de gerer ce salon.', { ephemeral: true });
+          return true;
+        }
+        const seconds = clampNumber(source.options.getInteger('seconds') ?? actionConfig.default_seconds, 0, 21600, 30);
+        await channel.setRateLimitPerUser(seconds, effectiveReason);
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Slowmode modifie', [
+          `Commande: ${command.display_trigger}`,
+          `Salon: <#${channel.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Slowmode: ${seconds} seconde(s)`,
+          `Raison: ${effectiveReason}`,
+        ], 0xf59e0b);
+        await this._replyToNativeSource(source, seconds > 0 ? `Le slowmode de <#${channel.id}> est regle a ${seconds} seconde(s).` : `Le slowmode de <#${channel.id}> est desactive.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.SAY_MESSAGE: {
+        const channel = await this._resolveTextChannel(source, actionConfig);
+        const message = String(source.options.getString('message', true) || '').trim();
+        if (!channel?.isTextBased?.()) {
+          await this._replyToNativeSource(source, 'Aucun salon texte valide n a ete trouve pour publier ce message.', { ephemeral: true });
+          return true;
+        }
+        const channelBotPermissions = channel.permissionsFor?.(botMember);
+        if (!channelBotPermissions?.has(PermissionFlagsBits.SendMessages)) {
+          await this._replyToNativeSource(source, 'Le bot ne peut pas envoyer de message dans ce salon.', { ephemeral: true });
+          return true;
+        }
+        const allowMentionsOption = source.options.getBoolean('allow_mentions');
+        const allowMentions = allowMentionsOption === null ? !!actionConfig.allow_mentions : !!allowMentionsOption;
+        await channel.send({
+          content: message,
+          allowedMentions: allowMentions ? undefined : { parse: [] },
+        });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Message envoye', [
+          `Commande: ${command.display_trigger}`,
+          `Salon: <#${channel.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Contenu: ${message.slice(0, 240)}`,
+        ], 0x06b6d4);
+        await this._replyToNativeSource(source, `Message envoye dans <#${channel.id}>.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE: {
+        const channel = await this._resolveTextChannel(source, actionConfig);
+        const message = String(source.options.getString('message', true) || '').trim();
+        const title = String(source.options.getString('title') || command.embed_title || 'Annonce').trim().slice(0, 120) || 'Annonce';
+        const pingEveryoneOption = source.options.getBoolean('ping_everyone');
+        const pingEveryone = pingEveryoneOption === null ? !!actionConfig.ping_everyone : !!pingEveryoneOption;
+        if (!channel?.isTextBased?.()) {
+          await this._replyToNativeSource(source, 'Aucun salon texte valide n a ete trouve pour publier cette annonce.', { ephemeral: true });
+          return true;
+        }
+        const channelBotPermissions = channel.permissionsFor?.(botMember);
+        if (!channelBotPermissions?.has(PermissionFlagsBits.SendMessages)) {
+          await this._replyToNativeSource(source, 'Le bot ne peut pas publier dans ce salon.', { ephemeral: true });
+          return true;
+        }
+        if (pingEveryone) {
+          if (!source.memberPermissions?.has(PermissionFlagsBits.MentionEveryone) || !channelBotPermissions?.has(PermissionFlagsBits.MentionEveryone)) {
+            await this._replyToNativeSource(source, 'Le @everyone demande la permission de mention globale pour toi et pour le bot.', { ephemeral: true });
+            return true;
+          }
+        }
+        await channel.send({
+          content: pingEveryone ? '@everyone' : undefined,
+          embeds: [{
+            title,
+            description: message,
+            color: this._hexColorToInt(command.embed_color, 0x8b5cf6),
+            timestamp: new Date().toISOString(),
+          }],
+        });
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Annonce publiee', [
+          `Commande: ${command.display_trigger}`,
+          `Salon: <#${channel.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Titre: ${title}`,
+          `Ping everyone: ${pingEveryone ? 'oui' : 'non'}`,
+        ], 0x8b5cf6);
+        await this._replyToNativeSource(source, `Annonce publiee dans <#${channel.id}>.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.MOVE_MEMBER: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
+        const destinationChannel = await this._resolveVoiceChannel(source);
+        if (!targetMember) {
+          await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
+          return true;
+        }
+        if (!destinationChannel) {
+          await this._replyToNativeSource(source, 'Choisis un salon vocal valide pour cette commande.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.voice?.channelId) {
+          await this._replyToNativeSource(source, 'Ce membre n est connecte a aucun salon vocal.', { ephemeral: true });
+          return true;
+        }
+        const destinationPermissions = destinationChannel.permissionsFor(botMember);
+        if (!destinationPermissions?.has(PermissionFlagsBits.Connect)) {
+          await this._replyToNativeSource(source, 'Le bot ne peut pas rejoindre le salon vocal de destination.', { ephemeral: true });
+          return true;
+        }
+        await targetMember.voice.setChannel(destinationChannel, effectiveReason);
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Membre deplace', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Destination: <#${destinationChannel.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0x14b8a6);
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete deplace vers <#${destinationChannel.id}>.`, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.DISCONNECT_MEMBER: {
+        const { user: targetUser, member: targetMember } = await resolveTargetMember();
+        if (!targetMember) {
+          await this._replyToNativeSource(source, 'Le membre est introuvable sur ce serveur.', { ephemeral: true });
+          return true;
+        }
+        if (!targetMember.voice?.channelId) {
+          await this._replyToNativeSource(source, 'Ce membre n est connecte a aucun salon vocal.', { ephemeral: true });
+          return true;
+        }
+        await targetMember.voice.setChannel(null, effectiveReason);
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Membre deconnecte', [
+          `Commande: ${command.display_trigger}`,
+          `Cible: <@${targetUser.id}>`,
+          `Moderateur: <@${source.user.id}>`,
+          `Raison: ${effectiveReason}`,
+        ], 0x0ea5e9);
+        await this._replyToNativeSource(source, `<@${targetUser.id}> a ete deconnecte de son salon vocal.`, replyOptions);
         return true;
       }
 
@@ -1023,11 +2311,27 @@ class BotProcess extends EventEmitter {
     switch (command.action_type) {
       case COMMAND_ACTION_TYPES.CLEAR_MESSAGES:
         return this._executeNativeClear(source, command, matchedTrigger);
+      case COMMAND_ACTION_TYPES.TICKET_PANEL:
+        return this._executeNativeTicketPanel(source, command, matchedTrigger);
       case COMMAND_ACTION_TYPES.BAN_MEMBER:
+      case COMMAND_ACTION_TYPES.BLACKLIST_MEMBER:
       case COMMAND_ACTION_TYPES.KICK_MEMBER:
+      case COMMAND_ACTION_TYPES.SOFTBAN_MEMBER:
       case COMMAND_ACTION_TYPES.TIMEOUT_MEMBER:
       case COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER:
       case COMMAND_ACTION_TYPES.WARN_MEMBER:
+      case COMMAND_ACTION_TYPES.UNBAN_MEMBER:
+      case COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER:
+      case COMMAND_ACTION_TYPES.ADD_ROLE:
+      case COMMAND_ACTION_TYPES.REMOVE_ROLE:
+      case COMMAND_ACTION_TYPES.SET_NICKNAME:
+      case COMMAND_ACTION_TYPES.LOCK_CHANNEL:
+      case COMMAND_ACTION_TYPES.UNLOCK_CHANNEL:
+      case COMMAND_ACTION_TYPES.SLOWMODE_CHANNEL:
+      case COMMAND_ACTION_TYPES.SAY_MESSAGE:
+      case COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE:
+      case COMMAND_ACTION_TYPES.MOVE_MEMBER:
+      case COMMAND_ACTION_TYPES.DISCONNECT_MEMBER:
         return this._executeNativeModeration(source, command);
       default:
         return handleCustomCommand(source, command, matchedTrigger);
@@ -1107,7 +2411,13 @@ class BotProcess extends EventEmitter {
   }
 
   async _onInteraction(interaction) {
-    if (!interaction.isChatInputCommand() || !interaction.guild) return;
+    if (!interaction.guild) return;
+
+    if (await this._handleTicketGeneratorInteraction(interaction)) {
+      return;
+    }
+
+    if (!interaction.isChatInputCommand()) return;
 
     const guildId = interaction.guild.id;
     const configs = await this._getEnabledModules(guildId);

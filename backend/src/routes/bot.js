@@ -15,6 +15,7 @@ const logger = require('../utils/logger').child('BotRoutes');
 const wsServer = require('../websocket');
 const moduleRoutes = require('./modules');
 const commandRoutes = require('./commands');
+const ticketRoutes = require('./tickets');
 const logRoutes = require('./logs');
 const moderationRoutes = require('./moderation');
 const blockedRoutes = require('./blocked');
@@ -142,6 +143,7 @@ router.post('/team/join-code/redeem', requireAuth, validate(guildAccessCodeRedee
 
 router.use('/guilds/:guildId/modules', moduleRoutes);
 router.use('/guilds/:guildId/commands', commandRoutes);
+router.use('/guilds/:guildId/tickets', ticketRoutes);
 router.use('/guilds/:guildId/logs', logRoutes);
 router.use('/guilds/:guildId/moderation', moderationRoutes);
 router.use('/guilds/:guildId/blocked', blockedRoutes);

@@ -377,6 +377,56 @@ const SCHEMA = [
     updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  `CREATE TABLE IF NOT EXISTS guild_ticket_generators (
+    id                TEXT PRIMARY KEY,
+    guild_id          TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    panel_channel_id  TEXT NOT NULL DEFAULT '',
+    panel_message_id  TEXT NOT NULL DEFAULT '',
+    panel_title       TEXT NOT NULL DEFAULT 'Support & tickets',
+    panel_description TEXT NOT NULL DEFAULT '',
+    panel_footer      TEXT NOT NULL DEFAULT '',
+    menu_placeholder  TEXT NOT NULL DEFAULT 'Choisis une categorie',
+    panel_color       TEXT NOT NULL DEFAULT '#7c3aed',
+    default_category_id TEXT NOT NULL DEFAULT '',
+    ticket_name_template TEXT NOT NULL DEFAULT 'ticket-{number}',
+    ticket_topic_template TEXT NOT NULL DEFAULT 'Ticket #{number} • {label}',
+    intro_message     TEXT NOT NULL DEFAULT '',
+    claim_message     TEXT NOT NULL DEFAULT 'Ticket pris en charge par {claimer}.',
+    close_message     TEXT NOT NULL DEFAULT 'Ticket ferme par {closer}.',
+    auto_ping_support INTEGER NOT NULL DEFAULT 1,
+    allow_user_close  INTEGER NOT NULL DEFAULT 1,
+    prevent_duplicates INTEGER NOT NULL DEFAULT 1,
+    options_json      TEXT NOT NULL DEFAULT '[]',
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(guild_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS guild_ticket_entries (
+    id                TEXT PRIMARY KEY,
+    guild_id          TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    generator_id      TEXT NOT NULL REFERENCES guild_ticket_generators(id) ON DELETE CASCADE,
+    option_key        TEXT NOT NULL,
+    ticket_number     INTEGER NOT NULL,
+    channel_id        TEXT NOT NULL,
+    creator_discord_user_id TEXT NOT NULL,
+    creator_username  TEXT NOT NULL DEFAULT '',
+    claimed_by_discord_user_id TEXT,
+    claimed_by_username TEXT,
+    closed_by_discord_user_id TEXT,
+    closed_by_username TEXT,
+    reason            TEXT NOT NULL DEFAULT '',
+    subject           TEXT NOT NULL DEFAULT '',
+    status            TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','claimed','closed')),
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    claimed_at        TEXT,
+    closed_at         TEXT,
+    UNIQUE(channel_id),
+    UNIQUE(guild_id, ticket_number)
+  )`,
+
   // ────────────────────────────────────────────────────────────────────────────
   // SITE REVIEWS
   // ────────────────────────────────────────────────────────────────────────────
@@ -484,6 +534,9 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status, last_message_at)`,
   `CREATE INDEX IF NOT EXISTS idx_support_tickets_claimed_by ON support_tickets(claimed_by_user_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_support_ticket_messages_ticket_id ON support_ticket_messages(ticket_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_ticket_generators_guild_id ON guild_ticket_generators(guild_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_ticket_entries_guild_status ON guild_ticket_entries(guild_id, status, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_ticket_entries_creator ON guild_ticket_entries(guild_id, creator_discord_user_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_site_reviews_updated_at ON site_reviews(updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_user_id ON access_blocks(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_lookup ON access_blocks(block_type, value_hash, is_active)`,

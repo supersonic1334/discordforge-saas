@@ -182,10 +182,24 @@ const nativeActionTypeSchema = z.enum([
   'clear_messages',
   'ticket_panel',
   'ban_member',
+  'blacklist_member',
   'kick_member',
+  'softban_member',
   'timeout_member',
   'untimeout_member',
   'warn_member',
+  'unban_member',
+  'unblacklist_member',
+  'add_role',
+  'remove_role',
+  'set_nickname',
+  'lock_channel',
+  'unlock_channel',
+  'slowmode_channel',
+  'say_message',
+  'announce_message',
+  'move_member',
+  'disconnect_member',
 ]);
 
 const customCommandSchema = z.object({
@@ -364,6 +378,50 @@ const supportTicketUpdateSchema = z.object({
   message: 'At least one field is required',
 });
 
+const discordSnowflakeSchema = z.string().trim().regex(/^\d+$/, 'Must be a Discord ID');
+const optionalDiscordSnowflakeSchema = z.string().trim().max(32).optional().default('').refine(
+  (value) => value === '' || /^\d+$/.test(value),
+  'Must be a Discord ID'
+);
+
+const ticketGeneratorOptionSchema = z.object({
+  key: z.string().trim().min(1).max(32).regex(/^[a-zA-Z0-9_-]+$/, 'Invalid option key'),
+  label: z.string().trim().min(1).max(40),
+  description: z.string().trim().max(100).optional().default(''),
+  emoji: z.string().trim().max(16).optional().default(''),
+  category_id: optionalDiscordSnowflakeSchema,
+  role_ids: z.array(discordSnowflakeSchema).max(12).optional().default([]),
+  ping_roles: z.boolean().optional().default(true),
+  question_label: z.string().trim().min(1).max(45),
+  question_placeholder: z.string().trim().max(100).optional().default(''),
+  modal_title: z.string().trim().min(1).max(45),
+  intro_message: z.string().trim().max(1600).optional().default(''),
+  ticket_name_template: z.string().trim().min(1).max(80),
+  ticket_topic_template: z.string().trim().max(220).optional().default(''),
+  enabled: z.boolean().optional().default(true),
+});
+
+const ticketGeneratorConfigSchema = z.object({
+  enabled: z.boolean().optional().default(true),
+  panel_channel_id: optionalDiscordSnowflakeSchema,
+  panel_message_id: optionalDiscordSnowflakeSchema,
+  panel_title: z.string().trim().min(1).max(120),
+  panel_description: z.string().trim().max(2000).optional().default(''),
+  panel_footer: z.string().trim().max(200).optional().default(''),
+  menu_placeholder: z.string().trim().min(1).max(120),
+  panel_color: z.string().trim().regex(/^#?[0-9a-fA-F]{6}$/, 'Invalid color'),
+  default_category_id: optionalDiscordSnowflakeSchema,
+  ticket_name_template: z.string().trim().min(1).max(80),
+  ticket_topic_template: z.string().trim().max(220).optional().default(''),
+  intro_message: z.string().trim().max(1600).optional().default(''),
+  claim_message: z.string().trim().min(1).max(240),
+  close_message: z.string().trim().min(1).max(240),
+  auto_ping_support: z.boolean().optional().default(true),
+  allow_user_close: z.boolean().optional().default(true),
+  prevent_duplicates: z.boolean().optional().default(true),
+  options: z.array(ticketGeneratorOptionSchema).min(1).max(10),
+});
+
 // ── Site reviews ─────────────────────────────────────────────────────────────
 const siteReviewCreateSchema = z.object({
   rating_half: z.number().int().min(1).max(10),
@@ -420,6 +478,8 @@ module.exports = {
   supportTicketMessageSchema,
   supportTicketStatusSchema,
   supportTicketUpdateSchema,
+  ticketGeneratorOptionSchema,
+  ticketGeneratorConfigSchema,
   siteReviewCreateSchema,
   siteReviewUpdateSchema,
 };

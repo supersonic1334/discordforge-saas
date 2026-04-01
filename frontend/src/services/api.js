@@ -245,6 +245,12 @@ export const commandsAPI = {
   delete: (guildId, id)   => api.delete(`/bot/guilds/${guildId}/commands/${id}`),
 }
 
+export const ticketGeneratorAPI = {
+  get: (guildId) => api.get(`/bot/guilds/${guildId}/tickets`),
+  save: (guildId, data) => api.put(`/bot/guilds/${guildId}/tickets/config`, data),
+  publish: (guildId) => api.post(`/bot/guilds/${guildId}/tickets/publish`),
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────────
 export const logsAPI = {
   list:       (guildId, params) => api.get(`/bot/guilds/${guildId}/logs`, { params }),

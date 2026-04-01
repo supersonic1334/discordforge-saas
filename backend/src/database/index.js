@@ -289,7 +289,7 @@ function runMigrations() {
   ensureColumn('custom_commands', 'usage_hint', "TEXT NOT NULL DEFAULT ''");
   db.exec("UPDATE custom_commands SET execution_mode = 'native' WHERE trim(COALESCE(action_type, '')) != ''");
   db.exec("UPDATE custom_commands SET execution_mode = 'response' WHERE execution_mode NOT IN ('response','native') OR execution_mode IS NULL");
-  db.exec("UPDATE custom_commands SET action_type = '' WHERE action_type NOT IN ('','clear_messages','ticket_panel','ban_member','kick_member','timeout_member','untimeout_member','warn_member') OR action_type IS NULL");
+  db.exec("UPDATE custom_commands SET action_type = '' WHERE action_type NOT IN ('','clear_messages','ticket_panel','ban_member','blacklist_member','kick_member','softban_member','timeout_member','untimeout_member','warn_member','unban_member','unblacklist_member','add_role','remove_role','set_nickname','lock_channel','unlock_channel','slowmode_channel','say_message','announce_message','move_member','disconnect_member') OR action_type IS NULL");
   db.exec("UPDATE custom_commands SET action_config = '{}' WHERE action_config IS NULL OR trim(action_config) = ''");
   db.exec("UPDATE custom_commands SET is_system = 0 WHERE is_system IS NULL");
   db.exec("UPDATE custom_commands SET system_key = '' WHERE system_key IS NULL");

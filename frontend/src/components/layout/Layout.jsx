@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
@@ -374,6 +374,7 @@ export default function Layout() {
     { icon: Ban, label: t('layout.nav.blocked', 'Contrôle d’accès'), path: '/dashboard/blocked', needsGuild: true },
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },
     { icon: Sparkles, label: t('layout.nav.commandsAi', 'Commandes IA'), path: '/dashboard/commands-ai', needsGuild: true },
+    { icon: Ticket, label: t('layout.nav.tickets', 'Tickets'), path: '/dashboard/tickets', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]

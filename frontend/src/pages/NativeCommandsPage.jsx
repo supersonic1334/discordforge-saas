@@ -59,14 +59,12 @@ const UI = {
     saving: 'Sauvegarde...',
     reset: 'Reinitialiser',
     updated: 'Commande synchronisee',
-    systemPanelTitle: 'Commandes automatiques',
-    systemPanelText: 'Ces commandes ne sont pas supprimables. Tu controles seulement leur statut, leur visibilite et leurs reglages natifs.',
+    systemPanelTitle: 'Commandes integrees',
+    systemPanelText: 'Ces commandes executent de vraies actions Discord. Tu peux les activer, les couper et regler leur comportement natif.',
     openAiCommands: 'Ouvrir Commandes IA',
     total: 'Commandes',
     moderationCount: 'Moderation',
     utilityCount: 'Utilitaire',
-    uses: 'Utilisations',
-    botReady: 'Synchro bot automatique',
     logChannel: 'Salon de logs',
     noLogChannel: 'Aucun salon',
     defaultTargetChannel: 'Salon par defaut',
@@ -84,9 +82,6 @@ const UI = {
     maxAmount: 'Maximum',
     allowMentions: 'Autoriser les mentions',
     pingEveryone: 'Autoriser @everyone',
-    builtInLocked: 'Le declencheur et l action native sont verrouilles. La configuration ci-dessous reste la seule partie editable.',
-    responseLabel: 'Apercu reponse',
-    usageLabel: 'Aide d usage',
     liveSyncReady: 'Synchro live active',
     liveSyncSaving: 'Synchronisation...',
   },
@@ -116,14 +111,12 @@ const UI = {
     saving: 'Saving...',
     reset: 'Reset',
     updated: 'Command synced',
-    systemPanelTitle: 'Automatic commands',
-    systemPanelText: 'These commands cannot be deleted. You only control their status, visibility, and native settings.',
+    systemPanelTitle: 'Built-in commands',
+    systemPanelText: 'These commands execute real Discord actions. You can toggle them, disable them, and tune their native behavior.',
     openAiCommands: 'Open AI Commands',
     total: 'Commands',
     moderationCount: 'Moderation',
     utilityCount: 'Utility',
-    uses: 'Uses',
-    botReady: 'Automatic bot sync',
     logChannel: 'Log channel',
     noLogChannel: 'No channel',
     defaultTargetChannel: 'Default channel',
@@ -141,9 +134,6 @@ const UI = {
     maxAmount: 'Maximum',
     allowMentions: 'Allow mentions',
     pingEveryone: 'Allow @everyone',
-    builtInLocked: 'The trigger and native action are locked. The configuration below is the only editable part.',
-    responseLabel: 'Response preview',
-    usageLabel: 'Usage hint',
     liveSyncReady: 'Live sync ready',
     liveSyncSaving: 'Syncing...',
   },
@@ -173,14 +163,12 @@ const UI = {
     saving: 'Guardando...',
     reset: 'Restablecer',
     updated: 'Comando sincronizado',
-    systemPanelTitle: 'Comandos automaticos',
-    systemPanelText: 'Estos comandos no se pueden borrar. Solo controlas su estado, visibilidad y ajustes nativos.',
+    systemPanelTitle: 'Comandos integrados',
+    systemPanelText: 'Estos comandos ejecutan acciones reales de Discord. Puedes activarlos, desactivarlos y ajustar su comportamiento nativo.',
     openAiCommands: 'Abrir Comandos IA',
     total: 'Comandos',
     moderationCount: 'Moderacion',
     utilityCount: 'Utilidad',
-    uses: 'Usos',
-    botReady: 'Sync automatica del bot',
     logChannel: 'Canal de logs',
     noLogChannel: 'Sin canal',
     defaultTargetChannel: 'Canal por defecto',
@@ -198,9 +186,6 @@ const UI = {
     maxAmount: 'Maximo',
     allowMentions: 'Permitir menciones',
     pingEveryone: 'Permitir @everyone',
-    builtInLocked: 'El trigger y la accion nativa estan bloqueados. La configuracion de abajo es la unica parte editable.',
-    responseLabel: 'Vista previa de respuesta',
-    usageLabel: 'Guia de uso',
     liveSyncReady: 'Sync activa',
     liveSyncSaving: 'Sincronizando...',
   },
@@ -263,6 +248,8 @@ function buildSystemActionConfig(command, draft) {
       }
 
     case 'ban_member':
+    case 'blacklist_member':
+    case 'softban_member':
       return {
         ...currentConfig,
         ...base,
@@ -274,10 +261,12 @@ function buildSystemActionConfig(command, draft) {
     case 'kick_member':
     case 'untimeout_member':
     case 'unban_member':
+    case 'unblacklist_member':
     case 'add_role':
     case 'remove_role':
     case 'set_nickname':
     case 'move_member':
+    case 'disconnect_member':
       return {
         ...currentConfig,
         ...base,
@@ -364,10 +353,11 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
   }, [command])
 
   const colors = CATEGORY_STYLES[command.system_category] || CATEGORY_STYLES.utility
-  const moderationWithDm = ['ban_member', 'kick_member', 'timeout_member', 'untimeout_member', 'warn_member']
+  const moderationWithDm = ['ban_member', 'blacklist_member', 'kick_member', 'softban_member', 'timeout_member', 'untimeout_member', 'warn_member']
   const supportsReason = [
     ...moderationWithDm,
     'unban_member',
+    'unblacklist_member',
     'add_role',
     'remove_role',
     'set_nickname',
@@ -375,6 +365,7 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
     'unlock_channel',
     'slowmode_channel',
     'move_member',
+    'disconnect_member',
   ].includes(command.action_type)
   const supportsDefaultChannel = [
     'lock_channel',
@@ -446,28 +437,6 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-            <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{ui.responseLabel}</p>
-            <p className="mt-2 text-sm text-white/72 whitespace-pre-wrap break-words">{command.response}</p>
-            {command.usage_hint ? (
-              <div className="mt-3 border-t border-white/[0.06] pt-3">
-                <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{ui.usageLabel}</p>
-                <p className="mt-2 text-sm text-white/58">{command.usage_hint}</p>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-sm text-white/58">
-            <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{ui.systemPanelTitle}</p>
-            <p className="mt-2">{ui.builtInLocked}</p>
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-mono text-white/40">
-              <span>{ui.uses}: {command.use_count || 0}</span>
-              <span>{ui.botReady}</span>
-            </div>
-          </div>
-        </div>
-
         <button
           type="button"
           onClick={() => setExpanded((current) => !current)}
@@ -481,12 +450,7 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
 
       {expanded && (
         <div className="border-t border-white/[0.06] p-5 space-y-5">
-          <div>
-            <p className="text-xs tracking-[0.25em] uppercase text-white/30 font-mono">{ui.configuration}</p>
-            <div className="mt-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 text-sm text-white/60">
-              {ui.builtInLocked}
-            </div>
-          </div>
+          <p className="text-xs tracking-[0.25em] uppercase text-white/30 font-mono">{ui.configuration}</p>
 
           <div className="grid gap-5 md:grid-cols-2">
             <label className="space-y-2">
@@ -593,7 +557,7 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
             </div>
           )}
 
-          {command.action_type === 'ban_member' && (
+          {['ban_member', 'blacklist_member', 'softban_member'].includes(command.action_type) && (
             <div className="grid gap-5 md:grid-cols-2">
               <label className="space-y-2">
                 <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.deleteMessageSeconds}</span>
