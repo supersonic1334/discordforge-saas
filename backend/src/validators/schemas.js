@@ -131,6 +131,31 @@ const guildDmConfigSchema = z.object({
     (value) => value === '' || /^https?:\/\/\S+$/i.test(value),
     'Invalid appeal server URL'
   ),
+  brand_name: z.string().trim().max(120).optional().default(''),
+  brand_site_url: z.string().trim().max(500).optional().default('').refine(
+    (value) => value === '' || /^https?:\/\/\S+$/i.test(value),
+    'Invalid brand site URL'
+  ),
+  brand_icon_url: z.string().trim().max(1_200_000).optional().default('').refine(
+    (value) => (
+      value === '' ||
+      /^https?:\/\/\S+$/i.test(value) ||
+      /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value)
+    ),
+    'Invalid brand icon'
+  ),
+  brand_logo_url: z.string().trim().max(1_200_000).optional().default('').refine(
+    (value) => (
+      value === '' ||
+      /^https?:\/\/\S+$/i.test(value) ||
+      /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value)
+    ),
+    'Invalid brand logo'
+  ),
+  site_button_label: z.string().trim().max(80).optional().default(''),
+  show_site_link: z.boolean().optional(),
+  show_brand_logo: z.boolean().optional(),
+  footer_text: z.string().trim().max(180).optional().default(''),
 });
 
 const directMessageSchema = z.object({
@@ -383,6 +408,14 @@ const optionalDiscordSnowflakeSchema = z.string().trim().max(32).optional().defa
   (value) => value === '' || /^\d+$/.test(value),
   'Must be a Discord ID'
 );
+const optionalImageAssetSchema = z.string().trim().max(1_200_000).optional().default('').refine(
+  (value) => (
+    value === '' ||
+    /^https?:\/\/\S+$/i.test(value) ||
+    /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value)
+  ),
+  'Invalid image asset'
+);
 
 const ticketGeneratorOptionSchema = z.object({
   key: z.string().trim().min(1).max(32).regex(/^[a-zA-Z0-9_-]+$/, 'Invalid option key'),
@@ -410,6 +443,8 @@ const ticketGeneratorConfigSchema = z.object({
   panel_footer: z.string().trim().max(200).optional().default(''),
   menu_placeholder: z.string().trim().min(1).max(120),
   panel_color: z.string().trim().regex(/^#?[0-9a-fA-F]{6}$/, 'Invalid color'),
+  panel_thumbnail_url: optionalImageAssetSchema,
+  panel_image_url: optionalImageAssetSchema,
   default_category_id: optionalDiscordSnowflakeSchema,
   ticket_name_template: z.string().trim().min(1).max(80),
   ticket_topic_template: z.string().trim().max(220).optional().default(''),

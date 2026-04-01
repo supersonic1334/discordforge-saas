@@ -10,8 +10,8 @@ const DEFAULT_OPTIONS = Object.freeze([
   {
     key: 'contact_staff',
     label: 'Contact staff',
-    description: 'Parler directement avec le staff',
-    emoji: '🛟',
+    description: 'Parler directement avec l equipe du serveur',
+    emoji: '',
     category_id: '',
     role_ids: [],
     ping_roles: true,
@@ -20,14 +20,14 @@ const DEFAULT_OPTIONS = Object.freeze([
     modal_title: 'Contact staff',
     intro_message: 'Bonjour {mention}, ta demande a bien ete ouverte.\n\nCategorie: {label}\nRaison: {reason}',
     ticket_name_template: 'staff-{number}',
-    ticket_topic_template: 'Ticket #{number} • {label} • {user_tag}',
+    ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}',
     enabled: true,
   },
   {
     key: 'report',
     label: 'Report',
     description: 'Signaler un membre ou un incident',
-    emoji: '🚨',
+    emoji: '',
     category_id: '',
     role_ids: [],
     ping_roles: true,
@@ -36,14 +36,30 @@ const DEFAULT_OPTIONS = Object.freeze([
     modal_title: 'Report',
     intro_message: 'Signalement recu pour {mention}.\n\nRaison: {reason}',
     ticket_name_template: 'report-{number}',
-    ticket_topic_template: 'Report #{number} • {user_tag}',
+    ticket_topic_template: 'Report #{number} | {user_tag}',
+    enabled: true,
+  },
+  {
+    key: 'appeal',
+    label: 'Appel sanction',
+    description: 'Demander une revision de sanction',
+    emoji: '',
+    category_id: '',
+    role_ids: [],
+    ping_roles: true,
+    question_label: 'Quelle sanction veux-tu contester ?',
+    question_placeholder: 'Explique la sanction et pourquoi tu fais appel...',
+    modal_title: 'Appel sanction',
+    intro_message: 'Appel de sanction recu pour {mention}.\n\nContexte: {reason}',
+    ticket_name_template: 'appeal-{number}',
+    ticket_topic_template: 'Appel #{number} | {user_tag}',
     enabled: true,
   },
   {
     key: 'partnership',
     label: 'Partenariat',
-    description: 'Proposer un partenariat',
-    emoji: '🤝',
+    description: 'Proposer un partenariat ou une collaboration',
+    emoji: '',
     category_id: '',
     role_ids: [],
     ping_roles: false,
@@ -52,7 +68,55 @@ const DEFAULT_OPTIONS = Object.freeze([
     modal_title: 'Partenariat',
     intro_message: 'Demande partenariat ouverte pour {mention}.\n\nDetails: {reason}',
     ticket_name_template: 'partner-{number}',
-    ticket_topic_template: 'Partenariat #{number} • {user_tag}',
+    ticket_topic_template: 'Partenariat #{number} | {user_tag}',
+    enabled: true,
+  },
+  {
+    key: 'purchase',
+    label: 'Achat',
+    description: 'Question commerciale ou achat de service',
+    emoji: '',
+    category_id: '',
+    role_ids: [],
+    ping_roles: false,
+    question_label: 'De quoi as-tu besoin ?',
+    question_placeholder: 'Produit, offre, budget, informations...',
+    modal_title: 'Achat',
+    intro_message: 'Demande commerciale ouverte pour {mention}.\n\nBesoin: {reason}',
+    ticket_name_template: 'purchase-{number}',
+    ticket_topic_template: 'Achat #{number} | {user_tag}',
+    enabled: true,
+  },
+  {
+    key: 'recruitment',
+    label: 'Recrutement',
+    description: 'Postuler ou contacter l equipe recrutement',
+    emoji: '',
+    category_id: '',
+    role_ids: [],
+    ping_roles: false,
+    question_label: 'Pourquoi souhaites-tu rejoindre l equipe ?',
+    question_placeholder: 'Experience, disponibilites, motivations...',
+    modal_title: 'Recrutement',
+    intro_message: 'Candidature recue pour {mention}.\n\nProfil: {reason}',
+    ticket_name_template: 'recruit-{number}',
+    ticket_topic_template: 'Recrutement #{number} | {user_tag}',
+    enabled: false,
+  },
+  {
+    key: 'other_request',
+    label: 'Autre demande',
+    description: 'Toute autre demande a traiter par le staff',
+    emoji: '',
+    category_id: '',
+    role_ids: [],
+    ping_roles: false,
+    question_label: 'Explique ta demande',
+    question_placeholder: 'Decris precisement ce dont tu as besoin...',
+    modal_title: 'Autre demande',
+    intro_message: 'Nouvelle demande ouverte pour {mention}.\n\nDetails: {reason}',
+    ticket_name_template: 'request-{number}',
+    ticket_topic_template: 'Demande #{number} | {user_tag}',
     enabled: true,
   },
 ]);
@@ -61,15 +125,17 @@ const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   panel_channel_id: '',
   panel_message_id: '',
-  panel_title: 'Ticket Generator',
-  panel_description: 'Choisis le type de ticket a ouvrir, puis decris ta demande dans le formulaire.',
-  panel_footer: 'Un ticket ouvert par categorie maximum si la protection doublon est active.',
-  menu_placeholder: 'Choisis une categorie de ticket',
+  panel_title: 'Support & tickets',
+  panel_description: 'Choisis le bon type de ticket dans le menu ci-dessous. Un formulaire rapide te sera ensuite propose pour ouvrir un salon prive avec la bonne equipe.',
+  panel_footer: 'Une seule demande active par categorie si la protection anti-doublon est active.',
+  menu_placeholder: 'Choisis le bon type de ticket',
   panel_color: DEFAULT_COLOR,
+  panel_thumbnail_url: '',
+  panel_image_url: '',
   default_category_id: '',
   ticket_name_template: 'ticket-{number}',
-  ticket_topic_template: 'Ticket #{number} • {label} • {user_tag}',
-  intro_message: 'Bonjour {mention}, un membre du staff arrivera bientot.\n\nCategorie: {label}\nRaison: {reason}',
+  ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}',
+  intro_message: 'Bonjour {mention}, ton ticket est bien cree.\n\nCategorie: {label}\nRaison: {reason}',
   claim_message: 'Ticket pris en charge par {claimer}.',
   close_message: 'Ticket ferme par {closer}.',
   auto_ping_support: true,
@@ -104,6 +170,14 @@ function normalizeColor(value, fallbackValue = DEFAULT_COLOR) {
   const raw = String(value || fallbackValue || '').trim();
   const hex = raw.startsWith('#') ? raw : `#${raw}`;
   return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex.toLowerCase() : DEFAULT_COLOR;
+}
+
+function normalizeAssetUrl(value, fallbackValue = '') {
+  const raw = String(value ?? fallbackValue ?? '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\/\S+$/i.test(raw)) return raw.slice(0, 1_200_000);
+  if (/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(raw)) return raw.slice(0, 1_200_000);
+  return String(fallbackValue || '').trim().slice(0, 1_200_000);
 }
 
 function sanitizeOptionKey(value, fallback = 'ticket') {
@@ -154,7 +228,7 @@ function mergeOptions(rawOptions = []) {
   const normalized = [];
 
   input.slice(0, MAX_OPTIONS).forEach((option, index) => {
-    const fallback = DEFAULT_OPTIONS[index] || {};
+    const fallback = DEFAULT_OPTIONS.find((item) => item.key === String(option?.key || '').trim()) || DEFAULT_OPTIONS[index] || {};
     const nextOption = normalizeOption(option, fallback, index);
     let nextKey = nextOption.key;
 
@@ -188,6 +262,8 @@ function ensureGeneratorRow(internalGuildId) {
     panel_footer: DEFAULT_CONFIG.panel_footer,
     menu_placeholder: DEFAULT_CONFIG.menu_placeholder,
     panel_color: DEFAULT_CONFIG.panel_color,
+    panel_thumbnail_url: DEFAULT_CONFIG.panel_thumbnail_url,
+    panel_image_url: DEFAULT_CONFIG.panel_image_url,
     default_category_id: '',
     ticket_name_template: DEFAULT_CONFIG.ticket_name_template,
     ticket_topic_template: DEFAULT_CONFIG.ticket_topic_template,
@@ -218,6 +294,8 @@ function mapGeneratorRow(row) {
     panel_footer: normalizeText(source.panel_footer, 200, DEFAULT_CONFIG.panel_footer),
     menu_placeholder: normalizeText(source.menu_placeholder, 120, DEFAULT_CONFIG.menu_placeholder) || DEFAULT_CONFIG.menu_placeholder,
     panel_color: normalizeColor(source.panel_color, DEFAULT_CONFIG.panel_color),
+    panel_thumbnail_url: normalizeAssetUrl(source.panel_thumbnail_url, DEFAULT_CONFIG.panel_thumbnail_url),
+    panel_image_url: normalizeAssetUrl(source.panel_image_url, DEFAULT_CONFIG.panel_image_url),
     default_category_id: normalizeSnowflake(source.default_category_id),
     ticket_name_template: normalizeText(source.ticket_name_template, 80, DEFAULT_CONFIG.ticket_name_template) || DEFAULT_CONFIG.ticket_name_template,
     ticket_topic_template: normalizeText(source.ticket_topic_template, 220, DEFAULT_CONFIG.ticket_topic_template) || DEFAULT_CONFIG.ticket_topic_template,
@@ -331,6 +409,8 @@ function saveGuildTicketGenerator(internalGuildId, payload = {}) {
     panel_footer: normalizeText(payload.panel_footer, 200, current.panel_footer),
     menu_placeholder: normalizeText(payload.menu_placeholder, 120, current.menu_placeholder) || current.menu_placeholder,
     panel_color: normalizeColor(payload.panel_color, current.panel_color),
+    panel_thumbnail_url: normalizeAssetUrl(payload.panel_thumbnail_url, current.panel_thumbnail_url),
+    panel_image_url: normalizeAssetUrl(payload.panel_image_url, current.panel_image_url),
     default_category_id: normalizeSnowflake(payload.default_category_id, current.default_category_id),
     ticket_name_template: normalizeText(payload.ticket_name_template, 80, current.ticket_name_template) || current.ticket_name_template,
     ticket_topic_template: normalizeText(payload.ticket_topic_template, 220, current.ticket_topic_template) || current.ticket_topic_template,
@@ -353,6 +433,8 @@ function saveGuildTicketGenerator(internalGuildId, payload = {}) {
     panel_footer: nextConfig.panel_footer,
     menu_placeholder: nextConfig.menu_placeholder,
     panel_color: nextConfig.panel_color,
+    panel_thumbnail_url: nextConfig.panel_thumbnail_url,
+    panel_image_url: nextConfig.panel_image_url,
     default_category_id: nextConfig.default_category_id,
     ticket_name_template: nextConfig.ticket_name_template,
     ticket_topic_template: nextConfig.ticket_topic_template,

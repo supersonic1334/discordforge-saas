@@ -96,6 +96,48 @@ function clampDurationMs(value, minimum, maximum, fallback) {
   return Math.min(maximum, Math.max(minimum, Math.round(numeric)));
 }
 
+function parseFlexibleDurationMs(value, {
+  fallback,
+  minimum = 0,
+  maximum = Number.MAX_SAFE_INTEGER,
+  defaultUnit = 'm',
+  allowZero = false,
+} = {}) {
+  if (value === null || value === undefined || value === '') return fallback;
+
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return fallback;
+  if (allowZero && (raw === '0' || raw === '0s' || raw === '0m' || raw === '0h' || raw === '0d' || raw === '0j')) {
+    return 0;
+  }
+
+  const match = raw.match(/^(\d+)\s*([smhdj]?)$/);
+  if (!match) return fallback;
+
+  const amount = Number(match[1]);
+  const unit = match[2] || defaultUnit;
+  const multiplier = unit === 's'
+    ? 1000
+    : unit === 'h'
+      ? 3600000
+      : (unit === 'd' || unit === 'j')
+        ? 86400000
+        : 60000;
+
+  const computed = Math.round(amount * multiplier);
+  if (allowZero && computed === 0) return 0;
+  return clampDurationMs(computed, minimum, maximum, fallback);
+}
+
+function parseFlexibleDurationSeconds(value, options = {}) {
+  const fallbackMs = Math.max(0, Math.round(Number(options.fallback || 0) * 1000));
+  const next = parseFlexibleDurationMs(value, {
+    ...options,
+    fallback: fallbackMs,
+  });
+  return Math.max(0, Math.round(Number(next || 0) / 1000));
+}
+
 function normalizeSnowflake(value, fallbackValue = '') {
   const raw = String(value ?? fallbackValue ?? '').trim();
   return /^\d+$/.test(raw) ? raw : '';
@@ -120,17 +162,18 @@ function normalizeCommandActionConfig(actionType, rawValue = {}) {
   const fallback = DEFAULT_ACTION_CONFIG_BY_TYPE.get(actionType) || {};
 
   switch (actionType) {
-    case COMMAND_ACTION_TYPES.CLEAR_MESSAGES:
+    case COMMAND_ACTION_TYPES.CLEAR_MESSAGES: {
+      const minAmount = clampNumber(source.min_amount ?? fallback.min_amount, 1, 100, 1);
       return {
         log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
-        min_amount: clampNumber(source.min_amount ?? fallback.min_amount, 1, 100, 1),
-        max_amount: clampNumber(source.max_amount ?? fallback.max_amount, 1, 100, 100),
-        default_amount: clampNumber(source.default_amount ?? fallback.default_amount, 1, 100, 20),
+        min_amount: minAmount,
+        max_amount: clampNumber(source.max_amount ?? fallback.max_amount, minAmount, 100, 100),
         success_message: String(source.success_message ?? fallback.success_message ?? '{count} messages supprimes dans {channel}.').trim().slice(0, 220),
         empty_message: String(source.empty_message ?? fallback.empty_message ?? 'Aucun message recent a supprimer ici.').trim().slice(0, 220),
         denied_message: String(source.denied_message ?? fallback.denied_message ?? 'Tu dois avoir la permission de gerer les messages pour utiliser cette commande.').trim().slice(0, 220),
         success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
       };
+    }
 
     case COMMAND_ACTION_TYPES.BAN_MEMBER:
     case COMMAND_ACTION_TYPES.BLACKLIST_MEMBER:
@@ -139,7 +182,13 @@ function normalizeCommandActionConfig(actionType, rawValue = {}) {
         log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
         dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
         require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? true),
-        delete_message_seconds: clampNumber(source.delete_message_seconds ?? fallback.delete_message_seconds, 0, 604800, 0),
+        delete_message_seconds: parseFlexibleDurationSeconds(source.delete_message_seconds ?? fallback.delete_message_seconds, {
+          fallback: Number(fallback.delete_message_seconds || 0),
+          minimum: 0,
+          maximum: 604800000,
+          defaultUnit: 's',
+          allowZero: true,
+        }),
         success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
       };
 
@@ -156,7 +205,12 @@ function normalizeCommandActionConfig(actionType, rawValue = {}) {
         log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
         dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
         require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? true),
-        default_duration_ms: clampDurationMs(source.default_duration_ms ?? fallback.default_duration_ms, 60000, 2419200000, 600000),
+        default_duration_ms: parseFlexibleDurationMs(source.default_duration_ms ?? fallback.default_duration_ms, {
+          fallback: Number(fallback.default_duration_ms || 600000),
+          minimum: 60000,
+          maximum: 2419200000,
+          defaultUnit: 'm',
+        }),
         success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
       };
 
@@ -204,7 +258,13 @@ function normalizeCommandActionConfig(actionType, rawValue = {}) {
         log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
         default_channel_id: normalizeSnowflake(source.default_channel_id, fallback.default_channel_id),
         require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? false),
-        default_seconds: clampNumber(source.default_seconds ?? fallback.default_seconds, 0, 21600, 30),
+        default_seconds: parseFlexibleDurationSeconds(source.default_seconds ?? fallback.default_seconds, {
+          fallback: Number(fallback.default_seconds || 30),
+          minimum: 0,
+          maximum: 21600000,
+          defaultUnit: 's',
+          allowZero: true,
+        }),
         success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
       };
 
@@ -286,7 +346,7 @@ function buildSlashCommandPayload(command) {
           type: ApplicationCommandOptionType.Integer,
           name: 'amount',
           description: 'Nombre de messages a supprimer',
-          required: false,
+          required: true,
           min_value: 1,
           max_value: 100,
         },
@@ -607,7 +667,7 @@ function parseDurationToMs(value, fallbackMs = 600000) {
   }
 
   const raw = String(value || '').trim().toLowerCase();
-  const match = raw.match(/^(\d+)(s|m|h|d)?$/);
+  const match = raw.match(/^(\d+)(s|m|h|d|j)?$/);
   if (!match) return fallbackMs;
 
   const amount = Number(match[1]);
@@ -616,7 +676,7 @@ function parseDurationToMs(value, fallbackMs = 600000) {
     ? 1000
     : unit === 'h'
       ? 3600000
-      : unit === 'd'
+      : (unit === 'd' || unit === 'j')
         ? 86400000
         : 60000;
   return clampDurationMs(amount * multiplier, 60000, 2419200000, fallbackMs);
@@ -1188,16 +1248,26 @@ class BotProcess extends EventEmitter {
   }
 
   _buildTicketGeneratorPanelPayload(generator) {
+    const embed = {
+      title: String(generator.panel_title || 'Ticket Generator').slice(0, 256),
+      description: String(generator.panel_description || 'Choisis une categorie de ticket puis remplis le formulaire.').slice(0, 4000),
+      color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
+      footer: generator.panel_footer
+        ? { text: String(generator.panel_footer).slice(0, 2048) }
+        : undefined,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (generator.panel_thumbnail_url) {
+      embed.thumbnail = { url: String(generator.panel_thumbnail_url) };
+    }
+
+    if (generator.panel_image_url) {
+      embed.image = { url: String(generator.panel_image_url) };
+    }
+
     return {
-      embeds: [{
-        title: String(generator.panel_title || 'Ticket Generator').slice(0, 256),
-        description: String(generator.panel_description || 'Choisis une categorie de ticket puis remplis le formulaire.').slice(0, 4000),
-        color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
-        footer: generator.panel_footer
-          ? { text: String(generator.panel_footer).slice(0, 2048) }
-          : undefined,
-        timestamp: new Date().toISOString(),
-      }],
+      embeds: [embed],
       components: this._buildTicketGeneratorComponents(generator),
     };
   }
@@ -1421,15 +1491,47 @@ class BotProcess extends EventEmitter {
       .setLabel('Fermer')
       .setStyle(ButtonStyle.Danger);
 
+    const openingEmbed = {
+      title: `${String(option.label || 'Ticket').slice(0, 80)} | #${entry.ticket_number}`,
+      description: introMessage,
+      color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
+      fields: [
+        {
+          name: 'Auteur',
+          value: interaction.user.id ? `<@${interaction.user.id}>` : (interaction.user.tag || interaction.user.username || interaction.user.id),
+          inline: true,
+        },
+        {
+          name: 'Categorie',
+          value: String(option.label || 'Ticket').slice(0, 1024),
+          inline: true,
+        },
+        {
+          name: 'Raison',
+          value: reason.slice(0, 1024) || 'Aucune raison',
+        },
+      ],
+      footer: {
+        text: `Ticket ${entry.ticket_number}`,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    if (generator.panel_thumbnail_url) {
+      openingEmbed.thumbnail = { url: String(generator.panel_thumbnail_url) };
+    }
+
+    if (generator.panel_image_url) {
+      openingEmbed.image = { url: String(generator.panel_image_url) };
+    }
+
     await channel.send({
-      content: [
-        shouldPingRoles ? supportRoleIds.map((roleId) => `<@&${roleId}>`).join(' ') : '',
-        introMessage,
-      ].filter(Boolean).join('\n\n'),
+      content: shouldPingRoles ? supportRoleIds.map((roleId) => `<@&${roleId}>`).join(' ') : '',
       allowedMentions: {
         roles: shouldPingRoles ? supportRoleIds : [],
         users: interaction.user.id ? [interaction.user.id] : [],
       },
+      embeds: [openingEmbed],
       components: [new ActionRowBuilder().addComponents(claimButton, closeButton)],
     }).catch(() => {});
 
@@ -1622,9 +1724,20 @@ class BotProcess extends EventEmitter {
     if (!guild || !channel?.bulkDelete) return false;
 
     const actionConfig = normalizeCommandActionConfig(COMMAND_ACTION_TYPES.CLEAR_MESSAGES, command.action_config);
-    const amount = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()
-      ? clampNumber(source.options.getInteger('amount') ?? actionConfig.default_amount, actionConfig.min_amount, actionConfig.max_amount, actionConfig.default_amount)
-      : clampNumber(this._extractNativeArgs(source, matchedTrigger)[0] ?? actionConfig.default_amount, actionConfig.min_amount, actionConfig.max_amount, actionConfig.default_amount);
+    const isSlash = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand();
+    const rawAmount = isSlash
+      ? source.options.getInteger('amount')
+      : this._extractNativeArgs(source, matchedTrigger)[0];
+
+    if (!isSlash && (rawAmount === null || rawAmount === undefined || String(rawAmount).trim() === '')) {
+      const usageMessage = command.usage_hint
+        ? `Indique une quantite. Exemple: ${command.usage_hint}`
+        : 'Indique le nombre de messages a supprimer.';
+      await this._replyToNativeSource(source, usageMessage, { ephemeral: true });
+      return true;
+    }
+
+    const amount = clampNumber(rawAmount, actionConfig.min_amount, actionConfig.max_amount, actionConfig.min_amount);
 
     const memberPermissions = typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()
       ? source.memberPermissions

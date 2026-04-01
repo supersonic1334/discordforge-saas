@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket, LayoutTemplate
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
@@ -370,6 +370,7 @@ export default function Layout() {
     { icon: ShieldAlert, label: t('layout.nav.incidents', 'Incidents'), path: '/dashboard/incidents', needsGuild: true },
     { icon: Send, label: t('layout.nav.messages', 'Messages'), path: '/dashboard/messages', needsGuild: true },
     { icon: Mail, label: t('layout.nav.dmCenter', 'Centre DM'), path: '/dashboard/dm-center', needsGuild: true },
+    { icon: LayoutTemplate, label: t('layout.nav.dmBranding', 'DM sanctions'), path: '/dashboard/dm-branding', needsGuild: true },
     { icon: BellRing, label: t('layout.nav.notifications', 'Notifications'), path: '/dashboard/notifications', needsGuild: true },
     { icon: Ban, label: t('layout.nav.blocked', 'Contrôle d’accès'), path: '/dashboard/blocked', needsGuild: true },
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },

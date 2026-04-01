@@ -783,7 +783,7 @@ function removeGuildCollaborator({ guildId, ownerUserId, memberUserId }) {
 
 function buildSnapshotPayload(guildId) {
   return {
-    version: 1,
+    version: 2,
     modules: db.raw('SELECT module_type, enabled, simple_config, advanced_config FROM modules WHERE guild_id = ? ORDER BY module_type ASC', [guildId]),
     custom_commands: db.raw(`
       SELECT trigger, command_type, command_prefix, command_name, description, response, reply_in_dm, response_mode,
@@ -795,7 +795,22 @@ function buildSnapshotPayload(guildId) {
     `, [guildId]),
     guild_log_channel: db.raw('SELECT channel_id, log_events, enabled FROM guild_log_channels WHERE guild_id = ? LIMIT 1', [guildId])[0] || null,
     guild_dm_settings: db.raw(`
-      SELECT auto_dm_warn, auto_dm_timeout, auto_dm_kick, auto_dm_ban, auto_dm_blacklist, appeal_server_name, appeal_server_url
+      SELECT
+        auto_dm_warn,
+        auto_dm_timeout,
+        auto_dm_kick,
+        auto_dm_ban,
+        auto_dm_blacklist,
+        appeal_server_name,
+        appeal_server_url,
+        brand_name,
+        brand_icon_url,
+        brand_logo_url,
+        brand_site_url,
+        site_button_label,
+        show_site_link,
+        show_brand_logo,
+        footer_text
       FROM guild_dm_settings
       WHERE guild_id = ?
       LIMIT 1
@@ -947,6 +962,14 @@ function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
         auto_dm_blacklist: payload.guild_dm_settings.auto_dm_blacklist ? 1 : 0,
         appeal_server_name: payload.guild_dm_settings.appeal_server_name || '',
         appeal_server_url: payload.guild_dm_settings.appeal_server_url || '',
+        brand_name: payload.guild_dm_settings.brand_name || '',
+        brand_icon_url: payload.guild_dm_settings.brand_icon_url || '',
+        brand_logo_url: payload.guild_dm_settings.brand_logo_url || '',
+        brand_site_url: payload.guild_dm_settings.brand_site_url || '',
+        site_button_label: payload.guild_dm_settings.site_button_label || '',
+        show_site_link: payload.guild_dm_settings.show_site_link ? 1 : 0,
+        show_brand_logo: payload.guild_dm_settings.show_brand_logo ? 1 : 0,
+        footer_text: payload.guild_dm_settings.footer_text || '',
         created_at: now,
         updated_at: now,
       });

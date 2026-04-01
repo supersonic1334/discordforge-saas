@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { ArrowRight, LifeBuoy, Plus, RefreshCw, Save, Send, Sparkles, Ticket, Users } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronUp, ImagePlus, LifeBuoy, RefreshCw, Save, Send, Sparkles, Ticket, Upload, Users, X } from 'lucide-react'
 import { botAPI, ticketGeneratorAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
@@ -11,231 +11,91 @@ const CATEGORY_CHANNEL_TYPE = 4
 const TEXT_CHANNEL_TYPES = new Set([0, 5, 11, 12, 15])
 const AUTO_REFRESH_MS = 12000
 
-const UI = {
-  fr: {
-    title: 'Ticket Generator',
-    subtitle: 'Panel Discord reel avec menu, formulaire, creation automatique du salon ticket et ping staff configurable.',
-    selectServerTitle: "Choisis d'abord un serveur",
-    selectServerText: 'Le systeme tickets se configure serveur par serveur.',
-    selectServerAction: 'Choisir un serveur',
-    refresh: 'Recharger',
-    save: 'Sauvegarder',
-    saving: 'Sauvegarde...',
-    publish: 'Publier le panel',
-    publishing: 'Publication...',
-    saved: 'Configuration tickets sauvegardee',
-    published: 'Panel tickets publie',
-    synced: 'Tickets synchronises',
-    loading: 'Chargement...',
-    loadError: 'Impossible de charger le generateur de tickets.',
-    stats: {
-      forms: 'Formulaires',
-      open: 'Ouverts',
-      claimed: 'Pris',
-      total: 'Total',
-    },
-    panel: 'Publication Discord',
-    panelHint: 'Choisis le salon du panel, le texte visible et l apparence du menu.',
-    defaults: 'Templates et comportement',
-    defaultsHint: 'Regle les messages par defaut, la categorie parent et les regles globales.',
-    options: 'Types de tickets',
-    optionsHint: 'Chaque entree du menu peut avoir ses propres roles, question, categorie et templates.',
-    recent: 'Activite recente',
-    recentHint: 'Derniers tickets ouverts, pris ou fermes depuis Discord.',
-    panelChannel: 'Salon du panel',
-    defaultCategory: 'Categorie parent par defaut',
-    noChannel: 'Aucun salon',
-    noCategory: 'Aucune categorie',
-    panelTitle: 'Titre du panel',
-    panelDescription: 'Description',
-    panelFooter: 'Footer',
-    placeholder: 'Placeholder du menu',
-    color: 'Couleur hex',
-    ticketNameTemplate: 'Template nom salon',
-    ticketTopicTemplate: 'Template topic salon',
-    introMessage: 'Message d ouverture',
-    claimMessage: 'Message de claim',
-    closeMessage: 'Message de fermeture',
-    enabled: 'Actif',
-    disabled: 'Desactive',
-    autoPing: 'Ping auto des roles staff',
-    allowUserClose: 'Autoriser l auteur a fermer',
-    preventDuplicates: 'Bloquer les doublons',
-    addType: 'Ajouter un type',
-    removeType: 'Supprimer',
-    key: 'Cle technique',
-    label: 'Label',
-    description: 'Description courte',
-    emoji: 'Emoji',
-    modalTitle: 'Titre du formulaire',
-    questionLabel: 'Question',
-    questionPlaceholder: 'Placeholder question',
-    optionCategory: 'Categorie parent',
-    optionIntro: 'Message d intro',
-    supportRoles: 'Roles staff',
-    pingRoles: 'Ping a l ouverture',
-    publishedPanel: 'Panel publie',
-    notPublished: 'Pas encore publie',
-    ticketChannel: 'Salon',
-    ticketReason: 'Raison',
-    ticketCreator: 'Auteur',
-    noTickets: 'Aucun ticket pour le moment.',
-    addOptionLimit: 'Maximum 10 types de tickets.',
-    duplicateKeys: 'Chaque type de ticket doit avoir une cle unique.',
-  },
-  en: {
-    title: 'Ticket Generator',
-    subtitle: 'Real Discord panel with menu, form, automatic ticket channel creation and configurable staff ping.',
-    selectServerTitle: 'Choose a server first',
-    selectServerText: 'The ticket system is configured per server.',
-    selectServerAction: 'Choose a server',
-    refresh: 'Refresh',
-    save: 'Save',
-    saving: 'Saving...',
-    publish: 'Publish panel',
-    publishing: 'Publishing...',
-    saved: 'Ticket configuration saved',
-    published: 'Ticket panel published',
-    synced: 'Tickets synced',
-    loading: 'Loading...',
-    loadError: 'Unable to load the ticket generator.',
-    stats: {
-      forms: 'Forms',
-      open: 'Open',
-      claimed: 'Claimed',
-      total: 'Total',
-    },
-    panel: 'Discord publish',
-    panelHint: 'Choose the panel channel, visible text and menu appearance.',
-    defaults: 'Templates and behavior',
-    defaultsHint: 'Tune default messages, parent category and global rules.',
-    options: 'Ticket types',
-    optionsHint: 'Each menu entry can have its own roles, question, category and templates.',
-    recent: 'Recent activity',
-    recentHint: 'Latest tickets opened, claimed or closed from Discord.',
-    panelChannel: 'Panel channel',
-    defaultCategory: 'Default parent category',
-    noChannel: 'No channel',
-    noCategory: 'No category',
-    panelTitle: 'Panel title',
-    panelDescription: 'Description',
-    panelFooter: 'Footer',
-    placeholder: 'Menu placeholder',
-    color: 'Hex color',
-    ticketNameTemplate: 'Channel name template',
-    ticketTopicTemplate: 'Channel topic template',
-    introMessage: 'Opening message',
-    claimMessage: 'Claim message',
-    closeMessage: 'Close message',
-    enabled: 'Enabled',
-    disabled: 'Disabled',
-    autoPing: 'Auto ping support roles',
-    allowUserClose: 'Allow author close',
-    preventDuplicates: 'Block duplicates',
-    addType: 'Add type',
-    removeType: 'Remove',
-    key: 'Technical key',
-    label: 'Label',
-    description: 'Short description',
-    emoji: 'Emoji',
-    modalTitle: 'Form title',
-    questionLabel: 'Question',
-    questionPlaceholder: 'Question placeholder',
-    optionCategory: 'Parent category',
-    optionIntro: 'Intro message',
-    supportRoles: 'Support roles',
-    pingRoles: 'Ping on open',
-    publishedPanel: 'Published panel',
-    notPublished: 'Not published yet',
-    ticketChannel: 'Channel',
-    ticketReason: 'Reason',
-    ticketCreator: 'Author',
-    noTickets: 'No tickets yet.',
-    addOptionLimit: 'Maximum 10 ticket types.',
-    duplicateKeys: 'Every ticket type needs a unique key.',
-  },
+const PRESETS = [
+  { key: 'contact_staff', label: 'Contact staff', description: 'Parler directement avec le staff', question_label: 'Pourquoi veux-tu contacter le staff ?', question_placeholder: 'Explique clairement ta demande...', intro_message: 'Bonjour {mention}, ta demande a bien ete ouverte.\n\nCategorie: {label}\nRaison: {reason}', ticket_name_template: 'staff-{number}', ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}', enabled: true, ping_roles: true },
+  { key: 'report', label: 'Report', description: 'Signaler un membre ou un incident', question_label: 'Que veux-tu signaler ?', question_placeholder: 'Donne le plus de details possible...', intro_message: 'Signalement recu pour {mention}.\n\nRaison: {reason}', ticket_name_template: 'report-{number}', ticket_topic_template: 'Report #{number} | {user_tag}', enabled: true, ping_roles: true },
+  { key: 'appeal', label: 'Appel sanction', description: 'Demander une revision de sanction', question_label: 'Quelle sanction veux-tu contester ?', question_placeholder: 'Explique la sanction et pourquoi tu fais appel...', intro_message: 'Appel de sanction recu pour {mention}.\n\nContexte: {reason}', ticket_name_template: 'appeal-{number}', ticket_topic_template: 'Appel #{number} | {user_tag}', enabled: true, ping_roles: true },
+  { key: 'partnership', label: 'Partenariat', description: 'Proposer un partenariat ou une collaboration', question_label: 'Parle-nous de ton partenariat', question_placeholder: 'Serveur, objectifs, lien, idee...', intro_message: 'Demande partenariat ouverte pour {mention}.\n\nDetails: {reason}', ticket_name_template: 'partner-{number}', ticket_topic_template: 'Partenariat #{number} | {user_tag}', enabled: true, ping_roles: false },
+  { key: 'purchase', label: 'Achat', description: 'Question commerciale ou achat de service', question_label: 'De quoi as-tu besoin ?', question_placeholder: 'Produit, offre, budget, informations...', intro_message: 'Demande commerciale ouverte pour {mention}.\n\nBesoin: {reason}', ticket_name_template: 'purchase-{number}', ticket_topic_template: 'Achat #{number} | {user_tag}', enabled: true, ping_roles: false },
+  { key: 'recruitment', label: 'Recrutement', description: 'Postuler ou contacter l equipe recrutement', question_label: 'Pourquoi souhaites-tu rejoindre l equipe ?', question_placeholder: 'Experience, disponibilites, motivations...', intro_message: 'Candidature recue pour {mention}.\n\nProfil: {reason}', ticket_name_template: 'recruit-{number}', ticket_topic_template: 'Recrutement #{number} | {user_tag}', enabled: false, ping_roles: false },
+]
+
+const PRESET_KEYS = new Set(PRESETS.map((item) => item.key))
+
+const DEFAULT_CONFIG = {
+  enabled: true,
+  panel_channel_id: '',
+  panel_message_id: '',
+  panel_title: 'Support & tickets',
+  panel_description: 'Choisis le bon type de ticket dans le menu ci-dessous. Un formulaire rapide te sera ensuite propose pour ouvrir un salon prive avec la bonne equipe.',
+  panel_footer: 'Une seule demande active par categorie si la protection anti-doublon est active.',
+  menu_placeholder: 'Choisis le bon type de ticket',
+  panel_color: '#7c3aed',
+  panel_thumbnail_url: '',
+  panel_image_url: '',
+  default_category_id: '',
+  ticket_name_template: 'ticket-{number}',
+  ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}',
+  intro_message: 'Bonjour {mention}, ton ticket est bien cree.\n\nCategorie: {label}\nRaison: {reason}',
+  claim_message: 'Ticket pris en charge par {claimer}.',
+  close_message: 'Ticket ferme par {closer}.',
+  auto_ping_support: true,
+  allow_user_close: true,
+  prevent_duplicates: true,
+  options: PRESETS,
 }
 
-function getUi(locale) {
-  const key = String(locale || 'fr').toLowerCase().split('-')[0]
-  return UI[key] || UI.fr
-}
-
-function getErrorMessage(error) {
-  return error?.response?.data?.error || error?.message || 'Unexpected error'
-}
-
-function isTextChannel(channel) {
-  return TEXT_CHANNEL_TYPES.has(Number(channel?.type))
-}
-
-function isCategoryChannel(channel) {
-  return Number(channel?.type) === CATEGORY_CHANNEL_TYPE
-}
-
-function sortChannels(channels) {
-  return [...channels].sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
-}
-
-function sortRoles(roles) {
-  return [...roles]
-    .filter((role) => role?.name !== '@everyone')
-    .sort((a, b) => Number(b?.position || 0) - Number(a?.position || 0))
-}
-
-function cloneConfig(value) {
-  return JSON.parse(JSON.stringify(value || {}))
-}
-
-function buildOptionKey(base, existingKeys) {
-  const normalized = String(base || 'ticket')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 32) || 'ticket'
-  let nextKey = normalized
-  let suffix = 1
-
-  while (existingKeys.has(nextKey)) {
-    nextKey = `${normalized}_${suffix}`.slice(0, 32)
-    suffix += 1
-  }
-
-  return nextKey
-}
-
-function createOptionDraft(existingOptions = []) {
-  const existingKeys = new Set(existingOptions.map((option) => String(option?.key || '').trim()).filter(Boolean))
-  const key = buildOptionKey(`ticket_${existingOptions.length + 1}`, existingKeys)
-  const label = `Ticket ${existingOptions.length + 1}`
-
-  return {
-    key,
-    label,
-    description: 'Nouvelle categorie de ticket',
-    emoji: '',
-    category_id: '',
-    role_ids: [],
-    ping_roles: true,
-    question_label: 'Explique ta demande',
-    question_placeholder: 'Donne le plus de details possible...',
-    modal_title: label,
-    intro_message: 'Bonjour {mention}, ton ticket est bien ouvert.\n\nRaison: {reason}',
-    ticket_name_template: `${key}-{number}`,
-    ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}',
-    enabled: true,
-  }
-}
+const getErrorMessage = (error) => error?.response?.data?.error || error?.message || 'Erreur inattendue'
+const isTextChannel = (channel) => TEXT_CHANNEL_TYPES.has(Number(channel?.type))
+const isCategoryChannel = (channel) => Number(channel?.type) === CATEGORY_CHANNEL_TYPE
+const sortChannels = (channels) => [...channels].sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+const sortRoles = (roles) => [...roles].filter((role) => role?.name !== '@everyone').sort((a, b) => Number(b?.position || 0) - Number(a?.position || 0))
+const clone = (value) => JSON.parse(JSON.stringify(value || {}))
 
 function formatDate(locale, value) {
-  if (!value) return '--'
   try {
-    return new Date(value).toLocaleString(locale)
+    return value ? new Date(value).toLocaleString(locale || 'fr-FR') : '--'
   } catch {
-    return value
+    return value || '--'
   }
 }
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('Lecture image impossible'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function mergeOptions(options = []) {
+  const map = new Map((Array.isArray(options) ? options : []).map((item) => [String(item?.key || '').trim(), item]).filter(([key]) => key))
+  const presets = PRESETS.map((template) => {
+    const current = map.get(template.key) || {}
+    return {
+      ...template,
+      ...current,
+      key: template.key,
+      label: String(current.label || template.label),
+      description: String(current.description || template.description),
+      role_ids: Array.isArray(current.role_ids) ? current.role_ids : [],
+      category_id: String(current.category_id || ''),
+      question_label: String(current.question_label || template.question_label),
+      question_placeholder: String(current.question_placeholder || template.question_placeholder),
+      modal_title: String(current.modal_title || current.label || template.label),
+      intro_message: String(current.intro_message || template.intro_message),
+      ticket_name_template: String(current.ticket_name_template || template.ticket_name_template),
+      ticket_topic_template: String(current.ticket_topic_template || template.ticket_topic_template),
+      enabled: typeof current.enabled === 'boolean' ? current.enabled : template.enabled,
+      ping_roles: typeof current.ping_roles === 'boolean' ? current.ping_roles : template.ping_roles,
+    }
+  })
+  const extras = (Array.isArray(options) ? options : []).filter((item) => !PRESET_KEYS.has(String(item?.key || '').trim()))
+  return [...presets, ...extras]
+}
+
+const normalizeConfig = (value = {}) => ({ ...DEFAULT_CONFIG, ...(value || {}), options: mergeOptions(value?.options) })
 
 function StatCard({ label, value, icon: Icon, tone }) {
   return (
@@ -253,126 +113,56 @@ function StatCard({ label, value, icon: Icon, tone }) {
   )
 }
 
-function TogglePill({ active, onClick, activeLabel, inactiveLabel }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-mono transition-all ${
-        active
-          ? 'border-emerald-400/30 bg-emerald-500/14 text-emerald-300'
-          : 'border-white/10 bg-white/[0.04] text-white/45 hover:text-white'
-      }`}
-    >
-      {active ? activeLabel : inactiveLabel}
-    </button>
-  )
-}
-
 function SelectField({ label, value, onChange, options, emptyLabel }) {
   return (
     <label className="space-y-2">
       <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">{label}</span>
-      <select
-        value={value || ''}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-400/25"
-      >
-        <option value="">{emptyLabel}</option>
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>
-            {option.name}
-          </option>
-        ))}
-      </select>
+      <div className="relative">
+        <select value={value || ''} onChange={(event) => onChange(event.target.value)} className="w-full appearance-none rounded-2xl border border-white/10 bg-[#0a101b] px-4 py-3 pr-12 text-sm text-white outline-none transition focus:border-cyan-400/25" style={{ colorScheme: 'dark' }}>
+          <option value="" style={{ color: '#f8fafc', backgroundColor: '#0a101b' }}>{emptyLabel}</option>
+          {options.map((option) => <option key={option.id} value={option.id} style={{ color: '#f8fafc', backgroundColor: '#0a101b' }}>{option.name}</option>)}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+      </div>
     </label>
   )
 }
 
-function TextField({ label, value, onChange, placeholder = '' }) {
+function InputField({ label, value, onChange, multiline = false, rows = 4, placeholder = '' }) {
   return (
     <label className="space-y-2">
       <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">{label}</span>
-      <input
-        value={value || ''}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-cyan-400/25"
-      />
+      {multiline ? (
+        <textarea rows={rows} value={value || ''} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-cyan-400/25" />
+      ) : (
+        <input value={value || ''} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-cyan-400/25" />
+      )}
     </label>
   )
 }
 
-function TextAreaField({ label, value, onChange, rows = 4 }) {
+function AssetBox({ label, value, onValue, onUpload, onClear, inputRef }) {
   return (
-    <label className="space-y-2">
-      <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">{label}</span>
-      <textarea
-        rows={rows}
-        value={value || ''}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-cyan-400/25"
-      />
-    </label>
-  )
-}
-
-function RolePills({ roles, selectedIds, onToggle }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {roles.map((role) => {
-        const active = selectedIds.includes(role.id)
-        return (
-          <button
-            key={role.id}
-            type="button"
-            onClick={() => onToggle(role.id)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-mono transition-all ${
-              active
-                ? 'border-cyan-400/30 bg-cyan-500/14 text-cyan-200'
-                : 'border-white/10 bg-white/[0.04] text-white/50 hover:text-white'
-            }`}
-          >
-            @{role.name}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function RecentTicketRow({ ticket, locale, ui }) {
-  const statusTone = ticket.status === 'closed'
-    ? 'border-white/10 bg-white/[0.06] text-white/60'
-    : ticket.status === 'claimed'
-      ? 'border-amber-400/20 bg-amber-500/12 text-amber-300'
-      : 'border-cyan-400/20 bg-cyan-500/12 text-cyan-300'
-
-  return (
-    <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono text-white/70">
-          #{ticket.ticket_number}
-        </span>
-        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${statusTone}`}>
-          {ticket.status}
-        </span>
+    <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-display font-700 text-white">{label}</p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/70 transition hover:text-white"><Upload className="h-3.5 w-3.5" />Importer</button>
+          <button type="button" onClick={onClear} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/70 transition hover:text-white"><X className="h-3.5 w-3.5" />Retirer</button>
+        </div>
       </div>
-      <div className="mt-3 grid gap-2 text-sm text-white/70 sm:grid-cols-2">
-        <div><span className="text-white/35">{ui.ticketCreator}:</span> {ticket.creator_username || '--'}</div>
-        <div><span className="text-white/35">{ui.ticketChannel}:</span> {ticket.channel_id || '--'}</div>
-        <div className="sm:col-span-2"><span className="text-white/35">{ui.ticketReason}:</span> {ticket.reason || '--'}</div>
+      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(event) => { void onUpload(event.target.files?.[0] || null); event.target.value = '' }} />
+      <div className="mt-4 flex items-center gap-4">
+        {value ? <img src={value} alt="" className="h-20 w-20 rounded-2xl border border-white/10 object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.03] text-white/25"><ImagePlus className="h-5 w-5" /></div>}
+        <input value={value || ''} onChange={(event) => onValue(event.target.value)} placeholder="URL image ou upload direct" className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-cyan-400/25" />
       </div>
-      <div className="mt-3 text-xs font-mono text-white/30">{formatDate(locale, ticket.updated_at || ticket.created_at)}</div>
     </div>
   )
 }
 
 export default function TicketGeneratorPage() {
   const { locale } = useI18n()
-  const ui = getUi(locale)
   const { selectedGuildId } = useGuildStore()
-
   const [config, setConfig] = useState(null)
   const [draft, setDraft] = useState(null)
   const [tickets, setTickets] = useState([])
@@ -384,25 +174,29 @@ export default function TicketGeneratorPage() {
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [expandedKeys, setExpandedKeys] = useState(['contact_staff'])
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const thumbnailRef = useRef(null)
+  const imageRef = useRef(null)
 
   const textChannels = useMemo(() => sortChannels(channels.filter(isTextChannel)), [channels])
   const categoryChannels = useMemo(() => sortChannels(channels.filter(isCategoryChannel)), [channels])
   const visibleRoles = useMemo(() => sortRoles(roles), [roles])
-  const draftDirty = JSON.stringify(config || {}) !== JSON.stringify(draft || {})
+  const normalizedConfig = config ? normalizeConfig(config) : null
+  const normalizedDraft = draft ? normalizeConfig(draft) : null
+  const draftDirty = JSON.stringify(normalizedConfig || {}) !== JSON.stringify(normalizedDraft || {})
+  const activeOptions = (normalizedDraft?.options || []).filter((item) => PRESET_KEYS.has(item.key) && item.enabled)
 
   const applyOverview = (payload = {}, preserveDraft = false) => {
-    const nextConfig = cloneConfig(payload.config || {})
+    const nextConfig = normalizeConfig(payload.config || {})
     setConfig(nextConfig)
     setTickets(Array.isArray(payload.tickets) ? payload.tickets : [])
     setStats(payload.stats || { forms: 0, open: 0, claimed: 0, total: 0 })
-    if (!preserveDraft) {
-      setDraft(cloneConfig(nextConfig))
-    }
+    if (!preserveDraft) setDraft(clone(nextConfig))
   }
 
   const loadAll = async (showToast = false) => {
     if (!selectedGuildId) return
-
     setLoading(true)
     try {
       const [overviewResponse, channelsResponse, rolesResponse] = await Promise.all([
@@ -410,30 +204,18 @@ export default function TicketGeneratorPage() {
         botAPI.channels(selectedGuildId),
         botAPI.roles(selectedGuildId),
       ])
-
       applyOverview(overviewResponse.data, false)
       setChannels(Array.isArray(channelsResponse.data?.channels) ? channelsResponse.data.channels : [])
       setRoles(Array.isArray(rolesResponse.data?.roles) ? rolesResponse.data.roles : [])
       setLoadError('')
-      if (showToast) toast.success(ui.synced)
+      if (showToast) toast.success('Configuration tickets rechargée')
     } catch (error) {
       const message = getErrorMessage(error)
-      setLoadError(message || ui.loadError)
-      if (showToast) toast.error(message || ui.loadError)
+      setLoadError(message)
+      if (showToast) toast.error(message)
     } finally {
       setLoading(false)
       setRefreshing(false)
-    }
-  }
-
-  const refreshOverviewOnly = async () => {
-    if (!selectedGuildId) return
-    try {
-      const response = await ticketGeneratorAPI.get(selectedGuildId)
-      applyOverview(response.data, draftDirty)
-      setLoadError('')
-    } catch {
-      // Silent refresh.
     }
   }
 
@@ -449,112 +231,57 @@ export default function TicketGeneratorPage() {
       setLoading(false)
       return
     }
-
     void loadAll(false)
   }, [selectedGuildId])
 
   useEffect(() => {
     if (!selectedGuildId) return undefined
-
     const unsubscribe = wsService.on('tickets:updated', (payload = {}) => {
       if (String(payload.guildId || '') !== String(selectedGuildId)) return
       applyOverview(payload, false)
       setLoadError('')
     })
-
     return () => unsubscribe()
   }, [selectedGuildId])
 
   useEffect(() => {
     if (!selectedGuildId) return undefined
     const timer = window.setInterval(() => {
-      void refreshOverviewOnly()
+      void ticketGeneratorAPI.get(selectedGuildId).then((response) => {
+        applyOverview(response.data, draftDirty)
+        setLoadError('')
+      }).catch(() => {})
     }, AUTO_REFRESH_MS)
     return () => window.clearInterval(timer)
   }, [selectedGuildId, draftDirty])
 
-  const updateDraft = (patch) => {
-    setDraft((current) => ({
-      ...(current || {}),
-      ...patch,
-    }))
-  }
-
-  const updateOption = (index, patch) => {
-    setDraft((current) => {
-      const nextOptions = [...(current?.options || [])]
-      nextOptions[index] = {
-        ...nextOptions[index],
-        ...patch,
-      }
-      return {
-        ...current,
-        options: nextOptions,
-      }
-    })
-  }
-
-  const toggleOptionRole = (index, roleId) => {
-    setDraft((current) => {
-      const nextOptions = [...(current?.options || [])]
-      const currentRoles = new Set(nextOptions[index]?.role_ids || [])
-      if (currentRoles.has(roleId)) currentRoles.delete(roleId)
-      else currentRoles.add(roleId)
-      nextOptions[index] = {
-        ...nextOptions[index],
-        role_ids: [...currentRoles],
-      }
-      return {
-        ...current,
-        options: nextOptions,
-      }
-    })
-  }
-
-  const addOption = () => {
-    setDraft((current) => {
-      const currentOptions = current?.options || []
-      if (currentOptions.length >= 10) {
-        toast.error(ui.addOptionLimit)
-        return current
-      }
-      return {
-        ...current,
-        options: [...currentOptions, createOptionDraft(currentOptions)],
-      }
-    })
-  }
-
-  const removeOption = (index) => {
-    setDraft((current) => {
-      const currentOptions = current?.options || []
-      if (currentOptions.length <= 1) return current
-      return {
-        ...current,
-        options: currentOptions.filter((_, optionIndex) => optionIndex !== index),
-      }
-    })
-  }
-
-  const ensureUniqueOptionKeys = () => {
-    const keys = (draft?.options || []).map((option) => String(option?.key || '').trim()).filter(Boolean)
-    return keys.length === (draft?.options || []).length && new Set(keys).size === keys.length
-  }
+  const updateDraft = (patch) => setDraft((current) => normalizeConfig({ ...(current || {}), ...patch }))
+  const updateOption = (key, patch) => setDraft((current) => {
+    const source = normalizeConfig(current || {})
+    return { ...source, options: source.options.map((item) => item.key === key ? { ...item, ...patch } : item) }
+  })
+  const toggleRole = (key, roleId) => setDraft((current) => {
+    const source = normalizeConfig(current || {})
+    return {
+      ...source,
+      options: source.options.map((item) => {
+        if (item.key !== key) return item
+        const roleIds = new Set(item.role_ids || [])
+        if (roleIds.has(roleId)) roleIds.delete(roleId)
+        else roleIds.add(roleId)
+        return { ...item, role_ids: [...roleIds] }
+      }),
+    }
+  })
 
   const saveConfig = async ({ silent = false } = {}) => {
-    if (!selectedGuildId || !draft) return null
-    if (!ensureUniqueOptionKeys()) {
-      toast.error(ui.duplicateKeys)
-      return null
-    }
-
+    if (!selectedGuildId || !normalizedDraft) return
     setSaving(true)
     try {
-      const response = await ticketGeneratorAPI.save(selectedGuildId, draft)
+      const response = await ticketGeneratorAPI.save(selectedGuildId, normalizedDraft)
       applyOverview(response.data, false)
       setLoadError('')
-      if (!silent) toast.success(ui.saved)
-      return response.data
+      if (!silent) toast.success('Configuration tickets sauvegardee')
     } catch (error) {
       toast.error(getErrorMessage(error))
       throw error
@@ -564,25 +291,29 @@ export default function TicketGeneratorPage() {
   }
 
   const publishPanel = async () => {
-    if (!selectedGuildId || !draft) return
-    if (!ensureUniqueOptionKeys()) {
-      toast.error(ui.duplicateKeys)
-      return
-    }
-
+    if (!selectedGuildId || !normalizedDraft) return
     setPublishing(true)
     try {
-      if (draftDirty) {
-        await saveConfig({ silent: true })
-      }
+      if (draftDirty) await saveConfig({ silent: true })
       const response = await ticketGeneratorAPI.publish(selectedGuildId)
       applyOverview(response.data, false)
       setLoadError('')
-      toast.success(ui.published)
+      toast.success('Panel tickets publie')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
       setPublishing(false)
+    }
+  }
+
+  const uploadAsset = async (targetKey, file) => {
+    if (!file) return
+    if (!String(file.type || '').startsWith('image/')) return toast.error('Choisis une image valide')
+    try {
+      updateDraft({ [targetKey]: await readFileAsDataUrl(file) })
+      toast.success('Image chargee')
+    } catch (error) {
+      toast.error(error?.message || 'Chargement impossible')
     }
   }
 
@@ -591,10 +322,10 @@ export default function TicketGeneratorPage() {
       <div className="mx-auto max-w-3xl px-4 pb-5 pt-20 sm:p-6 sm:pt-24">
         <div className="glass-card p-10 text-center">
           <Ticket className="mx-auto mb-4 h-12 w-12 text-white/10" />
-          <p className="font-display text-xl font-700 text-white">{ui.selectServerTitle}</p>
-          <p className="mt-2 text-white/40">{ui.selectServerText}</p>
+          <p className="font-display text-xl font-700 text-white">Choisis d'abord un serveur</p>
+          <p className="mt-2 text-white/40">Le systeme tickets se configure serveur par serveur.</p>
           <Link to="/dashboard/servers" className="mt-5 inline-flex items-center gap-2 rounded-xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-3 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/20">
-            {ui.selectServerAction}
+            Choisir un serveur
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -614,204 +345,203 @@ export default function TicketGeneratorPage() {
                 <LifeBuoy className="h-3.5 w-3.5" />
                 Ticket generator
               </div>
-              <h1 className="font-display text-3xl font-700 text-white sm:text-[2.5rem]">{ui.title}</h1>
-              <p className="max-w-3xl text-sm text-white/55 sm:text-base">{ui.subtitle}</p>
+              <h1 className="font-display text-3xl font-700 text-white sm:text-[2.5rem]">Tickets</h1>
+              <p className="max-w-3xl text-sm text-white/55 sm:text-base">Coche les types utiles, choisis ton salon de publication, ajuste le message et publie.</p>
             </div>
-
             <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setRefreshing(true)
-                  void loadAll(true)
-                }}
-                disabled={loading || refreshing}
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/70 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                {ui.refresh}
-              </button>
-              <button
-                type="button"
-                onClick={() => { void saveConfig() }}
-                disabled={!draft || saving || publishing}
-                className="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/12 px-4 py-3 text-sm text-cyan-200 transition hover:bg-cyan-500/18 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Save className="h-4 w-4" />
-                {saving ? ui.saving : ui.save}
-              </button>
-              <button
-                type="button"
-                onClick={() => { void publishPanel() }}
-                disabled={!draft || saving || publishing}
-                className="inline-flex items-center gap-2 rounded-2xl border border-violet-400/20 bg-violet-500/12 px-4 py-3 text-sm text-violet-200 transition hover:bg-violet-500/18 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Send className="h-4 w-4" />
-                {publishing ? ui.publishing : ui.publish}
-              </button>
+              <button type="button" onClick={() => { setRefreshing(true); void loadAll(true) }} disabled={loading || refreshing} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/70 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />Recharger</button>
+              <button type="button" onClick={() => { void saveConfig() }} disabled={!normalizedDraft || saving || publishing} className="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/12 px-4 py-3 text-sm text-cyan-200 transition hover:bg-cyan-500/18 disabled:cursor-not-allowed disabled:opacity-60"><Save className="h-4 w-4" />{saving ? 'Sauvegarde...' : 'Sauvegarder'}</button>
+              <button type="button" onClick={() => { void publishPanel() }} disabled={!normalizedDraft || saving || publishing} className="inline-flex items-center gap-2 rounded-2xl border border-violet-400/20 bg-violet-500/12 px-4 py-3 text-sm text-violet-200 transition hover:bg-violet-500/18 disabled:cursor-not-allowed disabled:opacity-60"><Send className="h-4 w-4" />{publishing ? 'Publication...' : 'Publier le panel'}</button>
             </div>
           </div>
-
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label={ui.stats.forms} value={stats.forms || 0} icon={Sparkles} tone="border-cyan-400/20 bg-cyan-500/12 text-cyan-300" />
-            <StatCard label={ui.stats.open} value={stats.open || 0} icon={Ticket} tone="border-violet-400/20 bg-violet-500/12 text-violet-300" />
-            <StatCard label={ui.stats.claimed} value={stats.claimed || 0} icon={Users} tone="border-amber-400/20 bg-amber-500/12 text-amber-300" />
-            <StatCard label={ui.stats.total} value={stats.total || 0} icon={LifeBuoy} tone="border-emerald-400/20 bg-emerald-500/12 text-emerald-300" />
+            <StatCard label="Formulaires actifs" value={stats.forms || 0} icon={Sparkles} tone="border-cyan-400/20 bg-cyan-500/12 text-cyan-300" />
+            <StatCard label="Tickets ouverts" value={stats.open || 0} icon={Ticket} tone="border-violet-400/20 bg-violet-500/12 text-violet-300" />
+            <StatCard label="Tickets pris" value={stats.claimed || 0} icon={Users} tone="border-amber-400/20 bg-amber-500/12 text-amber-300" />
+            <StatCard label="Tickets total" value={stats.total || 0} icon={LifeBuoy} tone="border-emerald-400/20 bg-emerald-500/12 text-emerald-300" />
           </div>
         </div>
       </section>
-
-      {loadError && (
-        <div className="rounded-[28px] border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm text-red-200">
-          {loadError || ui.loadError}
-        </div>
-      )}
-
-      {loading && !draft ? (
-        <div className="glass-card p-10 text-center text-white/60">{ui.loading}</div>
-      ) : draft ? (
+      {loadError && <div className="rounded-[28px] border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm text-red-200">{loadError}</div>}
+      {loading && !normalizedDraft ? <div className="glass-card p-10 text-center text-white/60">Chargement...</div> : normalizedDraft ? (
         <>
           <section className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
-            <div className="glass-card border border-white/[0.08] p-5">
-              <div className="mb-5 flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="font-display text-2xl font-700 text-white">{ui.panel}</h2>
-                  <p className="mt-1 text-sm text-white/45">{ui.panelHint}</p>
-                </div>
-                <TogglePill active={Boolean(draft.enabled)} onClick={() => updateDraft({ enabled: !draft.enabled })} activeLabel={ui.enabled} inactiveLabel={ui.disabled} />
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <SelectField label={ui.panelChannel} value={draft.panel_channel_id} onChange={(value) => updateDraft({ panel_channel_id: value })} options={textChannels} emptyLabel={ui.noChannel} />
-                <SelectField label={ui.defaultCategory} value={draft.default_category_id} onChange={(value) => updateDraft({ default_category_id: value })} options={categoryChannels} emptyLabel={ui.noCategory} />
-                <TextField label={ui.panelTitle} value={draft.panel_title} onChange={(value) => updateDraft({ panel_title: value })} />
-                <TextField label={ui.placeholder} value={draft.menu_placeholder} onChange={(value) => updateDraft({ menu_placeholder: value })} />
-                <div className="lg:col-span-2">
-                  <TextAreaField label={ui.panelDescription} rows={5} value={draft.panel_description} onChange={(value) => updateDraft({ panel_description: value })} />
-                </div>
-                <TextField label={ui.panelFooter} value={draft.panel_footer} onChange={(value) => updateDraft({ panel_footer: value })} />
-                <TextField label={ui.color} value={draft.panel_color} onChange={(value) => updateDraft({ panel_color: value })} />
-              </div>
-            </div>
-
             <div className="space-y-6">
               <div className="glass-card border border-white/[0.08] p-5">
-                <div className="mb-5">
-                  <h2 className="font-display text-2xl font-700 text-white">{ui.defaults}</h2>
-                  <p className="mt-1 text-sm text-white/45">{ui.defaultsHint}</p>
+                <div className="mb-5 flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="font-display text-2xl font-700 text-white">Publication du panel</h2>
+                    <p className="mt-1 text-sm text-white/45">Choisis le salon, le message, la couleur et les visuels du panel.</p>
+                  </div>
+                  <label className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/80">
+                    <input type="checkbox" checked={Boolean(normalizedDraft.enabled)} onChange={(event) => updateDraft({ enabled: event.target.checked })} className="h-4 w-4 accent-cyan-400" />
+                    Activer
+                  </label>
                 </div>
-                <div className="space-y-4">
-                  <TextField label={ui.ticketNameTemplate} value={draft.ticket_name_template} onChange={(value) => updateDraft({ ticket_name_template: value })} />
-                  <TextField label={ui.ticketTopicTemplate} value={draft.ticket_topic_template} onChange={(value) => updateDraft({ ticket_topic_template: value })} />
-                  <TextAreaField label={ui.introMessage} rows={4} value={draft.intro_message} onChange={(value) => updateDraft({ intro_message: value })} />
-                  <TextAreaField label={ui.claimMessage} rows={3} value={draft.claim_message} onChange={(value) => updateDraft({ claim_message: value })} />
-                  <TextAreaField label={ui.closeMessage} rows={3} value={draft.close_message} onChange={(value) => updateDraft({ close_message: value })} />
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <SelectField label="Salon du panel" value={normalizedDraft.panel_channel_id} onChange={(value) => updateDraft({ panel_channel_id: value })} options={textChannels} emptyLabel="Aucun salon" />
+                  <SelectField label="Categorie par defaut" value={normalizedDraft.default_category_id} onChange={(value) => updateDraft({ default_category_id: value })} options={categoryChannels} emptyLabel="Aucune categorie" />
+                  <InputField label="Titre du panel" value={normalizedDraft.panel_title} onChange={(value) => updateDraft({ panel_title: value })} />
+                  <InputField label="Placeholder du menu" value={normalizedDraft.menu_placeholder} onChange={(value) => updateDraft({ menu_placeholder: value })} />
+                  <div className="lg:col-span-2">
+                    <InputField label="Message du panel" value={normalizedDraft.panel_description} onChange={(value) => updateDraft({ panel_description: value })} multiline rows={5} />
+                  </div>
+                  <InputField label="Footer" value={normalizedDraft.panel_footer} onChange={(value) => updateDraft({ panel_footer: value })} />
+                  <label className="space-y-2">
+                    <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">Couleur du panel</span>
+                    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                      <input type="color" value={normalizedDraft.panel_color || '#7c3aed'} onChange={(event) => updateDraft({ panel_color: event.target.value })} className="h-11 w-14 cursor-pointer rounded-xl border border-white/10 bg-transparent" />
+                      <div>
+                        <div className="text-sm text-white">Couleur active</div>
+                        <div className="text-xs font-mono uppercase tracking-[0.18em] text-white/35">{normalizedDraft.panel_color}</div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  <AssetBox label="Miniature" value={normalizedDraft.panel_thumbnail_url} onValue={(value) => updateDraft({ panel_thumbnail_url: value })} onUpload={(file) => uploadAsset('panel_thumbnail_url', file)} onClear={() => updateDraft({ panel_thumbnail_url: '' })} inputRef={thumbnailRef} />
+                  <AssetBox label="Banniere" value={normalizedDraft.panel_image_url} onValue={(value) => updateDraft({ panel_image_url: value })} onUpload={(file) => uploadAsset('panel_image_url', file)} onClear={() => updateDraft({ panel_image_url: '' })} inputRef={imageRef} />
                 </div>
               </div>
 
               <div className="glass-card border border-white/[0.08] p-5">
-                <div className="grid gap-3">
-                  <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                    <span className="text-sm text-white/70">{ui.autoPing}</span>
-                    <TogglePill active={Boolean(draft.auto_ping_support)} onClick={() => updateDraft({ auto_ping_support: !draft.auto_ping_support })} activeLabel={ui.enabled} inactiveLabel={ui.disabled} />
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="font-display text-2xl font-700 text-white">Types de tickets</h2>
+                    <p className="mt-1 text-sm text-white/45">Tu coches ou decoches les categories utiles, puis tu ajustes juste l'essentiel.</p>
                   </div>
-                  <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                    <span className="text-sm text-white/70">{ui.allowUserClose}</span>
-                    <TogglePill active={Boolean(draft.allow_user_close)} onClick={() => updateDraft({ allow_user_close: !draft.allow_user_close })} activeLabel={ui.enabled} inactiveLabel={ui.disabled} />
-                  </div>
-                  <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                    <span className="text-sm text-white/70">{ui.preventDuplicates}</span>
-                    <TogglePill active={Boolean(draft.prevent_duplicates)} onClick={() => updateDraft({ prevent_duplicates: !draft.prevent_duplicates })} activeLabel={ui.enabled} inactiveLabel={ui.disabled} />
-                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/65">{activeOptions.length} actifs</div>
                 </div>
-
-                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">{ui.publishedPanel}</div>
-                  <div className="mt-2 text-sm text-white/70">
-                    {draft.panel_message_id ? `${draft.panel_channel_id || '--'} / ${draft.panel_message_id}` : ui.notPublished}
-                  </div>
+                <div className="space-y-4">
+                  {PRESETS.map((preset) => {
+                    const option = normalizedDraft.options.find((item) => item.key === preset.key) || preset
+                    const expanded = expandedKeys.includes(preset.key)
+                    return (
+                      <div key={preset.key} className="rounded-[28px] border border-white/10 bg-black/20 p-5">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="flex items-start gap-4">
+                            <label className="mt-1 inline-flex h-5 w-5 items-center justify-center">
+                              <input type="checkbox" checked={Boolean(option.enabled)} onChange={(event) => updateOption(preset.key, { enabled: event.target.checked })} className="h-4 w-4 rounded accent-cyan-400" />
+                            </label>
+                            <div>
+                              <div className="font-display text-xl font-700 text-white">{option.label}</div>
+                              <div className="mt-1 text-sm text-white/45">{option.description}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <span className={`rounded-full border px-3 py-1.5 text-xs font-mono ${option.enabled ? 'border-emerald-400/20 bg-emerald-500/12 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-white/45'}`}>{option.enabled ? 'Actif' : 'Desactive'}</span>
+                            <button type="button" onClick={() => setExpandedKeys((current) => current.includes(preset.key) ? current.filter((item) => item !== preset.key) : [...current, preset.key])} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/70 transition hover:text-white">
+                              Configurer
+                              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                        {expanded && <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                          <InputField label="Nom dans le menu" value={option.label} onChange={(value) => updateOption(preset.key, { label: value, modal_title: value || preset.label })} />
+                          <InputField label="Description courte" value={option.description} onChange={(value) => updateOption(preset.key, { description: value })} />
+                          <InputField label="Question affichee" value={option.question_label} onChange={(value) => updateOption(preset.key, { question_label: value })} />
+                          <SelectField label="Categorie parent" value={option.category_id} onChange={(value) => updateOption(preset.key, { category_id: value })} options={categoryChannels} emptyLabel="Aucune categorie" />
+                          <div className="xl:col-span-2"><InputField label="Placeholder de la question" value={option.question_placeholder} onChange={(value) => updateOption(preset.key, { question_placeholder: value })} /></div>
+                          <div className="xl:col-span-2"><InputField label="Message d'ouverture" value={option.intro_message} onChange={(value) => updateOption(preset.key, { intro_message: value })} multiline rows={4} /></div>
+                          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 xl:col-span-2">
+                            <div className="mb-3 flex items-center justify-between gap-4">
+                              <div>
+                                <div className="text-sm font-display font-700 text-white">Roles staff</div>
+                                <div className="text-xs text-white/40">Les roles selectionnes pourront voir et gerer ce ticket.</div>
+                              </div>
+                              <label className="inline-flex items-center gap-2 text-xs font-mono text-white/65">
+                                <input type="checkbox" checked={Boolean(option.ping_roles)} onChange={(event) => updateOption(preset.key, { ping_roles: event.target.checked })} className="h-4 w-4 accent-cyan-400" />
+                                Ping a l'ouverture
+                              </label>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {visibleRoles.map((role) => {
+                                const active = (option.role_ids || []).includes(role.id)
+                                return <button key={role.id} type="button" onClick={() => toggleRole(preset.key, role.id)} className={`rounded-full border px-3 py-1.5 text-xs font-mono transition-all ${active ? 'border-cyan-400/30 bg-cyan-500/14 text-cyan-200' : 'border-white/10 bg-white/[0.04] text-white/50 hover:text-white'}`}>@{role.name}</button>
+                              })}
+                            </div>
+                          </div>
+                        </div>}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </div>
-          </section>
-
-          <section className="glass-card border border-white/[0.08] p-5">
-            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-display text-2xl font-700 text-white">{ui.options}</h2>
-                <p className="mt-1 text-sm text-white/45">{ui.optionsHint}</p>
-              </div>
-              <button type="button" onClick={addOption} disabled={(draft.options || []).length >= 10} className="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-200 transition hover:bg-cyan-500/16 disabled:cursor-not-allowed disabled:opacity-50">
-                <Plus className="h-4 w-4" />
-                {ui.addType}
-              </button>
-            </div>
-
-            <div className="space-y-5">
-              {(draft.options || []).map((option, index) => (
-                <div key={`${option.key}-${index}`} className="rounded-[28px] border border-white/10 bg-black/20 p-5">
-                  <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <div className="font-display text-xl font-700 text-white">{option.label || `Ticket ${index + 1}`}</div>
-                      <div className="text-sm text-white/35">{option.key}</div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <TogglePill active={Boolean(option.enabled)} onClick={() => updateOption(index, { enabled: !option.enabled })} activeLabel={ui.enabled} inactiveLabel={ui.disabled} />
-                      <button type="button" onClick={() => removeOption(index)} disabled={(draft.options || []).length <= 1} className="rounded-full border border-red-400/18 bg-red-500/10 px-3 py-1.5 text-xs font-mono text-red-200 transition hover:bg-red-500/16 disabled:cursor-not-allowed disabled:opacity-50">
-                        {ui.removeType}
-                      </button>
-                    </div>
+            <div className="space-y-6">
+              <div className="glass-card border border-white/[0.08] p-5">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="font-display text-2xl font-700 text-white">Apercu Discord</h2>
+                    <p className="mt-1 text-sm text-white/45">Preview rapide du panel avant publication.</p>
                   </div>
-
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <TextField label={ui.label} value={option.label} onChange={(value) => updateOption(index, { label: value })} />
-                    <TextField label={ui.key} value={option.key} onChange={(value) => updateOption(index, { key: value })} />
-                    <TextField label={ui.description} value={option.description} onChange={(value) => updateOption(index, { description: value })} />
-                    <TextField label={ui.emoji} value={option.emoji} onChange={(value) => updateOption(index, { emoji: value })} />
-                    <TextField label={ui.modalTitle} value={option.modal_title} onChange={(value) => updateOption(index, { modal_title: value })} />
-                    <TextField label={ui.questionLabel} value={option.question_label} onChange={(value) => updateOption(index, { question_label: value })} />
-                    <div className="xl:col-span-2">
-                      <TextField label={ui.questionPlaceholder} value={option.question_placeholder} onChange={(value) => updateOption(index, { question_placeholder: value })} />
-                    </div>
-                    <SelectField label={ui.optionCategory} value={option.category_id} onChange={(value) => updateOption(index, { category_id: value })} options={categoryChannels} emptyLabel={ui.noCategory} />
-                    <div className="flex items-end">
-                      <div className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                        <span className="text-sm text-white/70">{ui.pingRoles}</span>
-                        <TogglePill active={Boolean(option.ping_roles)} onClick={() => updateOption(index, { ping_roles: !option.ping_roles })} activeLabel={ui.enabled} inactiveLabel={ui.disabled} />
+                  <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/65">{activeOptions.length} options</div>
+                </div>
+                <div className="rounded-[28px] border border-white/10 bg-[#111827] p-4 shadow-[0_20px_40px_rgba(2,8,23,0.25)]">
+                  <div className="rounded-[24px] border border-white/10 bg-[#101826] p-4">
+                    <div className="flex items-start gap-3">
+                      {normalizedDraft.panel_thumbnail_url ? <img src={normalizedDraft.panel_thumbnail_url} alt="" className="h-14 w-14 rounded-2xl border border-white/10 object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.03] text-white/25"><ImagePlus className="h-4 w-4" /></div>}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-lg font-display font-700 text-white">{normalizedDraft.panel_title}</div>
+                        <div className="mt-2 whitespace-pre-wrap text-sm text-white/65">{normalizedDraft.panel_description}</div>
                       </div>
                     </div>
-                    <TextField label={ui.ticketNameTemplate} value={option.ticket_name_template} onChange={(value) => updateOption(index, { ticket_name_template: value })} />
-                    <TextField label={ui.ticketTopicTemplate} value={option.ticket_topic_template} onChange={(value) => updateOption(index, { ticket_topic_template: value })} />
-                    <div className="xl:col-span-2">
-                      <TextAreaField label={ui.optionIntro} rows={4} value={option.intro_message} onChange={(value) => updateOption(index, { intro_message: value })} />
+                    {normalizedDraft.panel_image_url && <img src={normalizedDraft.panel_image_url} alt="" className="mt-4 h-32 w-full rounded-2xl border border-white/10 object-cover" />}
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-3">
+                      <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-white/35">{normalizedDraft.menu_placeholder}</div>
+                      <div className="space-y-2">
+                        {activeOptions.map((option) => <div key={option.key} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70"><span>{option.label}</span><span className="text-xs text-white/35">{option.description}</span></div>)}
+                      </div>
                     </div>
-                    <div className="xl:col-span-2 space-y-2">
-                      <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">{ui.supportRoles}</span>
-                      <RolePills roles={visibleRoles} selectedIds={option.role_ids || []} onToggle={(roleId) => toggleOptionRole(index, roleId)} />
-                    </div>
+                    <div className="mt-4 text-xs font-mono uppercase tracking-[0.18em] text-white/30">{normalizedDraft.panel_footer}</div>
                   </div>
                 </div>
-              ))}
+              </div>
+              <div className="glass-card border border-white/[0.08] p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-display text-2xl font-700 text-white">Reglages globaux</h2>
+                    <p className="mt-1 text-sm text-white/45">Les vrais comportements du systeme tickets.</p>
+                  </div>
+                  <button type="button" onClick={() => setShowAdvanced((current) => !current)} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/70 transition hover:text-white">
+                    {showAdvanced ? 'Masquer' : 'Afficher'}
+                    {showAdvanced ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+                <div className="grid gap-3">
+                  <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                    <span className="text-sm text-white/70">Ping staff automatique</span>
+                    <input type="checkbox" checked={Boolean(normalizedDraft.auto_ping_support)} onChange={(event) => updateDraft({ auto_ping_support: event.target.checked })} className="h-4 w-4 accent-cyan-400" />
+                  </label>
+                  <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                    <span className="text-sm text-white/70">Autoriser l'auteur a fermer</span>
+                    <input type="checkbox" checked={Boolean(normalizedDraft.allow_user_close)} onChange={(event) => updateDraft({ allow_user_close: event.target.checked })} className="h-4 w-4 accent-cyan-400" />
+                  </label>
+                  <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                    <span className="text-sm text-white/70">Bloquer les doublons</span>
+                    <input type="checkbox" checked={Boolean(normalizedDraft.prevent_duplicates)} onChange={(event) => updateDraft({ prevent_duplicates: event.target.checked })} className="h-4 w-4 accent-cyan-400" />
+                  </label>
+                </div>
+                {showAdvanced && <div className="mt-5 space-y-4">
+                  <InputField label="Message de prise en charge" value={normalizedDraft.claim_message} onChange={(value) => updateDraft({ claim_message: value })} multiline rows={3} />
+                  <InputField label="Message de fermeture" value={normalizedDraft.close_message} onChange={(value) => updateDraft({ close_message: value })} multiline rows={3} />
+                  <InputField label="Template nom du salon" value={normalizedDraft.ticket_name_template} onChange={(value) => updateDraft({ ticket_name_template: value })} />
+                  <InputField label="Template topic du salon" value={normalizedDraft.ticket_topic_template} onChange={(value) => updateDraft({ ticket_topic_template: value })} />
+                  <InputField label="Message d'ouverture global" value={normalizedDraft.intro_message} onChange={(value) => updateDraft({ intro_message: value })} multiline rows={4} />
+                </div>}
+                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">Panel publie</div>
+                  <div className="mt-2 text-sm text-white/70">{normalizedDraft.panel_message_id ? `${normalizedDraft.panel_channel_id || '--'} / ${normalizedDraft.panel_message_id}` : 'Pas encore publie'}</div>
+                </div>
+              </div>
             </div>
           </section>
-
           <section className="glass-card border border-white/[0.08] p-5">
             <div className="mb-5">
-              <h2 className="font-display text-2xl font-700 text-white">{ui.recent}</h2>
-              <p className="mt-1 text-sm text-white/45">{ui.recentHint}</p>
+              <h2 className="font-display text-2xl font-700 text-white">Activite recente</h2>
+              <p className="mt-1 text-sm text-white/45">Derniers tickets ouverts, pris ou fermes depuis Discord.</p>
             </div>
-
-            {tickets.length === 0 ? (
-              <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-10 text-center text-white/45">
-                {ui.noTickets}
-              </div>
-            ) : (
-              <div className="grid gap-4 xl:grid-cols-2">
-                {tickets.map((ticket) => (
-                  <RecentTicketRow key={ticket.id} ticket={ticket} locale={locale} ui={ui} />
-                ))}
-              </div>
-            )}
+            {tickets.length === 0 ? <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-10 text-center text-white/45">Aucun ticket pour le moment.</div> : <div className="grid gap-4 xl:grid-cols-2">{tickets.map((ticket) => <div key={ticket.id} className="rounded-3xl border border-white/10 bg-black/20 p-4"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono text-white/70">#{ticket.ticket_number}</span><span className={`rounded-full border px-2.5 py-1 text-[11px] font-mono ${ticket.status === 'closed' ? 'border-white/10 bg-white/[0.06] text-white/60' : ticket.status === 'claimed' ? 'border-amber-400/20 bg-amber-500/12 text-amber-300' : 'border-cyan-400/20 bg-cyan-500/12 text-cyan-300'}`}>{ticket.status}</span></div><div className="mt-3 grid gap-2 text-sm text-white/70 sm:grid-cols-2"><div><span className="text-white/35">Auteur:</span> {ticket.creator_username || '--'}</div><div><span className="text-white/35">Salon:</span> {ticket.channel_id || '--'}</div><div className="sm:col-span-2"><span className="text-white/35">Raison:</span> {ticket.reason || '--'}</div></div><div className="mt-3 text-xs font-mono text-white/30">{formatDate(locale, ticket.updated_at || ticket.created_at)}</div></div>)}</div>}
           </section>
         </>
       ) : null}

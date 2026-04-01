@@ -68,16 +68,19 @@ const UI = {
     logChannel: 'Salon de logs',
     noLogChannel: 'Aucun salon',
     defaultTargetChannel: 'Salon par defaut',
-    visibilityLabel: 'Visibilite du succes',
-    visibilityEphemeral: 'Prive',
-    visibilityPublic: 'Public',
+    visibilityLabel: 'Confirmation visible par',
+    visibilityEphemeral: 'Seulement le staff',
+    visibilityPublic: 'Tout le salon',
     dmUser: 'Envoyer un DM au membre',
     requireReason: 'Raison obligatoire',
-    deleteMessageSeconds: 'Historique a effacer (secondes)',
-    defaultTimeoutMinutes: 'Timeout par defaut (minutes)',
+    deleteMessageSeconds: 'Historique a supprimer',
+    deleteHistoryHint: 'Exemples: 0, 30s, 10m, 1h, 1j',
+    defaultTimeoutMinutes: 'Duree par defaut',
+    timeoutHint: 'Exemples: 10m, 2h, 1j',
     defaultPoints: 'Points par defaut',
-    defaultSlowmodeSeconds: 'Slowmode par defaut (secondes)',
-    defaultAmount: 'Quantite par defaut',
+    defaultSlowmodeSeconds: 'Slowmode par defaut',
+    slowmodeHint: 'Exemples: 0, 30s, 5m, 1h',
+    clearHint: 'La quantite est demandee a chaque utilisation de /clear.',
     minAmount: 'Minimum',
     maxAmount: 'Maximum',
     allowMentions: 'Autoriser les mentions',
@@ -120,16 +123,19 @@ const UI = {
     logChannel: 'Log channel',
     noLogChannel: 'No channel',
     defaultTargetChannel: 'Default channel',
-    visibilityLabel: 'Success visibility',
-    visibilityEphemeral: 'Private',
-    visibilityPublic: 'Public',
+    visibilityLabel: 'Confirmation visible to',
+    visibilityEphemeral: 'Staff only',
+    visibilityPublic: 'Whole channel',
     dmUser: 'Send DM to member',
     requireReason: 'Require reason',
-    deleteMessageSeconds: 'Delete history (seconds)',
-    defaultTimeoutMinutes: 'Default timeout (minutes)',
+    deleteMessageSeconds: 'Delete history',
+    deleteHistoryHint: 'Examples: 0, 30s, 10m, 1h, 1d',
+    defaultTimeoutMinutes: 'Default duration',
+    timeoutHint: 'Examples: 10m, 2h, 1d',
     defaultPoints: 'Default points',
-    defaultSlowmodeSeconds: 'Default slowmode (seconds)',
-    defaultAmount: 'Default amount',
+    defaultSlowmodeSeconds: 'Default slowmode',
+    slowmodeHint: 'Examples: 0, 30s, 5m, 1h',
+    clearHint: 'The amount is required each time in /clear.',
     minAmount: 'Minimum',
     maxAmount: 'Maximum',
     allowMentions: 'Allow mentions',
@@ -172,16 +178,19 @@ const UI = {
     logChannel: 'Canal de logs',
     noLogChannel: 'Sin canal',
     defaultTargetChannel: 'Canal por defecto',
-    visibilityLabel: 'Visibilidad del exito',
-    visibilityEphemeral: 'Privado',
-    visibilityPublic: 'Publico',
+    visibilityLabel: 'Confirmacion visible para',
+    visibilityEphemeral: 'Solo staff',
+    visibilityPublic: 'Todo el canal',
     dmUser: 'Enviar DM al miembro',
     requireReason: 'Exigir motivo',
-    deleteMessageSeconds: 'Borrar historial (segundos)',
-    defaultTimeoutMinutes: 'Timeout por defecto (minutos)',
+    deleteMessageSeconds: 'Borrar historial',
+    deleteHistoryHint: 'Ejemplos: 0, 30s, 10m, 1h, 1d',
+    defaultTimeoutMinutes: 'Duracion por defecto',
+    timeoutHint: 'Ejemplos: 10m, 2h, 1d',
     defaultPoints: 'Puntos por defecto',
-    defaultSlowmodeSeconds: 'Slowmode por defecto (segundos)',
-    defaultAmount: 'Cantidad por defecto',
+    defaultSlowmodeSeconds: 'Slowmode por defecto',
+    slowmodeHint: 'Ejemplos: 0, 30s, 5m, 1h',
+    clearHint: 'La cantidad se pide cada vez en /clear.',
     minAmount: 'Minimo',
     maxAmount: 'Maximo',
     allowMentions: 'Permitir menciones',
@@ -210,6 +219,50 @@ function clampIntegerString(value, min, max, fallback) {
   return Math.min(max, Math.max(min, numeric))
 }
 
+function parseFlexibleDurationMsInput(value, { fallback, min, max, defaultUnit = 'm', allowZero = false }) {
+  const raw = String(value ?? '').trim().toLowerCase()
+  if (!raw) return fallback
+  if (allowZero && ['0', '0s', '0m', '0h', '0d', '0j'].includes(raw)) return 0
+
+  const match = raw.match(/^(\d+)\s*([smhdj]?)$/)
+  if (!match) return fallback
+
+  const amount = Number.parseInt(match[1], 10)
+  const unit = match[2] || defaultUnit
+  const multiplier = unit === 's'
+    ? 1000
+    : unit === 'h'
+      ? 3600000
+      : (unit === 'd' || unit === 'j')
+        ? 86400000
+        : 60000
+
+  const computed = Math.round(amount * multiplier)
+  if (allowZero && computed === 0) return 0
+  return Math.min(max, Math.max(min, computed))
+}
+
+function parseFlexibleDurationSecondsInput(value, options) {
+  const next = parseFlexibleDurationMsInput(value, {
+    ...options,
+    fallback: Number(options.fallback || 0) * 1000,
+  })
+  return Math.max(0, Math.round(Number(next || 0) / 1000))
+}
+
+function formatDurationTokenFromMs(value, zeroToken = '0s') {
+  const ms = Math.max(0, Math.round(Number(value || 0)))
+  if (!ms) return zeroToken
+  if (ms % 86400000 === 0) return `${ms / 86400000}j`
+  if (ms % 3600000 === 0) return `${ms / 3600000}h`
+  if (ms % 60000 === 0) return `${ms / 60000}m`
+  return `${Math.max(1, Math.round(ms / 1000))}s`
+}
+
+function formatDurationTokenFromSeconds(value) {
+  return formatDurationTokenFromMs(Number(value || 0) * 1000)
+}
+
 function buildSystemDraft(command) {
   const config = command?.action_config || {}
   return {
@@ -217,11 +270,10 @@ function buildSystemDraft(command) {
     default_channel_id: config.default_channel_id || '',
     dm_user: Boolean(config.dm_user),
     require_reason: Boolean(config.require_reason),
-    delete_message_seconds: String(config.delete_message_seconds ?? 0),
-    default_timeout_minutes: String(Math.max(1, Math.round(Number(config.default_duration_ms || 600000) / 60000))),
+    delete_message_seconds: formatDurationTokenFromSeconds(config.delete_message_seconds ?? 0),
+    default_timeout_minutes: formatDurationTokenFromMs(config.default_duration_ms ?? 600000, '10m'),
     default_points: String(config.default_points ?? 1),
-    default_slowmode_seconds: String(config.default_seconds ?? 30),
-    default_amount: String(config.default_amount ?? 20),
+    default_slowmode_seconds: formatDurationTokenFromSeconds(config.default_seconds ?? 30),
     min_amount: String(config.min_amount ?? 1),
     max_amount: String(config.max_amount ?? 100),
     allow_mentions: Boolean(config.allow_mentions),
@@ -244,7 +296,6 @@ function buildSystemActionConfig(command, draft) {
         ...base,
         min_amount: clampIntegerString(draft?.min_amount, 1, 100, Number(currentConfig.min_amount || 1)),
         max_amount: clampIntegerString(draft?.max_amount, 1, 100, Number(currentConfig.max_amount || 100)),
-        default_amount: clampIntegerString(draft?.default_amount, 1, 100, Number(currentConfig.default_amount || 20)),
       }
 
     case 'ban_member':
@@ -255,7 +306,13 @@ function buildSystemActionConfig(command, draft) {
         ...base,
         dm_user: Boolean(draft?.dm_user),
         require_reason: Boolean(draft?.require_reason),
-        delete_message_seconds: clampIntegerString(draft?.delete_message_seconds, 0, 604800, Number(currentConfig.delete_message_seconds || 0)),
+        delete_message_seconds: parseFlexibleDurationSecondsInput(draft?.delete_message_seconds, {
+          fallback: Number(currentConfig.delete_message_seconds || 0),
+          min: 0,
+          max: 604800000,
+          defaultUnit: 's',
+          allowZero: true,
+        }),
       }
 
     case 'kick_member':
@@ -280,7 +337,12 @@ function buildSystemActionConfig(command, draft) {
         ...base,
         dm_user: Boolean(draft?.dm_user),
         require_reason: Boolean(draft?.require_reason),
-        default_duration_ms: clampIntegerString(draft?.default_timeout_minutes, 1, 40320, Math.max(1, Math.round(Number(currentConfig.default_duration_ms || 600000) / 60000))) * 60000,
+        default_duration_ms: parseFlexibleDurationMsInput(draft?.default_timeout_minutes, {
+          fallback: Number(currentConfig.default_duration_ms || 600000),
+          min: 60000,
+          max: 2419200000,
+          defaultUnit: 'm',
+        }),
       }
 
     case 'warn_member':
@@ -307,7 +369,13 @@ function buildSystemActionConfig(command, draft) {
         ...base,
         default_channel_id: String(draft?.default_channel_id || '').trim(),
         require_reason: Boolean(draft?.require_reason),
-        default_seconds: clampIntegerString(draft?.default_slowmode_seconds, 0, 21600, Number(currentConfig.default_seconds || 30)),
+        default_seconds: parseFlexibleDurationSecondsInput(draft?.default_slowmode_seconds, {
+          fallback: Number(currentConfig.default_seconds || 30),
+          min: 0,
+          max: 21600000,
+          defaultUnit: 's',
+          allowZero: true,
+        }),
       }
 
     case 'say_message':
@@ -563,12 +631,11 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
                 <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.deleteMessageSeconds}</span>
                 <input
                   className="input-field"
-                  type="number"
-                  min="0"
-                  max="604800"
+                  type="text"
                   value={draft.delete_message_seconds}
                   onChange={(event) => setDraft((current) => ({ ...current, delete_message_seconds: event.target.value }))}
                 />
+                <p className="text-xs text-white/35">{ui.deleteHistoryHint}</p>
               </label>
             </div>
           )}
@@ -579,12 +646,11 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
                 <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.defaultTimeoutMinutes}</span>
                 <input
                   className="input-field"
-                  type="number"
-                  min="1"
-                  max="40320"
+                  type="text"
                   value={draft.default_timeout_minutes}
                   onChange={(event) => setDraft((current) => ({ ...current, default_timeout_minutes: event.target.value }))}
                 />
+                <p className="text-xs text-white/35">{ui.timeoutHint}</p>
               </label>
             </div>
           )}
@@ -611,51 +677,42 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
                 <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.defaultSlowmodeSeconds}</span>
                 <input
                   className="input-field"
-                  type="number"
-                  min="0"
-                  max="21600"
+                  type="text"
                   value={draft.default_slowmode_seconds}
                   onChange={(event) => setDraft((current) => ({ ...current, default_slowmode_seconds: event.target.value }))}
                 />
+                <p className="text-xs text-white/35">{ui.slowmodeHint}</p>
               </label>
             </div>
           )}
 
           {command.action_type === 'clear_messages' && (
-            <div className="grid gap-5 md:grid-cols-3">
-              <label className="space-y-2">
-                <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.minAmount}</span>
-                <input
-                  className="input-field"
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={draft.min_amount}
-                  onChange={(event) => setDraft((current) => ({ ...current, min_amount: event.target.value }))}
-                />
-              </label>
-              <label className="space-y-2">
-                <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.defaultAmount}</span>
-                <input
-                  className="input-field"
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={draft.default_amount}
-                  onChange={(event) => setDraft((current) => ({ ...current, default_amount: event.target.value }))}
-                />
-              </label>
-              <label className="space-y-2">
-                <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.maxAmount}</span>
-                <input
-                  className="input-field"
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={draft.max_amount}
-                  onChange={(event) => setDraft((current) => ({ ...current, max_amount: event.target.value }))}
-                />
-              </label>
+            <div className="space-y-3">
+              <div className="grid gap-5 md:grid-cols-2">
+                <label className="space-y-2">
+                  <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.minAmount}</span>
+                  <input
+                    className="input-field"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={draft.min_amount}
+                    onChange={(event) => setDraft((current) => ({ ...current, min_amount: event.target.value }))}
+                  />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.maxAmount}</span>
+                  <input
+                    className="input-field"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={draft.max_amount}
+                    onChange={(event) => setDraft((current) => ({ ...current, max_amount: event.target.value }))}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-white/35">{ui.clearHint}</p>
             </div>
           )}
 

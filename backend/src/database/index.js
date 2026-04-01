@@ -233,6 +233,16 @@ function runMigrations() {
   ensureColumn('users', 'email_fast_vault_updated_at', 'TEXT');
   ensureColumn('guilds', 'discord_logs_cleared_before', 'TEXT');
   ensureColumn('support_tickets', 'claimed_once_at', 'TEXT');
+  ensureColumn('guild_dm_settings', 'brand_name', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_dm_settings', 'brand_icon_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_dm_settings', 'brand_logo_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_dm_settings', 'brand_site_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_dm_settings', 'site_button_label', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_dm_settings', 'show_site_link', 'INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('guild_dm_settings', 'show_brand_logo', 'INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('guild_dm_settings', 'footer_text', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_ticket_generators', 'panel_thumbnail_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_ticket_generators', 'panel_image_url', "TEXT NOT NULL DEFAULT ''");
   db.exec(`
     UPDATE support_tickets
     SET claimed_once_at = claimed_at

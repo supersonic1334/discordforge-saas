@@ -13,6 +13,14 @@ const DEFAULT_SETTINGS = {
   auto_dm_blacklist: true,
   appeal_server_name: '',
   appeal_server_url: '',
+  brand_name: '',
+  brand_icon_url: '',
+  brand_logo_url: '',
+  brand_site_url: '',
+  site_button_label: '',
+  show_site_link: true,
+  show_brand_logo: true,
+  footer_text: '',
 };
 
 const ACTION_STYLES = {
@@ -73,19 +81,35 @@ function sanitizeUrl(value) {
   return /^https?:\/\/\S+$/i.test(url) ? url : '';
 }
 
+function sanitizeAssetUrl(value) {
+  const asset = String(value || '').trim();
+  if (!asset) return '';
+  if (/^https?:\/\/\S+$/i.test(asset)) return asset;
+  if (/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(asset)) return asset;
+  return '';
+}
+
 function toBoolean(value, fallback) {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-function normalizeSettings(input = {}) {
+function normalizeSettings(input = {}, baseSettings = DEFAULT_SETTINGS) {
   return {
-    auto_dm_warn: toBoolean(input.auto_dm_warn, DEFAULT_SETTINGS.auto_dm_warn),
-    auto_dm_timeout: toBoolean(input.auto_dm_timeout, DEFAULT_SETTINGS.auto_dm_timeout),
-    auto_dm_kick: toBoolean(input.auto_dm_kick, DEFAULT_SETTINGS.auto_dm_kick),
-    auto_dm_ban: toBoolean(input.auto_dm_ban, DEFAULT_SETTINGS.auto_dm_ban),
-    auto_dm_blacklist: toBoolean(input.auto_dm_blacklist, DEFAULT_SETTINGS.auto_dm_blacklist),
+    auto_dm_warn: toBoolean(input.auto_dm_warn, baseSettings.auto_dm_warn),
+    auto_dm_timeout: toBoolean(input.auto_dm_timeout, baseSettings.auto_dm_timeout),
+    auto_dm_kick: toBoolean(input.auto_dm_kick, baseSettings.auto_dm_kick),
+    auto_dm_ban: toBoolean(input.auto_dm_ban, baseSettings.auto_dm_ban),
+    auto_dm_blacklist: toBoolean(input.auto_dm_blacklist, baseSettings.auto_dm_blacklist),
     appeal_server_name: sanitizeText(input.appeal_server_name, 120),
     appeal_server_url: sanitizeUrl(input.appeal_server_url),
+    brand_name: sanitizeText(input.brand_name, 120),
+    brand_icon_url: sanitizeAssetUrl(input.brand_icon_url),
+    brand_logo_url: sanitizeAssetUrl(input.brand_logo_url),
+    brand_site_url: sanitizeUrl(input.brand_site_url),
+    site_button_label: sanitizeText(input.site_button_label, 80),
+    show_site_link: toBoolean(input.show_site_link, baseSettings.show_site_link),
+    show_brand_logo: toBoolean(input.show_brand_logo, baseSettings.show_brand_logo),
+    footer_text: sanitizeText(input.footer_text, 180),
   };
 }
 
@@ -99,6 +123,14 @@ function mapSettingsRow(row) {
     auto_dm_blacklist: !!row.auto_dm_blacklist,
     appeal_server_name: row.appeal_server_name || '',
     appeal_server_url: row.appeal_server_url || '',
+    brand_name: row.brand_name || '',
+    brand_icon_url: row.brand_icon_url || '',
+    brand_logo_url: row.brand_logo_url || '',
+    brand_site_url: row.brand_site_url || '',
+    site_button_label: row.site_button_label || '',
+    show_site_link: !!row.show_site_link,
+    show_brand_logo: !!row.show_brand_logo,
+    footer_text: row.footer_text || '',
   });
 }
 
@@ -156,25 +188,35 @@ function truncateField(value, max = 1024) {
   return text.length > max ? `${text.slice(0, Math.max(0, max - 3))}...` : text;
 }
 
-function getBrandAssets() {
+function getBrandAssets(settings, guildIdentity) {
   const fallbackUrl = 'https://discordforger.onrender.com';
+  const customSiteUrl = sanitizeUrl(settings?.brand_site_url);
   const candidateUrl = sanitizeUrl(config.FRONTEND_URL);
-  const siteUrl = candidateUrl && !candidateUrl.includes('localhost') ? candidateUrl : fallbackUrl;
+  const siteUrl = customSiteUrl || ((candidateUrl && !candidateUrl.includes('localhost')) ? candidateUrl : fallbackUrl);
   const siteRoot = siteUrl.replace(/\/+$/, '');
+  const brandName = sanitizeText(settings?.brand_name, 120) || guildIdentity?.name || 'Serveur Discord';
+  const customIconUrl = sanitizeAssetUrl(settings?.brand_icon_url);
+  const customLogoUrl = sanitizeAssetUrl(settings?.brand_logo_url);
+  const siteButtonLabel = sanitizeText(settings?.site_button_label, 80) || `Ouvrir ${brandName}`;
 
   return {
-    brandName: 'DiscordForger',
+    brandName,
     siteUrl,
-    brandIconUrl: `${siteRoot}/discordforger-icon.png`,
-    brandLogoUrl: `${siteRoot}/discordforger-logo-full.png`,
+    siteButtonLabel,
+    showSiteLink: toBoolean(settings?.show_site_link, DEFAULT_SETTINGS.show_site_link),
+    showBrandLogo: toBoolean(settings?.show_brand_logo, DEFAULT_SETTINGS.show_brand_logo),
+    footerText: sanitizeText(settings?.footer_text, 180) || 'Notification automatique',
+    brandIconUrl: customIconUrl || guildIdentity?.iconUrl || `${siteRoot}/discordforger-icon.png`,
+    brandLogoUrl: customLogoUrl || `${siteRoot}/discordforger-logo-full.png`,
   };
 }
 
 function buildSiteButton(brandAssets) {
+  if (!brandAssets?.showSiteLink || !brandAssets?.siteUrl) return null;
   return {
     type: 2,
     style: 5,
-    label: 'Lien du site',
+    label: brandAssets.siteButtonLabel || 'Ouvrir le tableau de bord',
     url: brandAssets.siteUrl,
   };
 }
@@ -204,7 +246,7 @@ function buildActionPayload({
   settings,
 }) {
   const style = ACTION_STYLES[actionType] || ACTION_STYLES.warn;
-  const brandAssets = getBrandAssets();
+  const brandAssets = getBrandAssets(settings, guildIdentity);
   const moderatorLabel = hideModeratorIdentity
     ? 'Staff du serveur'
     : (sanitizeText(moderatorName, 80) || 'Staff du serveur');
@@ -235,8 +277,8 @@ function buildActionPayload({
 
   const fields = [
     {
-      name: 'Propulse par',
-      value: 'DiscordForger\nModeration automatisee',
+      name: 'Notification',
+      value: truncateField(brandAssets.brandName, 100),
       inline: true,
     },
     {
@@ -246,12 +288,14 @@ function buildActionPayload({
         : 'Notification envoyee',
       inline: true,
     },
-    {
-      name: 'Site',
-      value: `[Ouvrir DiscordForger](${brandAssets.siteUrl})`,
-      inline: true,
-    },
   ];
+  if (brandAssets.showSiteLink && brandAssets.siteUrl) {
+    fields.push({
+      name: 'Lien utile',
+      value: `[${brandAssets.siteButtonLabel}](${brandAssets.siteUrl})`,
+      inline: true,
+    });
+  }
 
   if ((actionType === 'ban' || actionType === 'blacklist') && appealButton) {
     description.push('', `**Recours**\nTu peux demander une nouvelle etude via **${appealName}**.`);
@@ -273,11 +317,8 @@ function buildActionPayload({
     thumbnail: {
       url: guildIdentity.iconUrl || brandAssets.brandIconUrl,
     },
-    image: {
-      url: brandAssets.brandLogoUrl,
-    },
     footer: {
-      text: 'Genere avec DiscordForger - Notification automatique',
+      text: brandAssets.footerText,
       icon_url: hideModeratorIdentity
         ? (guildIdentity.iconUrl || brandAssets.brandIconUrl)
         : (moderatorAvatarUrl || guildIdentity.iconUrl || brandAssets.brandIconUrl),
@@ -285,21 +326,31 @@ function buildActionPayload({
     timestamp: new Date().toISOString(),
     fields,
   };
+  if (brandAssets.showBrandLogo && brandAssets.brandLogoUrl) {
+    embed.image = {
+      url: brandAssets.brandLogoUrl,
+    };
+  }
 
-  const components = [buildSiteButton(brandAssets)];
+  const components = [];
+  const siteButton = buildSiteButton(brandAssets);
+  if (siteButton) components.push(siteButton);
   if ((actionType === 'ban' || actionType === 'blacklist') && appealButton) {
     components.push(appealButton);
   }
 
-  return {
+  const payload = {
     embeds: [embed],
-    components: [
+  };
+  if (components.length > 0) {
+    payload.components = [
       {
         type: 1,
         components,
       },
-    ],
-  };
+    ];
+  }
+  return payload;
 }
 
 function buildDirectMessagePayload({
@@ -308,66 +359,90 @@ function buildDirectMessagePayload({
   message,
   senderName,
   hideSenderIdentity,
+  settings,
 }) {
-  const brandAssets = getBrandAssets();
+  const brandAssets = getBrandAssets(settings, guildIdentity);
   const cleanTitle = sanitizeText(title, 120) || 'Message du staff';
   const cleanMessage = truncateField(message || 'Aucun contenu.', 1600);
   const senderLabel = hideSenderIdentity
     ? 'Staff du serveur'
     : (sanitizeText(senderName, 80) || 'Staff du serveur');
 
-  return {
-    embeds: [
-      {
-        color: 0x22d3ee,
-        author: {
-          name: `${brandAssets.brandName} - Message staff`,
-          icon_url: brandAssets.brandIconUrl,
-        },
-        title: cleanTitle,
-        description: [
-          'Tu as recu un message prive depuis le dashboard staff.',
-          '',
-          '**Message**',
-          cleanMessage,
-        ].join('\n'),
-        thumbnail: {
-          url: guildIdentity.iconUrl || brandAssets.brandIconUrl,
-        },
-        image: {
-          url: brandAssets.brandLogoUrl,
-        },
-        fields: [
-          {
-            name: 'Serveur',
-            value: guildIdentity.name,
-            inline: true,
-          },
-          {
-            name: 'Envoye par',
-            value: senderLabel,
-            inline: true,
-          },
-          {
-            name: 'Genere avec',
-            value: `[DiscordForger](${brandAssets.siteUrl})`,
-            inline: true,
-          },
-        ],
-        footer: {
-          text: 'Genere avec DiscordForger - Message prive',
-          icon_url: guildIdentity.iconUrl || brandAssets.brandIconUrl,
-        },
-        timestamp: new Date().toISOString(),
-      },
-    ],
-    components: [
+  const fields = [
+    {
+      name: 'Serveur',
+      value: guildIdentity.name,
+      inline: true,
+    },
+    {
+      name: 'Envoye par',
+      value: senderLabel,
+      inline: true,
+    },
+  ];
+  if (brandAssets.showSiteLink && brandAssets.siteUrl) {
+    fields.push({
+      name: 'Lien utile',
+      value: `[${brandAssets.siteButtonLabel}](${brandAssets.siteUrl})`,
+      inline: true,
+    });
+  }
+
+  const embed = {
+    color: 0x22d3ee,
+    author: {
+      name: `${brandAssets.brandName} - Message staff`,
+      icon_url: brandAssets.brandIconUrl,
+    },
+    title: cleanTitle,
+    description: [
+      'Tu as recu un message prive depuis le dashboard staff.',
+      '',
+      '**Message**',
+      cleanMessage,
+    ].join('\n'),
+    thumbnail: {
+      url: guildIdentity.iconUrl || brandAssets.brandIconUrl,
+    },
+    fields,
+    footer: {
+      text: brandAssets.footerText,
+      icon_url: guildIdentity.iconUrl || brandAssets.brandIconUrl,
+    },
+    timestamp: new Date().toISOString(),
+  };
+  if (brandAssets.showBrandLogo && brandAssets.brandLogoUrl) {
+    embed.image = {
+      url: brandAssets.brandLogoUrl,
+    };
+  }
+
+  const payload = {
+    embeds: [embed],
+  };
+  const siteButton = buildSiteButton(brandAssets);
+  if (siteButton) {
+    payload.components = [
       {
         type: 1,
-        components: [buildSiteButton(brandAssets)],
+        components: [siteButton],
       },
-    ],
-  };
+    ];
+  }
+
+  return payload;
+}
+
+function getSettingsForGuildIdentity(guildIdentity) {
+  if (!guildIdentity?.row?.id) return { ...DEFAULT_SETTINGS };
+  return getGuildDmSettings(guildIdentity.row.id);
+}
+
+function buildMergedSettings(existing, input = {}) {
+  return normalizeSettings({
+    ...(existing || DEFAULT_SETTINGS),
+    ...(input || {}),
+  }, existing || DEFAULT_SETTINGS);
 }
 
 function getGuildDmSettings(guildInternalId) {
@@ -376,7 +451,8 @@ function getGuildDmSettings(guildInternalId) {
 }
 
 function saveGuildDmSettings(guildInternalId, input) {
-  const settings = normalizeSettings(input);
+  const existingSettings = getGuildDmSettings(guildInternalId);
+  const settings = buildMergedSettings(existingSettings, input);
   const existing = db.findOne('guild_dm_settings', { guild_id: guildInternalId });
 
   if (existing) {
@@ -410,7 +486,7 @@ async function sendModerationDm({
     throw new Error('Guild not found for moderation DM');
   }
 
-  const settings = getGuildDmSettings(guildIdentity.row.id);
+  const settings = getSettingsForGuildIdentity(guildIdentity);
   const settingKey = getActionSettingKey(actionType);
   if (settingKey && !settings[settingKey]) {
     return { sent: false, skipped: true };
@@ -458,12 +534,14 @@ async function sendDirectStaffMessage({
   hideSenderIdentity,
 }) {
   const guildIdentity = getGuildIdentity({ guildRow, guildId, guild });
+  const settings = getSettingsForGuildIdentity(guildIdentity);
   const payload = buildDirectMessagePayload({
     guildIdentity,
     title,
     message,
     senderName,
     hideSenderIdentity,
+    settings,
   });
 
   await discordService.sendDirectMessage(botToken, targetUserId, payload);

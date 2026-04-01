@@ -20,6 +20,7 @@ import ScanPage from './pages/ScanPage'
 import LogsPage from './pages/LogsPage'
 import MessagesPage from './pages/MessagesPage'
 import DMCenterPage from './pages/DMCenterPage'
+import ModerationDMPage from './pages/ModerationDMPage'
 import NotificationsPage from './pages/NotificationsPage'
 import AccessControlPage from './pages/AccessControlPage'
 import CommandsPage from './pages/CommandsPage'
@@ -567,6 +568,7 @@ function AppRoot() {
           <Route path="moderation" element={<Navigate to="/dashboard/search" replace />} />
           <Route path="messages" element={<PageTransition><MessagesPage /></PageTransition>} />
           <Route path="dm-center" element={<PageTransition><DMCenterPage /></PageTransition>} />
+          <Route path="dm-branding" element={<PageTransition><ModerationDMPage /></PageTransition>} />
           <Route path="notifications" element={<PageTransition><NotificationsPage /></PageTransition>} />
           <Route path="blocked" element={<PageTransition><AccessControlPage /></PageTransition>} />
           <Route path="commands" element={<PageTransition><NativeCommandsPage /></PageTransition>} />

@@ -123,6 +123,48 @@ function clampDurationMs(value, minimum, maximum, fallback) {
   return Math.min(maximum, Math.max(minimum, Math.round(numeric)));
 }
 
+function parseFlexibleDurationMs(value, {
+  fallback,
+  minimum = 0,
+  maximum = Number.MAX_SAFE_INTEGER,
+  defaultUnit = 'm',
+  allowZero = false,
+} = {}) {
+  if (value === null || value === undefined || value === '') return fallback;
+
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return fallback;
+  if (allowZero && (raw === '0' || raw === '0s' || raw === '0m' || raw === '0h' || raw === '0d' || raw === '0j')) {
+    return 0;
+  }
+
+  const match = raw.match(/^(\d+)\s*([smhdj]?)$/);
+  if (!match) return fallback;
+
+  const amount = Number(match[1]);
+  const unit = match[2] || defaultUnit;
+  const multiplier = unit === 's'
+    ? 1000
+    : unit === 'h'
+      ? 3600000
+      : (unit === 'd' || unit === 'j')
+        ? 86400000
+        : 60000;
+
+  const computed = Math.round(amount * multiplier);
+  if (allowZero && computed === 0) return 0;
+  return clampDurationMs(computed, minimum, maximum, fallback);
+}
+
+function parseFlexibleDurationSeconds(value, options = {}) {
+  const fallbackMs = Math.max(0, Math.round(Number(options.fallback || 0) * 1000));
+  const next = parseFlexibleDurationMs(value, {
+    ...options,
+    fallback: fallbackMs,
+  });
+  return Math.max(0, Math.round(Number(next || 0) / 1000));
+}
+
 function normalizeSnowflake(value, fallbackValue = '') {
   const raw = String(value ?? fallbackValue ?? '').trim();
   return /^\d+$/.test(raw) ? raw : '';
@@ -143,13 +185,11 @@ function normalizeClearActionConfig(value = {}, fallbackValue = {}) {
   const fallback = fallbackValue && typeof fallbackValue === 'object' && !Array.isArray(fallbackValue) ? fallbackValue : {};
   const minAmount = clampNumber(source.min_amount ?? fallback.min_amount, 1, 100, 1);
   const maxAmount = clampNumber(source.max_amount ?? fallback.max_amount, minAmount, 100, 100);
-  const defaultAmount = clampNumber(source.default_amount ?? fallback.default_amount, minAmount, maxAmount, Math.min(20, maxAmount));
 
   return {
     log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
     min_amount: minAmount,
     max_amount: maxAmount,
-    default_amount: defaultAmount,
     success_message: String(source.success_message ?? fallback.success_message ?? '{count} messages supprimes dans {channel}.').trim().slice(0, 220),
     empty_message: String(source.empty_message ?? fallback.empty_message ?? 'Aucun message recent a supprimer ici.').trim().slice(0, 220),
     denied_message: String(source.denied_message ?? fallback.denied_message ?? 'Tu dois avoir la permission de gerer les messages pour utiliser cette commande.').trim().slice(0, 220),
@@ -182,7 +222,13 @@ function normalizeBanActionConfig(value = {}, fallbackValue = {}) {
     log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
     dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
     require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? true),
-    delete_message_seconds: clampNumber(source.delete_message_seconds ?? fallback.delete_message_seconds, 0, 604800, 0),
+    delete_message_seconds: parseFlexibleDurationSeconds(source.delete_message_seconds ?? fallback.delete_message_seconds, {
+      fallback: Number(fallback.delete_message_seconds || 0),
+      minimum: 0,
+      maximum: 604800000,
+      defaultUnit: 's',
+      allowZero: true,
+    }),
     success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
   };
 }
@@ -207,7 +253,12 @@ function normalizeTimeoutActionConfig(value = {}, fallbackValue = {}) {
     log_channel_id: normalizeSnowflake(source.log_channel_id, fallback.log_channel_id),
     dm_user: normalizeBooleanFlag(source.dm_user, fallback.dm_user ?? true),
     require_reason: normalizeBooleanFlag(source.require_reason, fallback.require_reason ?? true),
-    default_duration_ms: clampDurationMs(source.default_duration_ms ?? fallback.default_duration_ms, 60000, 2419200000, 600000),
+    default_duration_ms: parseFlexibleDurationMs(source.default_duration_ms ?? fallback.default_duration_ms, {
+      fallback: Number(fallback.default_duration_ms || 600000),
+      minimum: 60000,
+      maximum: 2419200000,
+      defaultUnit: 'm',
+    }),
     success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
   };
 }
@@ -266,7 +317,13 @@ function normalizeSlowmodeActionConfig(value = {}, fallbackValue = {}) {
 
   return {
     ...base,
-    default_seconds: clampNumber(source.default_seconds ?? fallback.default_seconds, 0, 21600, 30),
+    default_seconds: parseFlexibleDurationSeconds(source.default_seconds ?? fallback.default_seconds, {
+      fallback: Number(fallback.default_seconds || 30),
+      minimum: 0,
+      maximum: 21600000,
+      defaultUnit: 's',
+      allowZero: true,
+    }),
   };
 }
 
@@ -304,8 +361,14 @@ function normalizeActionConfig(actionType, value = {}, fallbackValue = {}) {
   if (actionType === COMMAND_ACTION_TYPES.BAN_MEMBER) {
     return normalizeBanActionConfig(value, fallbackValue);
   }
+  if (actionType === COMMAND_ACTION_TYPES.BLACKLIST_MEMBER) {
+    return normalizeBanActionConfig(value, fallbackValue);
+  }
   if (actionType === COMMAND_ACTION_TYPES.KICK_MEMBER) {
     return normalizeKickActionConfig(value, fallbackValue);
+  }
+  if (actionType === COMMAND_ACTION_TYPES.SOFTBAN_MEMBER) {
+    return normalizeBanActionConfig(value, fallbackValue);
   }
   if (actionType === COMMAND_ACTION_TYPES.TIMEOUT_MEMBER) {
     return normalizeTimeoutActionConfig(value, fallbackValue);
@@ -319,11 +382,15 @@ function normalizeActionConfig(actionType, value = {}, fallbackValue = {}) {
   if (actionType === COMMAND_ACTION_TYPES.UNBAN_MEMBER) {
     return normalizeReasonActionConfig(value, fallbackValue, false);
   }
+  if (actionType === COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER) {
+    return normalizeReasonActionConfig(value, fallbackValue, false);
+  }
   if (
     actionType === COMMAND_ACTION_TYPES.ADD_ROLE
     || actionType === COMMAND_ACTION_TYPES.REMOVE_ROLE
     || actionType === COMMAND_ACTION_TYPES.SET_NICKNAME
     || actionType === COMMAND_ACTION_TYPES.MOVE_MEMBER
+    || actionType === COMMAND_ACTION_TYPES.DISCONNECT_MEMBER
   ) {
     return normalizeReasonActionConfig(value, fallbackValue, false);
   }
@@ -403,6 +470,26 @@ function buildNativeActionDefaults(actionType, mode, currentCommand = null) {
     };
   }
 
+  if (actionType === COMMAND_ACTION_TYPES.BLACKLIST_MEMBER) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Blacklist un membre sur tout le reseau',
+      response: currentCommand?.response || 'Bannit le membre ici et l ajoute a la blacklist reseau du bot.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#dc2626',
+      mention_user: false,
+      usage_hint: mode === 'slash' ? '/blacklist user:@membre reason:"..."' : `${currentCommand?.display_trigger || '!blacklist'} @membre raison`,
+      require_args: mode !== 'slash',
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 3000),
+      action_config: normalizeBanActionConfig({}, currentConfig),
+    };
+  }
+
   if (actionType === COMMAND_ACTION_TYPES.KICK_MEMBER) {
     const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
     return {
@@ -420,6 +507,26 @@ function buildNativeActionDefaults(actionType, mode, currentCommand = null) {
       delete_trigger: false,
       cooldown_ms: Number(currentCommand?.cooldown_ms || 2500),
       action_config: normalizeKickActionConfig({}, currentConfig),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.SOFTBAN_MEMBER) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Ban puis deban un membre pour nettoyer',
+      response: currentCommand?.response || 'Bannit puis debannit un membre pour nettoyer ses messages recents.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#fb7185',
+      mention_user: false,
+      usage_hint: mode === 'slash' ? '/softban user:@membre reason:"..."' : `${currentCommand?.display_trigger || '!softban'} @membre raison`,
+      require_args: mode !== 'slash',
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 3000),
+      action_config: normalizeBanActionConfig({}, currentConfig),
     };
   }
 
@@ -496,6 +603,26 @@ function buildNativeActionDefaults(actionType, mode, currentCommand = null) {
       embed_color: currentCommand?.embed_color || '#22c55e',
       mention_user: false,
       usage_hint: '/unban user_id:123456789012345678 reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeReasonActionConfig({}, currentConfig, false),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Retire un utilisateur de la blacklist reseau',
+      response: currentCommand?.response || 'Retire un utilisateur de la blacklist reseau du bot.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#10b981',
+      mention_user: false,
+      usage_hint: '/unblacklist user_id:123456789012345678 reason:"..."',
       require_args: false,
       delete_trigger: false,
       cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
@@ -676,6 +803,26 @@ function buildNativeActionDefaults(actionType, mode, currentCommand = null) {
       embed_color: currentCommand?.embed_color || '#14b8a6',
       mention_user: false,
       usage_hint: '/move user:@membre channel:Vocal reason:"..."',
+      require_args: false,
+      delete_trigger: false,
+      cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
+      action_config: normalizeReasonActionConfig({}, currentConfig, false),
+    };
+  }
+
+  if (actionType === COMMAND_ACTION_TYPES.DISCONNECT_MEMBER) {
+    const currentConfig = currentCommand?.action_type === actionType ? currentCommand.action_config : {};
+    return {
+      execution_mode: 'native',
+      action_type: actionType,
+      description: currentCommand?.description || 'Deconnecte un membre de son vocal',
+      response: currentCommand?.response || 'Deconnecte un membre de son salon vocal avec journalisation.',
+      response_mode: 'reply',
+      embed_enabled: false,
+      embed_title: '',
+      embed_color: currentCommand?.embed_color || '#0ea5e9',
+      mention_user: false,
+      usage_hint: '/disconnect user:@membre reason:"..."',
       require_args: false,
       delete_trigger: false,
       cooldown_ms: Number(currentCommand?.cooldown_ms || 1500),
@@ -1380,8 +1527,16 @@ function promptMatchesBanIntent(text = '') {
   return matchesIntentPattern(text, /(^|\s)ban(\s|$)|banni(?:r|t)|bannissement/);
 }
 
+function promptMatchesBlacklistIntent(text = '') {
+  return matchesIntentPattern(text, /\bblacklist\b|blacklist(?:er)?|liste\s+noire|ban\s+reseau|network\s+blacklist/);
+}
+
 function promptMatchesKickIntent(text = '') {
   return matchesIntentPattern(text, /\bkick\b|expuls(?:e|er|ion)/);
+}
+
+function promptMatchesSoftbanIntent(text = '') {
+  return matchesIntentPattern(text, /\bsoftban\b|ban\s+puis\s+deban|temp\s*ban\s+cleanup/);
 }
 
 function promptMatchesTimeoutIntent(text = '') {
@@ -1394,6 +1549,10 @@ function promptMatchesUntimeoutIntent(text = '') {
 
 function promptMatchesWarnIntent(text = '') {
   return matchesIntentPattern(text, /\bwarn\b|avertissement|warning/);
+}
+
+function promptMatchesUnblacklistIntent(text = '') {
+  return matchesIntentPattern(text, /\bunblacklist\b|retir(?:e|er).*blacklist|sortir.*liste\s+noire|remove.*blacklist/);
 }
 
 function promptMatchesAddRoleIntent(text = '') {
@@ -1432,6 +1591,10 @@ function promptMatchesMoveIntent(text = '') {
   return matchesIntentPattern(text, /\bmove\b|deplac(?:e|er).*\bmembre\b|move.*voice|deplac(?:e|er).*\bvocal\b/);
 }
 
+function promptMatchesDisconnectIntent(text = '') {
+  return matchesIntentPattern(text, /\bdisconnect\b|deconnect(?:e|er).*\bvocal\b|kick.*voice|deco.*membre/);
+}
+
 function extractPromptInteger(text = '', minimum = 1, maximum = 100) {
   const matches = String(text || '').match(/\b\d{1,4}\b/g) || [];
   const values = matches
@@ -1446,11 +1609,14 @@ function buildNativeDraftFromIntent(actionType, { prompt, mode, requestedCommand
   if (!defaults) return null;
   const slashOnlyActionTypes = new Set([
     COMMAND_ACTION_TYPES.BAN_MEMBER,
+    COMMAND_ACTION_TYPES.BLACKLIST_MEMBER,
     COMMAND_ACTION_TYPES.KICK_MEMBER,
+    COMMAND_ACTION_TYPES.SOFTBAN_MEMBER,
     COMMAND_ACTION_TYPES.TIMEOUT_MEMBER,
     COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER,
     COMMAND_ACTION_TYPES.WARN_MEMBER,
     COMMAND_ACTION_TYPES.UNBAN_MEMBER,
+    COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER,
     COMMAND_ACTION_TYPES.ADD_ROLE,
     COMMAND_ACTION_TYPES.REMOVE_ROLE,
     COMMAND_ACTION_TYPES.SET_NICKNAME,
@@ -1460,26 +1626,22 @@ function buildNativeDraftFromIntent(actionType, { prompt, mode, requestedCommand
     COMMAND_ACTION_TYPES.SAY_MESSAGE,
     COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE,
     COMMAND_ACTION_TYPES.MOVE_MEMBER,
+    COMMAND_ACTION_TYPES.DISCONNECT_MEMBER,
   ]);
   if (mode !== 'slash' && slashOnlyActionTypes.has(actionType)) return null;
-
-  const amountHint = extractPromptInteger(prompt, 1, 100);
-  if (actionType === COMMAND_ACTION_TYPES.CLEAR_MESSAGES && amountHint) {
-    defaults.action_config = normalizeClearActionConfig({
-      ...defaults.action_config,
-      default_amount: amountHint,
-    }, defaults.action_config);
-  }
 
   const commandNameFallbackMap = {
     [COMMAND_ACTION_TYPES.CLEAR_MESSAGES]: 'clear',
     [COMMAND_ACTION_TYPES.TICKET_PANEL]: 'tickets',
     [COMMAND_ACTION_TYPES.BAN_MEMBER]: 'ban',
+    [COMMAND_ACTION_TYPES.BLACKLIST_MEMBER]: 'blacklist',
     [COMMAND_ACTION_TYPES.KICK_MEMBER]: 'kick',
+    [COMMAND_ACTION_TYPES.SOFTBAN_MEMBER]: 'softban',
     [COMMAND_ACTION_TYPES.TIMEOUT_MEMBER]: 'tempmute',
     [COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER]: 'unmute',
     [COMMAND_ACTION_TYPES.WARN_MEMBER]: 'warn',
     [COMMAND_ACTION_TYPES.UNBAN_MEMBER]: 'unban',
+    [COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER]: 'unblacklist',
     [COMMAND_ACTION_TYPES.ADD_ROLE]: 'addrole',
     [COMMAND_ACTION_TYPES.REMOVE_ROLE]: 'removerole',
     [COMMAND_ACTION_TYPES.SET_NICKNAME]: 'nick',
@@ -1489,6 +1651,7 @@ function buildNativeDraftFromIntent(actionType, { prompt, mode, requestedCommand
     [COMMAND_ACTION_TYPES.SAY_MESSAGE]: 'say',
     [COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE]: 'announce',
     [COMMAND_ACTION_TYPES.MOVE_MEMBER]: 'move',
+    [COMMAND_ACTION_TYPES.DISCONNECT_MEMBER]: 'disconnect',
   };
   const commandNameFallback = commandNameFallbackMap[actionType] || 'commande';
   const requestedName = sanitizeCommandName(requestedCommandName || currentCommand?.command_name || commandNameFallback, mode);
@@ -1510,9 +1673,12 @@ function inferNativeActionDraft({ prompt, mode, requestedCommandName, currentCom
   }
 
   const intentMatchers = [
+    [COMMAND_ACTION_TYPES.UNBLACKLIST_MEMBER, promptMatchesUnblacklistIntent],
     [COMMAND_ACTION_TYPES.UNBAN_MEMBER, promptMatchesUnbanIntent],
+    [COMMAND_ACTION_TYPES.BLACKLIST_MEMBER, promptMatchesBlacklistIntent],
     [COMMAND_ACTION_TYPES.BAN_MEMBER, promptMatchesBanIntent],
     [COMMAND_ACTION_TYPES.KICK_MEMBER, promptMatchesKickIntent],
+    [COMMAND_ACTION_TYPES.SOFTBAN_MEMBER, promptMatchesSoftbanIntent],
     [COMMAND_ACTION_TYPES.TIMEOUT_MEMBER, promptMatchesTimeoutIntent],
     [COMMAND_ACTION_TYPES.UNTIMEOUT_MEMBER, promptMatchesUntimeoutIntent],
     [COMMAND_ACTION_TYPES.WARN_MEMBER, promptMatchesWarnIntent],
@@ -1525,6 +1691,7 @@ function inferNativeActionDraft({ prompt, mode, requestedCommandName, currentCom
     [COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE, promptMatchesAnnounceIntent],
     [COMMAND_ACTION_TYPES.SAY_MESSAGE, promptMatchesSayIntent],
     [COMMAND_ACTION_TYPES.MOVE_MEMBER, promptMatchesMoveIntent],
+    [COMMAND_ACTION_TYPES.DISCONNECT_MEMBER, promptMatchesDisconnectIntent],
     [COMMAND_ACTION_TYPES.CLEAR_MESSAGES, promptMatchesClearIntent],
     [COMMAND_ACTION_TYPES.TICKET_PANEL, promptMatchesTicketIntent],
   ];
@@ -1651,7 +1818,7 @@ CHAMPS JSON AUTORISES UNIQUEMENT:
 - command_name (string, obligatoire)
 - description (string, max 100 chars)
 - execution_mode ("response" | "native")
-- action_type ("" | "clear_messages" | "ticket_panel" | "ban_member" | "kick_member" | "timeout_member" | "untimeout_member" | "warn_member" | "unban_member" | "add_role" | "remove_role" | "set_nickname" | "lock_channel" | "unlock_channel" | "slowmode_channel" | "say_message" | "announce_message" | "move_member")
+- action_type ("" | "clear_messages" | "ticket_panel" | "ban_member" | "blacklist_member" | "kick_member" | "softban_member" | "timeout_member" | "untimeout_member" | "warn_member" | "unban_member" | "unblacklist_member" | "add_role" | "remove_role" | "set_nickname" | "lock_channel" | "unlock_channel" | "slowmode_channel" | "say_message" | "announce_message" | "move_member" | "disconnect_member")
 - action_config (object)
 - response (string, max 2000 chars, obligatoire)
 - response_mode ("channel" | "reply" | "dm")
@@ -1690,8 +1857,8 @@ REGLES CRITIQUES:
 10. **UTILISE LE NATIF QUAND C'EST SUPPORTE**:
    - clear / purge / suppression de messages => execution_mode = "native", action_type = "clear_messages"
    - ticket / panel ticket / support => execution_mode = "native", action_type = "ticket_panel"
-   - ban / kick / tempmute / unmute / warn / unban => utilise les actions natives de moderation
-   - addrole / removerole / nick / lock / unlock / slowmode / say / announce / move => utilise les actions natives correspondantes
+   - ban / blacklist / kick / softban / tempmute / unmute / warn / unban / unblacklist => utilise les actions natives de moderation
+   - addrole / removerole / nick / lock / unlock / slowmode / say / announce / move / disconnect => utilise les actions natives correspondantes
    - NE REPONDS PAS "je ne peux pas" pour ces cas, ils sont supportes.
 
 11. **LANGUE**: Reponds dans la langue de l'utilisateur.
@@ -1725,7 +1892,7 @@ Demande: "cree un slash clear qui supprime des messages"
 Reponse:
 Commande slash native prete.
 \`\`\`command
-{"command_name":"clear","execution_mode":"native","action_type":"clear_messages","action_config":{"min_amount":1,"max_amount":100,"default_amount":20},"description":"Supprime un lot de messages","response":"Supprime un nombre precis de messages dans le salon courant.","response_mode":"reply","embed_enabled":false,"usage_hint":"/clear amount:20","require_args":false,"delete_trigger":false,"cooldown_ms":3000}
+{"command_name":"clear","execution_mode":"native","action_type":"clear_messages","action_config":{"min_amount":1,"max_amount":100},"description":"Supprime un lot de messages","response":"Supprime un nombre precis de messages dans le salon courant.","response_mode":"reply","embed_enabled":false,"usage_hint":"/clear amount:20","require_args":false,"delete_trigger":false,"cooldown_ms":3000}
 \`\`\`
 
 Demande: "fais un panel de tickets"

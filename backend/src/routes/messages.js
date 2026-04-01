@@ -8,7 +8,9 @@ const { moderationSearchSchema, guildDmConfigSchema, directMessageSchema } = req
 const { decrypt } = require('../services/encryptionService');
 const discordService = require('../services/discordService');
 const authService = require('../services/authService');
+const guildAccessService = require('../services/guildAccessService');
 const { recordModAction } = require('../bot/utils/modHelpers');
+const wsServer = require('../websocket');
 const {
   DEFAULT_SETTINGS,
   getGuildDmSettings,
@@ -27,6 +29,35 @@ function buildHttpError(status, message, code = null) {
 
 function isPrimaryFounder(user) {
   return authService.isPrimaryFounderEmail(user?.email);
+}
+
+function notifyGuildMessageSync(req, settings) {
+  const recipients = guildAccessService.listGuildCollaborators(req.guild.id);
+  const userIds = new Set(
+    recipients
+      .map((entry) => String(entry?.user_id || '').trim())
+      .filter(Boolean)
+  );
+
+  if (req.guild?.user_id) {
+    userIds.add(String(req.guild.user_id));
+  }
+
+  const eventPayload = {
+    guildId: req.guild.id,
+    discordGuildId: req.guild.guild_id,
+    actorUserId: req.user.id,
+    actorUsername: req.user.username,
+    updatedAt: new Date().toISOString(),
+    settings,
+  };
+
+  for (const userId of userIds) {
+    wsServer.broadcastToUser(userId, {
+      event: 'messages:updated',
+      data: eventPayload,
+    });
+  }
 }
 
 function buildSearchResult(user, member = null, banned = false) {
@@ -97,6 +128,7 @@ router.get('/config', (req, res) => {
 
 router.put('/config', validate(guildDmConfigSchema), (req, res) => {
   const settings = saveGuildDmSettings(req.guild.id, req.body || {});
+  notifyGuildMessageSync(req, settings);
   res.json({
     message: 'DM settings updated',
     settings,

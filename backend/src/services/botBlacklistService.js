@@ -60,7 +60,7 @@ function upsertBlacklistEntry(ownerUserId, targetUserId, targetUsername, reason,
   return entry;
 }
 
-async function banUserAcrossBotNetwork(ownerUserId, targetUserId, targetUsername, botToken, reason, sourceModule) {
+async function banUserAcrossBotNetwork(ownerUserId, targetUserId, targetUsername, botToken, reason, sourceModule, deleteMessageSeconds = 0) {
   const entry = upsertBlacklistEntry(ownerUserId, targetUserId, targetUsername, reason, sourceModule);
   const guildRows = db.raw(
     'SELECT guild_id FROM guilds WHERE user_id = ? AND is_active = 1',
@@ -69,7 +69,13 @@ async function banUserAcrossBotNetwork(ownerUserId, targetUserId, targetUsername
 
   for (const guildRow of guildRows) {
     try {
-      await discordService.banMember(botToken, guildRow.guild_id, targetUserId, reason || 'Blacklisted on bot network');
+      await discordService.banMember(
+        botToken,
+        guildRow.guild_id,
+        targetUserId,
+        reason || 'Blacklisted on bot network',
+        deleteMessageSeconds
+      );
       await recordModAction(
         guildRow.guild_id,
         'ban',
@@ -80,7 +86,7 @@ async function banUserAcrossBotNetwork(ownerUserId, targetUserId, targetUsername
         reason || 'Blacklisted on bot network',
         null,
         sourceModule,
-        { blacklist_scope: 'bot-network' }
+        { blacklist_scope: 'bot-network', delete_message_seconds: deleteMessageSeconds }
       );
     } catch (error) {
       if (error?.httpStatus === 404 || error?.discordCode === 10026) continue;
