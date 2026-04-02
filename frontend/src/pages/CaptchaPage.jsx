@@ -16,13 +16,13 @@ const MAX_CAPTCHA_REQUEST_LENGTH = 650000
 const DEFAULT_CHALLENGE_TYPES = [
   {
     key: 'image_code',
-    label: 'Image aléatoire',
-    description: 'Le membre recopie un code généré dans une image.',
+    label: 'Image sécurisée',
+    description: 'Le membre recopie un code généré dans une image unique.',
     enabled: true,
   },
   {
     key: 'quick_math',
-    label: 'Calcul rapide',
+    label: 'Calcul express',
     description: 'Le membre résout un calcul court pour valider son accès.',
     enabled: true,
   },
@@ -35,7 +35,7 @@ const DEFAULT_CONFIG = {
   panel_channel_name: 'verification',
   panel_message_id: '',
   panel_title: 'Vérification CAPTCHA',
-  panel_description: 'Choisis une vérification ci-dessous pour débloquer ton accès au serveur.',
+  panel_description: 'Clique sur le bouton de vérification pour débloquer ton accès au serveur.',
   panel_color: '#06b6d4',
   panel_thumbnail_url: '',
   panel_image_url: '',
@@ -685,7 +685,7 @@ export default function CaptchaPage() {
             <div className="glass-card border border-white/[0.08] p-5">
               <div className="mb-5">
                 <h2 className="font-display text-2xl font-700 text-white">Méthodes CAPTCHA</h2>
-                <p className="mt-1 text-sm text-white/45">Coche simplement les vérifications que tu veux proposer dans Discord.</p>
+                <p className="mt-1 text-sm text-white/45">Coche les méthodes autorisées. Discord lancera automatiquement l'une d'elles avec un seul bouton.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {normalizedDraft.challenge_types.map((item) => {
@@ -803,12 +803,8 @@ export default function CaptchaPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {enabledChallenges.map((item, index) => (
-                      <button key={item.key} type="button" className={`rounded-2xl border px-4 py-3 text-sm font-medium transition ${index === 0 ? 'border-cyan-400/25 bg-cyan-500/14 text-cyan-100' : 'border-white/10 bg-white/[0.04] text-white/80'}`}>
-                        {item.label}
-                      </button>
-                    ))}
+                  <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/14 px-4 py-3 text-center text-sm font-medium text-cyan-100">
+                    Lancer la vérification
                   </div>
                 </div>
               </div>
@@ -832,7 +828,7 @@ export default function CaptchaPage() {
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/70">
                   {enabledChallenges.length > 0
-                    ? `${enabledChallenges.length} méthode${enabledChallenges.length > 1 ? 's' : ''} CAPTCHA sera${enabledChallenges.length > 1 ? 'ont' : ''} proposée${enabledChallenges.length > 1 ? 's' : ''} dans Discord.`
+                    ? `${enabledChallenges.length} méthode${enabledChallenges.length > 1 ? 's' : ''} CAPTCHA sera${enabledChallenges.length > 1 ? 'ont' : ''} pilotée${enabledChallenges.length > 1 ? 's' : ''} automatiquement depuis le site.`
                     : 'Active au moins une méthode CAPTCHA avant de publier.'}
                 </div>
               </div>

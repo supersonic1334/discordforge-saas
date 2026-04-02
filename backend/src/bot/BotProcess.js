@@ -54,6 +54,7 @@ const {
 } = require('../services/ticketGeneratorService');
 const {
   buildCaptchaCode,
+  buildNumericCaptchaCode,
   getGuildCaptchaConfig,
   getGuildCaptchaConfigById,
   saveGuildCaptchaConfig,
@@ -62,6 +63,7 @@ const {
   getActiveCaptchaChallengeById,
   validateCaptchaChallenge,
 } = require('../services/captchaGeneratorService');
+const { buildCaptchaPngAttachment } = require('../services/captchaImageService');
 const config = require('../config');
 
 // ── Status enum ───────────────────────────────────────────────────────────────
@@ -2231,13 +2233,13 @@ class BotProcess extends EventEmitter {
     const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled).slice(0, 5);
     if (!enabledTypes.length) return [];
 
-    const buttons = enabledTypes.map((item, index) => new ButtonBuilder()
-      .setCustomId(this._buildCaptchaCustomId('start', configRow.id, item.key))
-      .setLabel(String(item.label || 'CAPTCHA').slice(0, 80))
-      .setStyle(index === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary));
-
     return [
-      new ActionRowBuilder().addComponents(...buttons),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(this._buildCaptchaCustomId('start', configRow.id))
+          .setLabel('Lancer la verification')
+          .setStyle(ButtonStyle.Primary)
+      ),
     ];
   }
 
@@ -2245,6 +2247,9 @@ class BotProcess extends EventEmitter {
     const assets = this._buildCaptchaPanelAssets(configRow);
     const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled);
     const roleMentions = (configRow?.verified_role_ids || []).map((roleId) => `<@&${roleId}>`).join(', ');
+    const methodList = enabledTypes.length
+      ? enabledTypes.map((item) => `• ${String(item.label || 'Verification').trim()}`).join('\n')
+      : 'Aucune verification active.';
 
     const embed = {
       color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
@@ -2252,19 +2257,22 @@ class BotProcess extends EventEmitter {
       description: [
         String(configRow.panel_description || '').trim(),
         '',
-        enabledTypes.length
-          ? enabledTypes.map((item) => `• **${String(item.label || 'CAPTCHA')}** — ${String(item.description || '').trim() || 'Verification rapide.'}`).join('\n')
-          : 'Aucune verification active.',
+        'Clique sur le bouton ci-dessous pour lancer automatiquement une verification.',
       ].filter(Boolean).join('\n'),
       fields: [
         {
-          name: 'Acces debloque',
+          name: 'Methodes actives',
+          value: methodList,
+          inline: true,
+        },
+        {
+          name: 'Roles debloques',
           value: roleMentions || 'Configure au moins un role valide.',
-          inline: false,
+          inline: true,
         },
       ],
       footer: {
-        text: 'Le membre doit valider une verification pour recevoir son acces.',
+        text: 'Le type de verification est pilote depuis le site.',
       },
     };
 
@@ -2282,37 +2290,12 @@ class BotProcess extends EventEmitter {
     };
   }
 
-  _buildCaptchaImageAttachment(code, challengeId) {
-    const fileName = `captcha-${challengeId}.svg`;
-    const characters = String(code || '').split('');
-    const textNodes = characters.map((char, index) => {
-      const x = 105 + (index * 86);
-      const y = 138 + ((index % 2 === 0) ? -8 : 12);
-      const rotate = (index % 2 === 0) ? -8 : 7;
-      return `<text x="${x}" y="${y}" font-size="68" font-weight="700" fill="#f8fafc" transform="rotate(${rotate} ${x} ${y})">${char}</text>`;
-    }).join('');
-
-    const svg = [
-      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220">',
-      '<defs>',
-      '<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">',
-      '<stop offset="0%" stop-color="#08121f" />',
-      '<stop offset="100%" stop-color="#1f1340" />',
-      '</linearGradient>',
-      '</defs>',
-      '<rect width="640" height="220" rx="28" fill="url(#bg)" />',
-      '<rect x="12" y="12" width="616" height="196" rx="22" fill="none" stroke="rgba(255,255,255,0.16)" />',
-      '<path d="M40 78 C120 120, 180 28, 270 84 S430 144, 600 70" stroke="#22d3ee" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.28" />',
-      '<path d="M30 168 C130 110, 230 206, 340 144 S500 70, 610 150" stroke="#a855f7" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.24" />',
-      '<circle cx="82" cy="46" r="12" fill="#22d3ee" opacity="0.16" />',
-      '<circle cx="548" cy="174" r="18" fill="#a855f7" opacity="0.14" />',
-      '<text x="42" y="44" font-size="16" fill="#7dd3fc" font-family="Arial, sans-serif" letter-spacing="3">CAPTCHA</text>',
-      textNodes,
-      '<text x="42" y="192" font-size="16" fill="#cbd5e1" font-family="Arial, sans-serif">Recopie le code visible exactement.</text>',
-      '</svg>',
-    ].join('');
-
-    return new AttachmentBuilder(Buffer.from(svg, 'utf8'), { name: fileName });
+  _pickCaptchaChallengeType(configRow) {
+    const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled);
+    if (!enabledTypes.length) return null;
+    if (enabledTypes.length === 1) return enabledTypes[0].key;
+    const index = Math.floor(Math.random() * enabledTypes.length);
+    return enabledTypes[index]?.key || enabledTypes[0].key;
   }
 
   _buildCaptchaChallengePrompt(challengeType) {
@@ -2333,7 +2316,7 @@ class BotProcess extends EventEmitter {
       };
     }
 
-    const expectedAnswer = buildCaptchaCode(5);
+    const expectedAnswer = buildNumericCaptchaCode(6);
     return {
       challengeType: 'image_code',
       promptText: 'Recopie le code visible sur l image.',
@@ -2495,7 +2478,7 @@ class BotProcess extends EventEmitter {
     }).catch(() => {});
   }
 
-  async _handleCaptchaStart(interaction, configId, challengeType, internalGuildId) {
+  async _handleCaptchaStart(interaction, configId, internalGuildId) {
     const configRow = getGuildCaptchaConfigById(configId);
     if (!configRow?.id || configRow.guild_id !== internalGuildId || !configRow.enabled) {
       await interaction.reply({ content: 'Ce CAPTCHA est indisponible.', ephemeral: true }).catch(() => {});
@@ -2513,7 +2496,13 @@ class BotProcess extends EventEmitter {
       return true;
     }
 
-    const prompt = this._buildCaptchaChallengePrompt(challengeType);
+    const selectedType = this._pickCaptchaChallengeType(configRow);
+    if (!selectedType) {
+      await interaction.reply({ content: 'Active au moins une methode CAPTCHA sur le site avant de publier.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const prompt = this._buildCaptchaChallengePrompt(selectedType);
     const challenge = createCaptchaChallenge({
       guildId: internalGuildId,
       configId: configRow.id,
@@ -2530,16 +2519,23 @@ class BotProcess extends EventEmitter {
       return true;
     }
 
-    const attachment = this._buildCaptchaImageAttachment(prompt.visualCode, challenge.id);
+    const attachment = buildCaptchaPngAttachment(prompt.visualCode, challenge.id, configRow.panel_color);
     await interaction.reply({
       ephemeral: true,
       embeds: [{
-        color: 0x06b6d4,
+        color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
         title: 'Verification image',
-        description: 'Observe l image, puis clique sur le bouton pour recopier le code.',
+        description: 'Observe le code affiche, puis ouvre le formulaire pour le recopier exactement.',
         image: { url: `attachment://${attachment.name}` },
+        fields: [
+          {
+            name: 'Conseil',
+            value: 'Le code est unique et expire rapidement.',
+            inline: false,
+          },
+        ],
         footer: {
-          text: 'Le code expire apres quelques minutes.',
+          text: 'Recopie les 6 chiffres affiches.',
         },
       }],
       files: [attachment],
@@ -2660,7 +2656,7 @@ class BotProcess extends EventEmitter {
 
     try {
       if (interaction.isButton() && parsed.type === 'start') {
-        return this._handleCaptchaStart(interaction, parsed.args[0], parsed.args[1], internalGuildId);
+        return this._handleCaptchaStart(interaction, parsed.args[0], internalGuildId);
       }
 
       if (interaction.isButton() && parsed.type === 'answer') {

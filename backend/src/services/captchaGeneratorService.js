@@ -7,7 +7,7 @@ const db = require('../database');
 
 const DEFAULT_COLOR = '#06b6d4';
 const DEFAULT_PANEL_TITLE = 'Verification CAPTCHA';
-const DEFAULT_PANEL_DESCRIPTION = 'Choisis une verification ci-dessous pour debloquer ton acces au serveur.';
+const DEFAULT_PANEL_DESCRIPTION = 'Clique sur le bouton de verification pour debloquer ton acces au serveur.';
 const DEFAULT_CHANNEL_NAME = 'verification';
 const DEFAULT_SUCCESS_MESSAGE = 'Verification reussie. Acces debloque.';
 const DEFAULT_FAILURE_MESSAGE = 'Code invalide. Reessaie avec une nouvelle verification.';
@@ -17,13 +17,13 @@ const MAX_CHALLENGE_ATTEMPTS = 3;
 const DEFAULT_CHALLENGE_TYPES = Object.freeze([
   {
     key: 'image_code',
-    label: 'Image aleatoire',
-    description: 'Recopier un code affiche dans une image generee.',
+    label: 'Image securisee',
+    description: 'Recopier le code genere dans une image unique.',
     enabled: true,
   },
   {
     key: 'quick_math',
-    label: 'Calcul rapide',
+    label: 'Calcul express',
     description: 'Resoudre un calcul court pour valider ton acces.',
     enabled: true,
   },
@@ -257,6 +257,16 @@ function buildCaptchaCode(length = 5) {
   return out;
 }
 
+function buildNumericCaptchaCode(length = 6) {
+  const alphabet = '23456789';
+  const bytes = randomBytes(length);
+  let out = '';
+  for (let index = 0; index < length; index += 1) {
+    out += alphabet[bytes[index] % alphabet.length];
+  }
+  return out;
+}
+
 function expirePendingChallengesForUser(guildId, discordUserId) {
   db.db.prepare(`
     UPDATE guild_captcha_challenges
@@ -404,6 +414,7 @@ module.exports = {
   DEFAULT_FAILURE_MESSAGE,
   CHALLENGE_TTL_MINUTES,
   buildCaptchaCode,
+  buildNumericCaptchaCode,
   getGuildCaptchaConfig,
   getGuildCaptchaConfigById,
   saveGuildCaptchaConfig,
