@@ -22,6 +22,7 @@ const {
 const guildAccessService = require('../services/guildAccessService');
 const botManager = require('../services/botManager');
 const wsServer = require('../websocket');
+const logger = require('../utils/logger').child('TeamRoutes');
 
 router.use(requireAuth, requireBotToken, requireGuildOwner);
 
@@ -100,6 +101,18 @@ function buildOverview(req) {
     join_codes: access?.is_owner ? guildAccessService.listGuildJoinCodes(req.guild.id) : [],
     snapshots: access?.is_owner ? guildAccessService.listGuildSnapshots(req.guild.id) : [],
   };
+}
+
+function buildOverviewSafe(req) {
+  try {
+    return buildOverview(req);
+  } catch (error) {
+    logger.warn(`Team overview refresh failed: ${error.message}`, {
+      guildId: req.guild?.id,
+      userId: req.user?.id,
+    });
+    return {};
+  }
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -277,14 +290,27 @@ router.post('/backups/import', requireGuildPrimaryOwner, validate(guildBackupImp
       backup: req.body.backup,
     });
 
-    await refreshGuildRuntime(req.guild.user_id, req.guild.guild_id);
-    notifyProfileRefresh(req.guild.user_id, 'guild_snapshot_restored');
-    notifyAllCollaborators(req.guild.id, 'team:snapshot_restored', { guildId: req.guild.id }, null);
+    await refreshGuildRuntime(req.guild.user_id, req.guild.guild_id).catch((error) => {
+      logger.warn(`Team backup import runtime refresh failed: ${error.message}`, {
+        guildId: req.guild.id,
+        ownerUserId: req.guild.user_id,
+      });
+    });
+
+    try {
+      notifyProfileRefresh(req.guild.user_id, 'guild_snapshot_restored');
+      notifyAllCollaborators(req.guild.id, 'team:snapshot_restored', { guildId: req.guild.id }, null);
+    } catch (error) {
+      logger.warn(`Team backup import broadcast failed: ${error.message}`, {
+        guildId: req.guild.id,
+        ownerUserId: req.guild.user_id,
+      });
+    }
 
     res.json({
       message: 'Sauvegarde importee',
       restored,
-      ...buildOverview(req),
+      ...buildOverviewSafe(req),
     });
   } catch (error) {
     next(error);

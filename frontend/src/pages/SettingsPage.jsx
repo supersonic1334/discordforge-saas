@@ -52,6 +52,124 @@ function downloadBlob(blob, filename) {
 }
 
 function SettingsPanel({ icon: Icon, iconTone, title, hint, children }) {
+  const __unusedExportGuildBackupSafe = async () => {
+    if (!selectedGuildId) return toast.error('Choisis un serveur avant de créer une sauvegarde.')
+    if (!canManageGuildBackup) return toast.error('Cette sauvegarde est réservée au propriétaire principal du serveur.')
+
+    setSaving('backup-export')
+    try {
+      const response = await teamAPI.exportBackup(selectedGuildId)
+      const filename = extractFilenameFromDisposition(response.headers?.['content-disposition'])
+      downloadBlob(new Blob([response.data], { type: 'application/json' }), filename)
+      toast.success('Sauvegarde téléchargée')
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Impossible de télécharger la sauvegarde.'))
+    }
+    setSaving(null)
+  }
+
+  const __unusedHandleBackupFileChangeSafe = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    try {
+      const parsed = await readJsonFile(file)
+      const payload = parsed?.backup || parsed?.payload || parsed
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('Fichier de sauvegarde invalide.')
+      }
+
+      setBackupFile(payload)
+      setBackupFileMeta({
+        name: file.name,
+        guildName: parsed?.guild?.name || '',
+        exportedAt: parsed?.exported_at || '',
+      })
+      toast.success('Fichier chargé')
+    } catch (error) {
+      setBackupFile(null)
+      setBackupFileMeta(null)
+      toast.error(getErrorMessage(error, 'Fichier de sauvegarde invalide.'))
+    }
+  }
+
+  const __unusedImportGuildBackupSafe = async () => {
+    if (!selectedGuildId) return toast.error("Choisis un serveur avant d'importer une sauvegarde.")
+    if (!canManageGuildBackup) return toast.error('Cette sauvegarde est réservée au propriétaire principal du serveur.')
+    if (!backupFile) return toast.error("Choisis d'abord un fichier de sauvegarde.")
+
+    setSaving('backup-import')
+    try {
+      await teamAPI.importBackup(selectedGuildId, { backup: backupFile })
+      setBackupFile(null)
+      setBackupFileMeta(null)
+      toast.success('Sauvegarde importée')
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Impossible d'importer cette sauvegarde."))
+    }
+    setSaving(null)
+  }
+
+  const exportGuildBackupSafe = async () => {
+    if (!selectedGuildId) return toast.error('Choisis un serveur avant de créer une sauvegarde.')
+    if (!canManageGuildBackup) return toast.error('Cette sauvegarde est réservée au propriétaire principal du serveur.')
+
+    setSaving('backup-export')
+    try {
+      const response = await teamAPI.exportBackup(selectedGuildId)
+      const filename = extractFilenameFromDisposition(response.headers?.['content-disposition'])
+      downloadBlob(new Blob([response.data], { type: 'application/json' }), filename)
+      toast.success('Sauvegarde téléchargée')
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Impossible de télécharger la sauvegarde.'))
+    }
+    setSaving(null)
+  }
+
+  const handleBackupFileChangeSafe = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    try {
+      const parsed = await readJsonFile(file)
+      const payload = parsed?.backup || parsed?.payload || parsed
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('Fichier de sauvegarde invalide.')
+      }
+
+      setBackupFile(payload)
+      setBackupFileMeta({
+        name: file.name,
+        guildName: parsed?.guild?.name || '',
+        exportedAt: parsed?.exported_at || '',
+      })
+      toast.success('Fichier chargé')
+    } catch (error) {
+      setBackupFile(null)
+      setBackupFileMeta(null)
+      toast.error(getErrorMessage(error, 'Fichier de sauvegarde invalide.'))
+    }
+  }
+
+  const importGuildBackupSafe = async () => {
+    if (!selectedGuildId) return toast.error("Choisis un serveur avant d'importer une sauvegarde.")
+    if (!canManageGuildBackup) return toast.error('Cette sauvegarde est réservée au propriétaire principal du serveur.')
+    if (!backupFile) return toast.error("Choisis d'abord un fichier de sauvegarde.")
+
+    setSaving('backup-import')
+    try {
+      await teamAPI.importBackup(selectedGuildId, { backup: backupFile })
+      setBackupFile(null)
+      setBackupFileMeta(null)
+      toast.success('Sauvegarde importée')
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Impossible d'importer cette sauvegarde."))
+    }
+    setSaving(null)
+  }
+
   return (
     <div className="spotlight-card p-5 sm:p-6">
       <div className="relative z-[1] space-y-4">
@@ -756,7 +874,7 @@ export default function SettingsPage() {
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={exportGuildBackup}
+                  onClick={exportGuildBackupSafe}
                   disabled={!selectedGuildId || !canManageGuildBackup || saving === 'backup-export'}
                   className="px-5 py-3 rounded-2xl bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm font-mono hover:bg-neon-cyan/20 transition-all disabled:opacity-40"
                 >
@@ -774,7 +892,7 @@ export default function SettingsPage() {
 
                 <button
                   type="button"
-                  onClick={importGuildBackup}
+                  onClick={importGuildBackupSafe}
                   disabled={!selectedGuildId || !canManageGuildBackup || !backupFile || saving === 'backup-import'}
                   className="px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-mono hover:bg-emerald-500/20 transition-all disabled:opacity-40"
                 >
@@ -787,7 +905,7 @@ export default function SettingsPage() {
                 type="file"
                 accept=".json,application/json"
                 className="hidden"
-                onChange={handleBackupFileChange}
+                onChange={handleBackupFileChangeSafe}
               />
 
               {backupFileMeta ? (

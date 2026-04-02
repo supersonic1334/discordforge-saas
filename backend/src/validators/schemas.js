@@ -190,7 +190,10 @@ const guildSnapshotCreateSchema = z.object({
 });
 
 const guildBackupImportSchema = z.object({
-  backup: z.record(z.unknown()),
+  backup: z.any().refine(
+    (value) => !!value && typeof value === 'object' && !Array.isArray(value),
+    'Backup invalide'
+  ),
 });
 
 const guildAccessSuspendSchema = z.object({

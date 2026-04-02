@@ -159,19 +159,54 @@ function readFileAsDataUrl(file) {
   })
 }
 
-function AssetPreview({ src, label, rounded = false, className = '' }) {
+function AssetPreview({ src, label, rounded = false, className = '', onClick = null }) {
+  const baseClassName = `${rounded ? 'rounded-2xl' : 'rounded-3xl'} border ${className}`
+  const interactiveClassName = onClick
+    ? 'cursor-pointer transition-all hover:border-white/20 hover:bg-white/[0.05]'
+    : ''
+
   if (src) {
+    if (onClick) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`Importer ${label}`}
+          className={`${baseClassName} overflow-hidden ${interactiveClassName}`}
+        >
+          <img
+            src={src}
+            alt={label}
+            className="h-full w-full object-cover"
+          />
+        </button>
+      )
+    }
+
     return (
       <img
         src={src}
         alt={label}
-        className={`${rounded ? 'rounded-2xl' : 'rounded-3xl'} border border-white/10 object-cover ${className}`}
+        className={`${baseClassName} border-white/10 object-cover`}
       />
     )
   }
 
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Importer ${label}`}
+        className={`${baseClassName} border-dashed border-white/12 bg-white/[0.03] flex items-center justify-center text-white/30 ${interactiveClassName}`}
+      >
+        <ImagePlus className="w-5 h-5" />
+      </button>
+    )
+  }
+
   return (
-    <div className={`${rounded ? 'rounded-2xl' : 'rounded-3xl'} border border-dashed border-white/12 bg-white/[0.03] flex items-center justify-center text-white/30 ${className}`}>
+    <div className={`${baseClassName} border-dashed border-white/12 bg-white/[0.03] flex items-center justify-center text-white/30`}>
       <ImagePlus className="w-5 h-5" />
     </div>
   )
@@ -502,7 +537,13 @@ export default function NotificationsPage() {
                       </button>
                     </div>
                   </div>
-                  <AssetPreview src={config.brand_icon_url || guild?.iconUrl || ''} label="Icone DM" rounded className="w-24 h-24" />
+                  <AssetPreview
+                    src={config.brand_icon_url || guild?.iconUrl || ''}
+                    label="Icone DM"
+                    rounded
+                    className="w-24 h-24"
+                    onClick={() => iconUploadRef.current?.click()}
+                  />
                   <input
                     className="input-field"
                     placeholder="URL icone (ou importe une image)"
@@ -533,7 +574,12 @@ export default function NotificationsPage() {
                       </button>
                     </div>
                   </div>
-                  <AssetPreview src={config.brand_logo_url || ''} label="Logo DM" className="w-full h-28" />
+                  <AssetPreview
+                    src={config.brand_logo_url || ''}
+                    label="Logo DM"
+                    className="w-full h-28"
+                    onClick={() => logoUploadRef.current?.click()}
+                  />
                   <input
                     className="input-field"
                     placeholder="URL logo (ou importe une image)"
