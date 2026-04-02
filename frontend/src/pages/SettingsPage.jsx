@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Save, Key, User, Lock, Languages, ImagePlus, Trash2, Link2 } from 'lucide-react'
+import { Save, Key, User, Lock, Languages, ImagePlus, Trash2, Link2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { authAPI } from '../services/api'
+import { authAPI, teamAPI } from '../services/api'
 import { useAuthStore, useBotStore, useGuildStore } from '../stores'
 import { AI_LANGUAGE_OPTIONS, SITE_LANGUAGE_OPTIONS, getOptionLabel, useI18n } from '../i18n'
 import { prepareAvatarDataUrl } from '../utils/avatarUpload'
@@ -25,6 +25,30 @@ function getMaskedQuickToken(token) {
 
 function getErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback
+}
+
+function extractFilenameFromDisposition(header) {
+  const raw = String(header || '')
+  const utf8Match = raw.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1])
+  const classicMatch = raw.match(/filename="?([^";]+)"?/i)
+  return classicMatch?.[1] || 'backup.json'
+}
+
+async function readJsonFile(file) {
+  const raw = await file.text()
+  return JSON.parse(raw)
+}
+
+function downloadBlob(blob, filename) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
 }
 
 function SettingsPanel({ icon: Icon, iconTone, title, hint, children }) {
@@ -77,7 +101,7 @@ function SettingsMetric({ label, value, tone }) {
 export default function SettingsPage() {
   const { user, fetchMe, setUser, logout } = useAuthStore()
   const { fetchStatus: refreshBotStatus } = useBotStore()
-  const { fetchGuilds } = useGuildStore()
+  const { guilds, selectedGuildId, selectGuild, fetchGuilds } = useGuildStore()
   const { t, locale } = useI18n()
   const navigate = useNavigate()
   const preferencesReadyRef = useRef(false)
@@ -91,6 +115,7 @@ export default function SettingsPage() {
     email: user?.email || null,
   }), [user?.id, user?.email])
   const fileInputRef = useRef(null)
+  const backupInputRef = useRef(null)
   const [username, setUsername] = useState(user?.username || '')
   const [avatarDraft, setAvatarDraft] = useState(user?.avatar_url || '')
   const [avatarFileName, setAvatarFileName] = useState('')
@@ -106,6 +131,8 @@ export default function SettingsPage() {
     ai_language: normalizePreference(user?.ai_language),
   })
   const [saving, setSaving] = useState(null)
+  const [backupFile, setBackupFile] = useState(null)
+  const [backupFileMeta, setBackupFileMeta] = useState(null)
   const canRevealPrimaryEmail = !!(
     user?.is_primary_founder
     || (user?.role === 'founder' && user?.email === '********@********.***')
@@ -121,10 +148,27 @@ export default function SettingsPage() {
     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
     : 'bg-white/5 text-white/40 border border-white/10'
   const profileAvatarPreview = avatarDraft || user?.display_avatar_url || user?.avatar_url || ''
+  const selectedGuild = useMemo(
+    () => guilds.find((entry) => String(entry.id) === String(selectedGuildId || '')) || null,
+    [guilds, selectedGuildId],
+  )
+  const canManageGuildBackup = Boolean(
+    selectedGuildId && (
+      selectedGuild?.is_owner
+      || selectedGuild?.access_role === 'owner'
+      || selectedGuild?.user_id === user?.id
+    ),
+  )
 
   useEffect(() => {
     fetchMe().catch(() => {})
   }, [fetchMe])
+
+  useEffect(() => {
+    if (guilds.length === 0) {
+      fetchGuilds().catch(() => {})
+    }
+  }, [fetchGuilds, guilds.length])
 
   useEffect(() => {
     let active = true
@@ -344,6 +388,65 @@ export default function SettingsPage() {
       if (String(e?.message || '') !== 'Popup fermee') {
         toast.error(getErrorMessage(e, 'Impossible de changer le compte Discord.'))
       }
+    }
+    setSaving(null)
+  }
+
+  const exportGuildBackup = async () => {
+    if (!selectedGuildId) return toast.error('Choisis un serveur avant de créer une sauvegarde.')
+    if (!canManageGuildBackup) return toast.error('Cette sauvegarde est réservée au propriétaire principal du serveur.')
+
+    setSaving('backup-export')
+    try {
+      const response = await teamAPI.exportBackup(selectedGuildId)
+      const filename = extractFilenameFromDisposition(response.headers?.['content-disposition'])
+      downloadBlob(new Blob([response.data], { type: 'application/json' }), filename)
+      toast.success('Sauvegarde téléchargée')
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Impossible de télécharger la sauvegarde.'))
+    }
+    setSaving(null)
+  }
+
+  const handleBackupFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    try {
+      const parsed = await readJsonFile(file)
+      const payload = parsed?.backup || parsed?.payload || parsed
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('Fichier de sauvegarde invalide.')
+      }
+
+      setBackupFile(parsed)
+      setBackupFileMeta({
+        name: file.name,
+        guildName: parsed?.guild?.name || '',
+        exportedAt: parsed?.exported_at || '',
+      })
+      toast.success('Fichier chargé')
+    } catch (error) {
+      setBackupFile(null)
+      setBackupFileMeta(null)
+      toast.error(getErrorMessage(error, 'Fichier de sauvegarde invalide.'))
+    }
+  }
+
+  const importGuildBackup = async () => {
+    if (!selectedGuildId) return toast.error("Choisis un serveur avant d'importer une sauvegarde.")
+    if (!canManageGuildBackup) return toast.error('Cette sauvegarde est réservée au propriétaire principal du serveur.')
+    if (!backupFile) return toast.error("Choisis d'abord un fichier de sauvegarde.")
+
+    setSaving('backup-import')
+    try {
+      await teamAPI.importBackup(selectedGuildId, { backup: backupFile })
+      setBackupFile(null)
+      setBackupFileMeta(null)
+      toast.success('Sauvegarde importée')
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Impossible d'importer cette sauvegarde."))
     }
     setSaving(null)
   }
@@ -611,6 +714,90 @@ export default function SettingsPage() {
             <button onClick={saveToken} disabled={!botToken || saving==='token'} className="px-5 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-mono hover:bg-amber-500/20 transition-all disabled:opacity-40">
               {saving==='token' ? t('settings.updatingToken') : t('settings.updateToken')}
             </button>
+          </SettingsPanel>
+
+          <SettingsPanel
+            icon={Save}
+            iconTone="border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan"
+            title="Sauvegarde serveur"
+            hint="Télécharge un fichier complet puis réimporte-le en un clic pour restaurer ta configuration."
+          >
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-white/40 block">Serveur ciblé</label>
+                <select
+                  className="select-field"
+                  value={selectedGuildId || ''}
+                  onChange={(event) => selectGuild(event.target.value || null)}
+                >
+                  <option value="">Choisir un serveur</option>
+                  {guilds.map((guild) => (
+                    <option key={guild.id} value={guild.id}>
+                      {guild.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-2xl border border-white/8 bg-black/15 px-4 py-4 text-sm leading-6 text-white/60">
+                La sauvegarde inclut les protections, les commandes, les tickets, les notifications et les réglages de logs du serveur sélectionné.
+              </div>
+
+              {!selectedGuildId ? (
+                <div className="rounded-2xl border border-amber-400/15 bg-amber-400/10 px-4 py-3 text-sm text-amber-100/80">
+                  Sélectionne un serveur pour créer ou importer une sauvegarde.
+                </div>
+              ) : !canManageGuildBackup ? (
+                <div className="rounded-2xl border border-red-400/15 bg-red-500/10 px-4 py-3 text-sm text-red-100/80">
+                  Seul le propriétaire principal peut exporter ou importer une sauvegarde privée.
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={exportGuildBackup}
+                  disabled={!selectedGuildId || !canManageGuildBackup || saving === 'backup-export'}
+                  className="px-5 py-3 rounded-2xl bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm font-mono hover:bg-neon-cyan/20 transition-all disabled:opacity-40"
+                >
+                  {saving === 'backup-export' ? 'Téléchargement...' : 'Télécharger la sauvegarde'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => backupInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white/70 text-sm font-mono hover:bg-white/[0.08] transition-all"
+                >
+                  <Upload className="w-4 h-4" />
+                  Choisir un fichier
+                </button>
+
+                <button
+                  type="button"
+                  onClick={importGuildBackup}
+                  disabled={!selectedGuildId || !canManageGuildBackup || !backupFile || saving === 'backup-import'}
+                  className="px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-mono hover:bg-emerald-500/20 transition-all disabled:opacity-40"
+                >
+                  {saving === 'backup-import' ? 'Import...' : 'Importer'}
+                </button>
+              </div>
+
+              <input
+                ref={backupInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleBackupFileChange}
+              />
+
+              {backupFileMeta ? (
+                <div className="rounded-2xl border border-white/8 bg-black/15 px-4 py-4 text-sm text-white/65">
+                  <p className="font-display font-700 text-white">{backupFileMeta.name}</p>
+                  {backupFileMeta.guildName ? <p className="mt-1">Serveur source : {backupFileMeta.guildName}</p> : null}
+                  {backupFileMeta.exportedAt ? <p className="mt-1">Exporté le : {new Date(backupFileMeta.exportedAt).toLocaleString('fr-FR')}</p> : null}
+                </div>
+              ) : null}
+            </div>
           </SettingsPanel>
 
           <SettingsPanel

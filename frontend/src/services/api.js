@@ -213,6 +213,8 @@ export const teamAPI = {
   createSnapshot: (guildId, data) => api.post(`/bot/guilds/${guildId}/team/snapshots`, data),
   restoreSnapshot:(guildId, snapshotId) => api.post(`/bot/guilds/${guildId}/team/snapshots/${snapshotId}/restore`),
   deleteSnapshot: (guildId, snapshotId) => api.delete(`/bot/guilds/${guildId}/team/snapshots/${snapshotId}`),
+  exportBackup:   (guildId) => api.get(`/bot/guilds/${guildId}/team/backups/export`, { responseType: 'blob', timeout: 60000 }),
+  importBackup:   (guildId, data) => api.post(`/bot/guilds/${guildId}/team/backups/import`, data, { timeout: 60000 }),
 }
 
 export const scanAPI = {
@@ -241,6 +243,7 @@ export const commandsAPI = {
   assistant: (guildId, data) => api.post(`/bot/guilds/${guildId}/commands/assistant`, data),
   create: (guildId, data) => api.post(`/bot/guilds/${guildId}/commands`, data),
   update: (guildId, id, data) => api.patch(`/bot/guilds/${guildId}/commands/${id}`, data),
+  setSystemLogChannel: (guildId, log_channel_id) => api.patch(`/bot/guilds/${guildId}/commands/system/log-channel`, { log_channel_id }),
   toggle: (guildId, id, enabled)   => api.patch(`/bot/guilds/${guildId}/commands/${id}/toggle`, typeof enabled === 'boolean' ? { enabled } : {}),
   delete: (guildId, id)   => api.delete(`/bot/guilds/${guildId}/commands/${id}`),
 }

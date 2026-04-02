@@ -5,6 +5,11 @@ const { randomBytes } = require('crypto');
 
 const db = require('../database');
 const { initializeDefaultModules } = require('./guildSyncService');
+const {
+  DEFAULT_TICKET_CONFIG,
+  getGuildTicketGenerator,
+  saveGuildTicketGenerator,
+} = require('./ticketGeneratorService');
 
 const ACCESS_ROLES = ['admin', 'moderator', 'viewer'];
 
@@ -783,7 +788,7 @@ function removeGuildCollaborator({ guildId, ownerUserId, memberUserId }) {
 
 function buildSnapshotPayload(guildId) {
   return {
-    version: 2,
+    version: 3,
     modules: db.raw('SELECT module_type, enabled, simple_config, advanced_config FROM modules WHERE guild_id = ? ORDER BY module_type ASC', [guildId]),
     custom_commands: db.raw(`
       SELECT trigger, command_type, command_prefix, command_name, description, response, reply_in_dm, response_mode,
@@ -815,80 +820,33 @@ function buildSnapshotPayload(guildId) {
       WHERE guild_id = ?
       LIMIT 1
     `, [guildId])[0] || null,
+    ticket_generator: getGuildTicketGenerator(guildId),
   };
 }
 
-function listGuildSnapshots(guildId) {
-  return db.db.prepare(`
-    SELECT
-      snap.*,
-      users.username AS created_by_username,
-      users.avatar_url AS created_by_avatar_url
-    FROM guild_config_snapshots snap
-    LEFT JOIN users ON users.id = snap.created_by_user_id
-    WHERE snap.guild_id = ?
-    ORDER BY snap.created_at DESC
-  `).all(guildId).map((row) => {
-    const payload = parseJson(row.payload, {});
-    return {
-      id: row.id,
-      label: row.label || '',
-      created_at: row.created_at,
-      created_by_user_id: row.created_by_user_id || null,
-      created_by_username: row.created_by_username || 'Compte inconnu',
-      created_by_avatar_url: row.created_by_avatar_url || null,
-      module_count: Array.isArray(payload.modules) ? payload.modules.length : 0,
-      command_count: Array.isArray(payload.custom_commands) ? payload.custom_commands.length : 0,
-      has_log_channel: Boolean(payload.guild_log_channel),
-      has_dm_settings: Boolean(payload.guild_dm_settings),
-    };
-  });
+function extractSnapshotPayload(source = {}) {
+  const candidate = source && typeof source === 'object'
+    ? (
+      source.backup && typeof source.backup === 'object'
+        ? source.backup
+        : source.payload && typeof source.payload === 'object'
+          ? source.payload
+          : source
+    )
+    : {};
+
+  return {
+    version: Number(candidate.version || 3),
+    modules: Array.isArray(candidate.modules) ? candidate.modules : [],
+    custom_commands: Array.isArray(candidate.custom_commands) ? candidate.custom_commands : [],
+    guild_log_channel: candidate.guild_log_channel && typeof candidate.guild_log_channel === 'object' ? candidate.guild_log_channel : null,
+    guild_dm_settings: candidate.guild_dm_settings && typeof candidate.guild_dm_settings === 'object' ? candidate.guild_dm_settings : null,
+    ticket_generator: candidate.ticket_generator && typeof candidate.ticket_generator === 'object' ? candidate.ticket_generator : null,
+  };
 }
 
-function createGuildSnapshot({ guildId, ownerUserId, actorUserId, label }) {
-  const guild = db.findOne('guilds', { id: guildId });
-  if (!guild || guild.user_id !== ownerUserId) {
-    throw Object.assign(new Error('Guild not found'), { status: 404 });
-  }
-
-  const payload = buildSnapshotPayload(guildId);
-  const row = db.insert('guild_config_snapshots', {
-    guild_id: guildId,
-    created_by_user_id: actorUserId,
-    label: String(label || '').trim() || `Snapshot ${new Date().toLocaleString('fr-FR')}`,
-    payload: JSON.stringify(payload),
-    created_at: new Date().toISOString(),
-  });
-
-  logCollabAction({
-    guildId,
-    actorUserId,
-    actorUsername: db.findOne('users', { id: actorUserId })?.username,
-    actionType: 'snapshot_create',
-    target: label || 'Sans nom',
-  });
-
-  return db.findOne('guild_config_snapshots', { id: row.id });
-}
-
-function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
-  const guild = db.findOne('guilds', { id: guildId });
-  if (!guild || guild.user_id !== ownerUserId) {
-    throw Object.assign(new Error('Guild not found'), { status: 404 });
-  }
-
-  const snapshot = db.db.prepare(`
-    SELECT *
-    FROM guild_config_snapshots
-    WHERE id = ? AND guild_id = ?
-    LIMIT 1
-  `).get(snapshotId, guildId);
-
-  if (!snapshot) {
-    throw Object.assign(new Error('Sauvegarde introuvable'), { status: 404 });
-  }
-
-  const payload = parseJson(snapshot.payload, {});
+function applySnapshotPayload(guildId, source = {}) {
+  const payload = extractSnapshotPayload(source);
   const now = new Date().toISOString();
 
   db.transaction(() => {
@@ -897,7 +855,7 @@ function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
     db.db.prepare('DELETE FROM guild_log_channels WHERE guild_id = ?').run(guildId);
     db.db.prepare('DELETE FROM guild_dm_settings WHERE guild_id = ?').run(guildId);
 
-    for (const module of Array.isArray(payload.modules) ? payload.modules : []) {
+    for (const module of payload.modules) {
       db.insert('modules', {
         guild_id: guildId,
         module_type: module.module_type,
@@ -911,7 +869,7 @@ function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
 
     initializeDefaultModules(guildId);
 
-    for (const command of Array.isArray(payload.custom_commands) ? payload.custom_commands : []) {
+    for (const command of payload.custom_commands) {
       db.insert('custom_commands', {
         guild_id: guildId,
         trigger: command.trigger,
@@ -976,6 +934,101 @@ function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
     }
   });
 
+  saveGuildTicketGenerator(guildId, payload.ticket_generator || DEFAULT_TICKET_CONFIG);
+  return payload;
+}
+
+function listGuildSnapshots(guildId) {
+  return db.db.prepare(`
+    SELECT
+      snap.*,
+      users.username AS created_by_username,
+      users.avatar_url AS created_by_avatar_url
+    FROM guild_config_snapshots snap
+    LEFT JOIN users ON users.id = snap.created_by_user_id
+    WHERE snap.guild_id = ?
+    ORDER BY snap.created_at DESC
+  `).all(guildId).map((row) => {
+    const payload = parseJson(row.payload, {});
+    return {
+      id: row.id,
+      label: row.label || '',
+      created_at: row.created_at,
+      created_by_user_id: row.created_by_user_id || null,
+      created_by_username: row.created_by_username || 'Compte inconnu',
+      created_by_avatar_url: row.created_by_avatar_url || null,
+      module_count: Array.isArray(payload.modules) ? payload.modules.length : 0,
+      command_count: Array.isArray(payload.custom_commands) ? payload.custom_commands.length : 0,
+      has_log_channel: Boolean(payload.guild_log_channel),
+      has_dm_settings: Boolean(payload.guild_dm_settings),
+    };
+  });
+}
+
+function createGuildSnapshot({ guildId, ownerUserId, actorUserId, label }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const payload = buildSnapshotPayload(guildId);
+  const row = db.insert('guild_config_snapshots', {
+    guild_id: guildId,
+    created_by_user_id: actorUserId,
+    label: String(label || '').trim() || `Snapshot ${new Date().toLocaleString('fr-FR')}`,
+    payload: JSON.stringify(payload),
+    created_at: new Date().toISOString(),
+  });
+
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: db.findOne('users', { id: actorUserId })?.username,
+    actionType: 'snapshot_create',
+    target: label || 'Sans nom',
+  });
+
+  return db.findOne('guild_config_snapshots', { id: row.id });
+}
+
+function exportGuildBackup({ guildId, ownerUserId, actorUserId = ownerUserId }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  return {
+    kind: 'discordforge-guild-backup',
+    exported_at: new Date().toISOString(),
+    exported_by_user_id: actorUserId,
+    guild: {
+      id: guild.id,
+      guild_id: guild.guild_id,
+      name: guild.name,
+    },
+    backup: buildSnapshotPayload(guildId),
+  };
+}
+
+function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const snapshot = db.db.prepare(`
+    SELECT *
+    FROM guild_config_snapshots
+    WHERE id = ? AND guild_id = ?
+    LIMIT 1
+  `).get(snapshotId, guildId);
+
+  if (!snapshot) {
+    throw Object.assign(new Error('Sauvegarde introuvable'), { status: 404 });
+  }
+
+  const payload = applySnapshotPayload(guildId, parseJson(snapshot.payload, {}));
+
   logCollabAction({
     guildId,
     actorUserId: ownerUserId,
@@ -987,8 +1040,38 @@ function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
   return {
     snapshot,
     restored: {
-      module_count: Array.isArray(payload.modules) ? payload.modules.length : 0,
-      command_count: Array.isArray(payload.custom_commands) ? payload.custom_commands.length : 0,
+      module_count: payload.modules.length,
+      command_count: payload.custom_commands.length,
+      ticket_form_count: Array.isArray(payload.ticket_generator?.options)
+        ? payload.ticket_generator.options.filter((option) => option?.enabled !== false).length
+        : 0,
+    },
+  };
+}
+
+function importGuildBackup({ guildId, ownerUserId, actorUserId, backup }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const payload = applySnapshotPayload(guildId, backup);
+
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: db.findOne('users', { id: actorUserId })?.username,
+    actionType: 'snapshot_restore',
+    target: 'Import JSON',
+  });
+
+  return {
+    restored: {
+      module_count: payload.modules.length,
+      command_count: payload.custom_commands.length,
+      ticket_form_count: Array.isArray(payload.ticket_generator?.options)
+        ? payload.ticket_generator.options.filter((option) => option?.enabled !== false).length
+        : 0,
     },
   };
 }
@@ -1057,7 +1140,9 @@ module.exports = {
   listCollabAuditLog,
   listGuildSnapshots,
   createGuildSnapshot,
+  exportGuildBackup,
   restoreGuildSnapshot,
+  importGuildBackup,
   deleteGuildSnapshot,
   getSharedGuildCounts,
 };

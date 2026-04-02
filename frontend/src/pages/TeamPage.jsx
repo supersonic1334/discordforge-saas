@@ -50,7 +50,7 @@ function getErrorMessage(error) {
 }
 
 function formatDate(locale, value) {
-  if (!value) return 'â€”'
+  if (!value) return '—'
   try {
     return new Date(value).toLocaleString(locale)
   } catch {
@@ -109,7 +109,7 @@ function describeAuditDetails(details = {}) {
     })
     .filter(Boolean)
 
-  return entries.length > 0 ? entries.join(' Â· ') : ''
+  return entries.length > 0 ? entries.join(' · ') : ''
 }
 
 async function connectDiscordAccountWithPopup(returnTo) {
@@ -188,23 +188,23 @@ const SUSPEND_OPTIONS = [
 ]
 
 const ROLE_CONFIG = {
-  owner: { label: 'Proprietaire', color: 'amber', icon: Crown },
+  owner: { label: 'Propriétaire', color: 'amber', icon: Crown },
   admin: { label: 'Admin', color: 'cyan', icon: Shield },
-  moderator: { label: 'Moderateur', color: 'violet', icon: UserCheck },
+  moderator: { label: 'Modérateur', color: 'violet', icon: UserCheck },
   viewer: { label: 'Lecture seule', color: 'slate', icon: Eye },
 }
 
 const AUDIT_ACTION_CONFIG = {
-  invite:           { label: 'Invitation envoyee',       icon: UserPlus,  bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  code_create:      { label: 'Code genere',              icon: Plus,      bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20',    text: 'text-cyan-400' },
-  code_redeem:      { label: 'Equipe rejointe',          icon: UserCheck, bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  code_revoke:      { label: 'Code revoque',             icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
-  revoke:           { label: 'Acces retire',             icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
-  role_change:      { label: 'Role modifie',             icon: Shield,    bg: 'bg-violet-500/10',  border: 'border-violet-500/20',  text: 'text-violet-400' },
+  invite:           { label: 'Invitation envoyée',       icon: UserPlus,  bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
+  code_create:      { label: 'Code généré',              icon: Plus,      bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20',    text: 'text-cyan-400' },
+  code_redeem:      { label: 'Équipe rejointe',          icon: UserCheck, bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
+  code_revoke:      { label: 'Code révoqué',             icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
+  revoke:           { label: 'Accès retiré',             icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
+  role_change:      { label: 'Rôle modifié',             icon: Shield,    bg: 'bg-violet-500/10',  border: 'border-violet-500/20',  text: 'text-violet-400' },
   suspend:          { label: 'Compte suspendu',          icon: Pause,     bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   text: 'text-amber-400' },
-  unsuspend:        { label: 'Compte reactive',          icon: Play,      bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  snapshot_create:  { label: 'Sauvegarde creee',         icon: Save,      bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20',    text: 'text-cyan-400' },
-  snapshot_restore: { label: 'Sauvegarde restauree',     icon: RotateCcw, bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   text: 'text-amber-400' },
+  unsuspend:        { label: 'Compte réactivé',          icon: Play,      bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
+  snapshot_create:  { label: 'Sauvegarde créée',         icon: Save,      bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20',    text: 'text-cyan-400' },
+  snapshot_restore: { label: 'Sauvegarde restaurée',     icon: RotateCcw, bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   text: 'text-amber-400' },
   snapshot_delete:  { label: 'Sauvegarde supprimee',     icon: Trash2,    bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
 }
 
@@ -454,7 +454,7 @@ export default function TeamPage() {
     const handleSnapshotRestored = (data) => {
       if (data?.guildId === selectedGuildId) {
         loadOverview({ silent: true })
-        toast.success('Sauvegarde restauree â€” donnees synchronisees.')
+        toast.success('Sauvegarde restaurée — données synchronisées.')
       }
     }
 
@@ -494,7 +494,7 @@ export default function TeamPage() {
         expires_in_hours: codeForm.expires_in_hours,
       })
       setOverview(response.data)
-      toast.success('Code genere')
+      toast.success('Code généré')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -508,7 +508,7 @@ export default function TeamPage() {
     try {
       const response = await teamAPI.revokeCode(selectedGuildId, codeId)
       setOverview(response.data)
-      toast.success('Code revoque')
+      toast.success('Code révoqué')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -527,7 +527,7 @@ export default function TeamPage() {
         selectGuild(response.data.guild.id)
       }
       setJoinCode('')
-      toast.success('Equipe rejointe')
+      toast.success('Équipe rejointe')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -542,9 +542,9 @@ export default function TeamPage() {
       const result = await connectDiscordAccountWithPopup(returnTo)
       const linked = await syncTeamAfterDiscordLink(result)
       if (!linked) {
-        throw new Error('Le compte Discord est lie, mais la synchronisation n est pas encore finie.')
+        throw new Error('Le compte Discord est lié, mais la synchronisation n’est pas encore finie.')
       }
-      toast.success('Compte Discord connecte')
+      toast.success('Compte Discord connecté')
     } catch (error) {
       if (String(error?.message || '') !== 'Popup fermee') {
         toast.error(getErrorMessage(error))
@@ -560,7 +560,7 @@ export default function TeamPage() {
     try {
       const response = await teamAPI.updateMember(selectedGuildId, memberUserId, { access_role: accessRole })
       setOverview(response.data)
-      toast.success('Role mis a jour')
+      toast.success('Rôle mis à jour')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -579,8 +579,8 @@ export default function TeamPage() {
       setOverview(response.data)
       toast.success(
         isSuspended
-          ? (durationHours > 0 ? `${username} bloque ${durationHours}h` : `${username} suspendu`)
-          : `${username} reactive`
+          ? (durationHours > 0 ? `${username} bloqué ${durationHours}h` : `${username} suspendu`)
+          : `${username} réactivé`
       )
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -591,12 +591,12 @@ export default function TeamPage() {
 
   const handleRemoveMember = async (memberUserId, username) => {
     if (!selectedGuildId) return
-    if (!window.confirm(`Retirer l'acces de ${username || 'ce compte'} ? Cette action est immediate.`)) return
+    if (!window.confirm(`Retirer l'accès de ${username || 'ce compte'} ? Cette action est immédiate.`)) return
     setSaving(`remove:${memberUserId}`)
     try {
       const response = await teamAPI.removeMember(selectedGuildId, memberUserId)
       setOverview(response.data)
-      toast.success('Acces retire')
+      toast.success('Accès retiré')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -611,7 +611,7 @@ export default function TeamPage() {
       const response = await teamAPI.createSnapshot(selectedGuildId, { label: snapshotLabel.trim() })
       setOverview((current) => ({ ...current, snapshots: response.data?.snapshots || current.snapshots }))
       setSnapshotLabel('')
-      toast.success('Sauvegarde creee')
+      toast.success('Sauvegarde créée')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -626,7 +626,7 @@ export default function TeamPage() {
     try {
       const response = await teamAPI.restoreSnapshot(selectedGuildId, snapshot.id)
       setOverview(response.data)
-      toast.success('Sauvegarde restauree')
+      toast.success('Sauvegarde restaurée')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -674,7 +674,7 @@ export default function TeamPage() {
             <Users className="w-7 h-7 text-white/15" />
           </div>
           <p className="font-display font-700 text-white text-xl">Selectionne un espace</p>
-          <p className="text-white/35 mt-2 text-sm max-w-sm mx-auto">Choisis ton propre serveur ou rejoins une equipe avec un code d acces a usage unique.</p>
+          <p className="text-white/35 mt-2 text-sm max-w-sm mx-auto">Choisis ton propre serveur ou rejoins une équipe avec un code d’accès à usage unique.</p>
           <Link to="/dashboard/servers" className="inline-flex items-center gap-2 mt-6 px-5 py-3 rounded-xl bg-neon-cyan/10 border border-neon-cyan/25 text-neon-cyan font-mono text-sm hover:bg-neon-cyan/20 transition-all">
             Voir les serveurs
             <ArrowRight className="w-4 h-4" />
@@ -697,12 +697,12 @@ export default function TeamPage() {
   // â”€â”€ Tabs config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const tabs = [
-    { id: 'team', label: 'Equipe', icon: Users },
+    { id: 'team', label: 'Équipe', icon: Users },
     { id: 'collaborators', label: 'Collaborateurs', icon: UserCheck },
     { id: 'spaces', label: 'Espaces', icon: ArrowRight },
     ...(isOwner ? [
       { id: 'backups', label: 'Sauvegardes', icon: Database },
-      { id: 'audit', label: 'Activite', icon: ScrollText },
+      { id: 'audit', label: 'Activité', icon: ScrollText },
     ] : []),
   ]
 
@@ -719,12 +719,12 @@ export default function TeamPage() {
                   <Users className="w-5 h-5 text-neon-cyan" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="font-display font-800 text-2xl text-white sm:text-3xl leading-tight">Equipe</h1>
+                  <h1 className="font-display font-800 text-2xl text-white sm:text-3xl leading-tight">Équipe</h1>
                   <p className="text-white/40 text-xs font-mono mt-0.5">{guild?.name || 'Serveur'}</p>
                 </div>
               </div>
               <p className="max-w-xl text-sm text-white/45 leading-relaxed">
-                Partage le dashboard en toute securite. Le token reste prive, chaque modification est tracee et tu peux tout restaurer.
+                Partage le dashboard en toute sécurité. Le token reste privé, chaque modification est tracée et tu peux tout restaurer.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -734,10 +734,10 @@ export default function TeamPage() {
 
           {/* Stats row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
-            <StatPill icon={Crown} label="Ton role" value={isOwner ? 'Proprietaire' : (ROLE_CONFIG[overview.access?.access_role]?.label || 'Partage')} tone="amber" />
+            <StatPill icon={Crown} label="Ton rôle" value={isOwner ? 'Propriétaire' : (ROLE_CONFIG[overview.access?.access_role]?.label || 'Partage')} tone="amber" />
             <StatPill icon={Users} label="Collaborateurs" value={nonOwnerCollabs.length} tone="violet" />
             <StatPill icon={UserCheck} label="Actifs" value={activeCollabs.length} tone="emerald" />
-            <StatPill icon={Database} label="Sauvegardes" value={isOwner ? snapshots.length : 'â€”'} tone="cyan" />
+            <StatPill icon={Database} label="Sauvegardes" value={isOwner ? snapshots.length : '—'} tone="cyan" />
           </div>
         </div>
       </div>
@@ -892,7 +892,7 @@ function WorkspaceSwitchCard({ ownGuilds, sharedGuilds, selectedGuildId, onSelec
                   </span>
                   <span className="text-white/18">â€¢</span>
                   <span className="truncate">
-                    {entry.is_owner ? 'Ton espace' : 'Espace partage'}
+                    {entry.is_owner ? 'Ton espace' : 'Espace partagé'}
                   </span>
                 </div>
               </div>
@@ -908,7 +908,7 @@ function WorkspaceSwitchCard({ ownGuilds, sharedGuilds, selectedGuildId, onSelec
       <SectionTitle
         icon={ArrowRight}
         title="Mes espaces"
-        subtitle="Passe de ton espace principal Ã  un espace partagÃ© sans te dÃ©connecter."
+        subtitle="Passe de ton espace principal à un espace partagé sans te déconnecter."
         tone="cyan"
       />
       <div className="grid gap-4 lg:grid-cols-2">
@@ -917,8 +917,8 @@ function WorkspaceSwitchCard({ ownGuilds, sharedGuilds, selectedGuildId, onSelec
           {renderGuilds(ownGuilds, 'Aucun espace principal disponible.')}
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
-          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Espaces partages</p>
-          {renderGuilds(sharedGuilds, 'Aucune equipe rejointe pour le moment.')}
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Espaces partagés</p>
+          {renderGuilds(sharedGuilds, 'Aucune équipe rejointe pour le moment.')}
         </div>
       </div>
     </div>
@@ -932,15 +932,15 @@ function JoinTeamCard({ user, joinCode, setJoinCode, saving, onRedeem, onConnect
     <div className="spotlight-card p-5 space-y-4">
       <SectionTitle
         icon={UserPlus}
-        title="Rejoindre une equipe"
-        subtitle="Le code est a usage unique. Un compte Discord lie est obligatoire avant validation."
+        title="Rejoindre une équipe"
+        subtitle="Le code est à usage unique. Un compte Discord lié est obligatoire avant validation."
         tone="emerald"
       />
       {!linked ? (
         <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-display font-600 text-amber-100">Compte Discord requis</p>
-            <p className="mt-1 text-sm text-amber-100/70">Lie ton compte Discord une fois, puis les codes equipe marcheront instantanement.</p>
+            <p className="mt-1 text-sm text-amber-100/70">Lie ton compte Discord une fois, puis les codes équipe marcheront instantanément.</p>
           </div>
           <button
             type="button"
@@ -955,7 +955,7 @@ function JoinTeamCard({ user, joinCode, setJoinCode, saving, onRedeem, onConnect
       ) : null}
       {linked ? (
         <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.05] px-4 py-3 text-xs text-emerald-200/80 font-mono">
-          Compte Discord lie: {user?.discord_global_name || user?.discord_username || user?.username || user?.discord_id}
+          Compte Discord lié : {user?.discord_global_name || user?.discord_username || user?.username || user?.discord_id}
         </div>
       ) : null}
       <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
@@ -964,7 +964,7 @@ function JoinTeamCard({ user, joinCode, setJoinCode, saving, onRedeem, onConnect
           value={joinCode}
           onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
           onKeyDown={(event) => event.key === 'Enter' && linked && onRedeem()}
-          placeholder="Code d acces a usage unique"
+          placeholder="Code d’accès à usage unique"
         />
         <button
           type="button"
@@ -985,8 +985,8 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
     <div className="spotlight-card p-5 space-y-4">
       <SectionTitle
         icon={Shield}
-        title="Codes d'accÃ¨s"
-        subtitle="Un code = une personne. AccÃ¨s complet Ã  l'Ã©quipe, hors sauvegardes et activitÃ©."
+        title="Codes d’accès"
+        subtitle="Un code = une personne. Accès complet à l’équipe, hors sauvegardes et activité."
         tone="violet"
       />
       <div className="grid gap-3 lg:grid-cols-[220px_auto]">
@@ -1006,11 +1006,11 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/10 px-5 py-3 text-sm font-mono text-violet-300 transition-all hover:bg-violet-500/20 disabled:opacity-40"
         >
           {saving === 'code:create' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {saving === 'code:create' ? 'GÃ©nÃ©ration...' : 'GÃ©nÃ©rer un code'}
+          {saving === 'code:create' ? 'Génération...' : 'Générer un code'}
         </button>
       </div>
       <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-white/38">
-        Le code reste actif jusqu'Ã  son expiration ou sa premiÃ¨re utilisation.
+        Le code reste actif jusqu’à son expiration ou sa première utilisation.
       </div>
       {joinCodes.length === 0 ? (
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-sm text-white/35">
@@ -1024,7 +1024,7 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
                 <div className="min-w-0">
                   <p className="font-display text-lg font-700 text-white tracking-[0.18em] break-all">{entry.code}</p>
                   <p className="mt-1 text-xs text-white/32 font-mono">
-                    {ROLE_CONFIG[entry.access_role]?.label || entry.access_role} Â· {entry.expires_at ? `expire ${formatRelativeTime(entry.expires_at)}` : 'sans expiration'}
+                    {ROLE_CONFIG[entry.access_role]?.label || entry.access_role} · {entry.expires_at ? `expire ${formatRelativeTime(entry.expires_at)}` : 'sans expiration'}
                   </p>
                 </div>
                 <button
@@ -1037,7 +1037,7 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
                 </button>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/35">
-                <span>Cree {timeAgo(entry.created_at)}</span>
+                <span>Créé {timeAgo(entry.created_at)}</span>
                 <span>Par {entry.created_by_display_name || entry.created_by_username || 'Inconnu'}</span>
                 <span className="font-mono">1 seule utilisation</span>
               </div>
@@ -1112,7 +1112,7 @@ function TeamTab({
                 <RoleBadge role="owner" />
               </div>
               <div className="flex items-center gap-3 mt-1 text-xs text-white/30 font-mono">
-                <span>{isOwner ? 'Proprietaire du bot' : 'Espace partage'}</span>
+                <span>{isOwner ? 'Propriétaire du bot' : 'Espace partagé'}</span>
                 {teamOwner.site_username && <span>Site: {teamOwner.site_username}</span>}
                 {teamOwner.discord_id && <span>Discord: {teamOwner.discord_id}</span>}
               </div>
@@ -1120,7 +1120,7 @@ function TeamTab({
             <div className="hidden sm:flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-400/15 bg-amber-400/[0.06]">
                 <Lock className="w-3 h-3 text-amber-300" />
-                <span className="text-[11px] font-mono text-amber-300">Token prive</span>
+                <span className="text-[11px] font-mono text-amber-300">Token privé</span>
               </div>
             </div>
           </div>
@@ -1152,7 +1152,7 @@ function TeamTab({
               </div>
               <div className="text-left">
                 <p className="font-display font-700 text-white text-sm">Inviter un collaborateur</p>
-                <p className="text-white/35 text-xs mt-0.5">Partager l'acces au dashboard sans exposer le token</p>
+                <p className="text-white/35 text-xs mt-0.5">Partager l'accès au dashboard sans exposer le token</p>
               </div>
             </div>
             <motion.div animate={{ rotate: showInviteForm ? 45 : 0 }} transition={{ duration: 0.2 }}>
@@ -1184,7 +1184,7 @@ function TeamTab({
                       onChange={(e) => setInviteForm((c) => ({ ...c, access_role: e.target.value }))}
                     >
                       <option value="admin">Admin</option>
-                      <option value="moderator">Moderateur</option>
+                      <option value="moderator">Modérateur</option>
                       <option value="viewer">Lecture seule</option>
                     </select>
                     <select
@@ -1198,7 +1198,7 @@ function TeamTab({
                     </select>
                   </div>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-white/25 font-mono">L'utilisateur recevra un acces immediat au dashboard</p>
+                    <p className="text-xs text-white/25 font-mono">L'utilisateur recevra un accès immédiat au dashboard</p>
                     <button
                       type="button"
                       onClick={onInvite}
@@ -1225,7 +1225,7 @@ function TeamTab({
         <SectionTitle
           icon={Users}
           title={`Collaborateurs${nonOwnerCollabs.length > 0 ? ` (${nonOwnerCollabs.length})` : ''}`}
-          subtitle={isOwner ? 'Gere les acces et permissions de ton equipe' : 'Les personnes qui partagent ce dashboard'}
+          subtitle={isOwner ? 'Gère les accès et permissions de ton équipe' : 'Les personnes qui partagent ce dashboard'}
           tone="cyan"
         />
 
@@ -1280,7 +1280,7 @@ function TeamTab({
                         disabled={saving === `member:${entry.user_id}` || entry.is_suspended}
                       >
                         <option value="admin">Admin</option>
-                        <option value="moderator">Moderateur</option>
+                        <option value="moderator">Modérateur</option>
                         <option value="viewer">Lecture</option>
                       </select>
                       {entry.is_suspended ? (
@@ -1288,7 +1288,7 @@ function TeamTab({
                           type="button"
                           onClick={() => onSuspend(entry.user_id, getTeamDisplayName(entry), false, 0)}
                           disabled={saving.startsWith(`suspend:${entry.user_id}:`)}
-                          title="Reactiver"
+                          title="Réactiver"
                           className="p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all disabled:opacity-40"
                         >
                           <Play className="w-3.5 h-3.5" />
@@ -1315,7 +1315,7 @@ function TeamTab({
                         type="button"
                         onClick={() => onRemoveMember(entry.user_id, getTeamDisplayName(entry))}
                         disabled={saving === `remove:${entry.user_id}`}
-                        title="Retirer l'acces"
+                        title="Retirer l'accès"
                         className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-40"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1335,7 +1335,7 @@ function TeamTab({
           <div className="absolute inset-x-4 bottom-4 h-10 rounded-full bg-emerald-400/10 blur-2xl pointer-events-none" />
           <div className="flex items-center justify-between gap-2 mb-2 relative">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-display font-600 text-white">Securite du token</span>
+            <span className="text-xs font-display font-600 text-white">Sécurité du token</span>
           </div>
           <div className="relative mt-4 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
             <div className="flex items-center gap-3">
@@ -1402,7 +1402,7 @@ function SimpleTeamTab({ isOwner, collaborators, activeCollabs, suspendedCollabs
                   <RoleBadge role="owner" />
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-white/30 font-mono">
-                  <span>{isOwner ? 'Espace principal' : 'Espace partagÃ©'}</span>
+                  <span>{isOwner ? 'Espace principal' : 'Espace partagé'}</span>
                   {teamOwner.site_username && <span>Site: {teamOwner.site_username}</span>}
                   {teamOwner.discord_id && <span>ID Discord: {teamOwner.discord_id}</span>}
                 </div>
@@ -1411,7 +1411,7 @@ function SimpleTeamTab({ isOwner, collaborators, activeCollabs, suspendedCollabs
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatPill icon={Users} label="Collaborateurs" value={Math.max(collaborators.length - 1, 0)} tone="violet" />
               <StatPill icon={UserCheck} label="Actifs" value={activeCollabs.length} tone="emerald" />
-              <StatPill icon={Pause} label="BloquÃ©s" value={suspendedCollabs.length} tone="amber" />
+              <StatPill icon={Pause} label="Bloqués" value={suspendedCollabs.length} tone="amber" />
               <StatPill icon={Shield} label="Codes actifs" value={joinCodes.length} tone="cyan" />
             </div>
           </div>
@@ -1422,23 +1422,23 @@ function SimpleTeamTab({ isOwner, collaborators, activeCollabs, suspendedCollabs
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
           <SectionTitle
             icon={ShieldCheck}
-            title="SÃ©curitÃ© du token"
-            subtitle="Les invitÃ©s n'ont jamais accÃ¨s au token ni aux sauvegardes privÃ©es."
+            title="Sécurité du token"
+            subtitle="Les invités n'ont jamais accès au token ni aux sauvegardes privées."
             tone="emerald"
           />
           <p className="mt-4 text-sm text-white/50 leading-relaxed">
-            Chaque accÃ¨s partagÃ© reste isolÃ©, contrÃ´lÃ© et rÃ©vocable en un clic.
+            Chaque accès partagé reste isolé, contrôlé et révocable en un clic.
           </p>
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
           <SectionTitle
             icon={Zap}
             title="Synchronisation"
-            subtitle="Les espaces partagÃ©s se mettent Ã  jour en temps rÃ©el pour toute l'Ã©quipe."
+            subtitle="Les espaces partagés se mettent à jour en temps réel pour toute l'équipe."
             tone="cyan"
           />
           <p className="mt-4 text-sm text-white/50 leading-relaxed">
-            Les changements visibles sont propagÃ©s sans rechargement manuel.
+            Les changements visibles sont propagés sans rechargement manuel.
           </p>
         </div>
       </div>
@@ -1446,15 +1446,15 @@ function SimpleTeamTab({ isOwner, collaborators, activeCollabs, suspendedCollabs
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
           <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Collaborateurs</p>
-          <p className="mt-2 text-sm text-white/60 leading-relaxed">GÃ¨re l'accÃ¨s, bloque temporairement ou retire un membre sans quitter la page.</p>
+          <p className="mt-2 text-sm text-white/60 leading-relaxed">Gère l'accès, bloque temporairement ou retire un membre sans quitter la page.</p>
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Codes dâ€™accÃ¨s</p>
-          <p className="mt-2 text-sm text-white/60 leading-relaxed">GÃ©nÃ¨re un code sÃ©curisÃ©, copie-le en un clic et laisse-le expirer automatiquement.</p>
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Codes d’accès</p>
+          <p className="mt-2 text-sm text-white/60 leading-relaxed">Génère un code sécurisé, copie-le en un clic et laisse-le expirer automatiquement.</p>
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
           <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/28">Espaces</p>
-          <p className="mt-2 text-sm text-white/60 leading-relaxed">Passe facilement de ton espace principal aux espaces partagÃ©s sans te dÃ©connecter.</p>
+          <p className="mt-2 text-sm text-white/60 leading-relaxed">Passe facilement de ton espace principal aux espaces partagés sans te déconnecter.</p>
         </div>
       </div>
     </div>
@@ -1472,7 +1472,7 @@ function CollaboratorDetailField({ label, value, mono = false }) {
 }
 
 function CollaboratorDetailsPanel({ entry }) {
-  const discordLabel = entry.discord_global_name || entry.discord_username || 'Compte Discord non lie'
+  const discordLabel = entry.discord_global_name || entry.discord_username || 'Compte Discord non lié'
   const siteLabel = entry.site_username || entry.username || 'Compte site'
   const joinedAt = formatDate('fr-FR', entry.accepted_at || entry.created_at)
   const updatedAt = formatDate('fr-FR', entry.updated_at || entry.accepted_at || entry.created_at)
@@ -1505,10 +1505,10 @@ function CollaboratorDetailsPanel({ entry }) {
             </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <CollaboratorDetailField label="Pseudo Discord" value={entry.discord_username ? `@${entry.discord_username}` : 'Aucun pseudo lie'} />
-            <CollaboratorDetailField label="ID Discord" value={entry.discord_id || 'Compte Discord non lie'} mono />
-            <CollaboratorDetailField label="Nom affiche" value={entry.discord_global_name || 'Non defini'} />
-            <CollaboratorDetailField label="Statut" value={entry.is_suspended ? 'Acces bloque temporairement' : 'Acces actif'} />
+            <CollaboratorDetailField label="Pseudo Discord" value={entry.discord_username ? `@${entry.discord_username}` : 'Aucun pseudo lié'} />
+            <CollaboratorDetailField label="ID Discord" value={entry.discord_id || 'Compte Discord non lié'} mono />
+            <CollaboratorDetailField label="Nom affiché" value={entry.discord_global_name || 'Non défini'} />
+            <CollaboratorDetailField label="Statut" value={entry.is_suspended ? 'Accès bloqué temporairement' : 'Accès actif'} />
           </div>
         </div>
 
@@ -1523,15 +1523,15 @@ function CollaboratorDetailsPanel({ entry }) {
             <div className="min-w-0">
               <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-neon-cyan/70">Compte site</p>
               <p className="mt-1 font-display font-700 text-white text-lg truncate">{siteLabel}</p>
-              <p className="mt-1 text-xs text-white/45">Toutes les modifications restent tracees dans l'activite proprietaire.</p>
+              <p className="mt-1 text-xs text-white/45">Toutes les modifications restent tracées dans l’activité propriétaire.</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <CollaboratorDetailField label="Email" value={entry.email || entry.site_email || 'Aucun email visible'} mono />
             <CollaboratorDetailField label="Rejoint le" value={joinedAt} />
-            <CollaboratorDetailField label="Derniere mise a jour" value={updatedAt} />
+            <CollaboratorDetailField label="Dernière mise à jour" value={updatedAt} />
             <CollaboratorDetailField label="Expiration" value={entry.expires_at ? formatDate('fr-FR', entry.expires_at) : 'Aucune'} />
-            {suspendedUntil && <CollaboratorDetailField label="Bloque jusqu'a" value={suspendedUntil} />}
+            {suspendedUntil && <CollaboratorDetailField label="Bloqué jusqu'à" value={suspendedUntil} />}
           </div>
         </div>
       </div>
@@ -1588,14 +1588,14 @@ function CollaboratorsTab({
               ? `Collaborateurs${nonOwnerCollabs.length > 0 ? ` (${nonOwnerCollabs.length})` : ''}`
               : 'Collaborateurs'
           }
-          subtitle={isOwner ? 'Gere les acces de ton equipe depuis une vue claire.' : 'Les personnes qui partagent cet espace avec toi.'}
+          subtitle={isOwner ? 'Gère les accès de ton équipe depuis une vue claire.' : 'Les personnes qui partagent cet espace avec toi.'}
           tone="cyan"
         />
 
         {nonOwnerCollabs.length === 0 ? (
           <EmptyState
             icon={Users}
-            message={isOwner ? 'Aucun collaborateur pour le moment. Genere un code pour commencer.' : 'Aucun autre collaborateur sur ce serveur.'}
+            message={isOwner ? 'Aucun collaborateur pour le moment. Génère un code pour commencer.' : 'Aucun autre collaborateur sur ce serveur.'}
           />
         ) : (
           <div className="space-y-3">
@@ -1620,7 +1620,7 @@ function CollaboratorsTab({
                         </span>
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neon-cyan/20 bg-neon-cyan/10 text-[11px] font-mono text-neon-cyan">
                           <Shield className="w-3 h-3" />
-                          Acces equipe
+                          Accès équipe
                         </span>
                         <StatusDot isSuspended={entry.is_suspended} suspendedUntil={entry.suspended_until} expiresAt={entry.expires_at} />
                       </div>
@@ -1659,7 +1659,7 @@ function CollaboratorsTab({
                           )}
                           className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] font-mono text-emerald-300 hover:bg-emerald-500/20 transition-all disabled:opacity-40"
                         >
-                          Reactiver
+                          Réactiver
                         </button>
                       ) : (
                         SUSPEND_OPTIONS.map((option) => (
@@ -1735,8 +1735,8 @@ function AccessCodesTab({ user, isOwner, saving, codeForm, setCodeForm, joinCode
         <div className="spotlight-card p-5 space-y-4">
           <SectionTitle
             icon={Shield}
-            title="Codes d acces"
-            subtitle="Cree un code securise, copie-le et partage-le a une seule personne."
+            title="Codes d’accès"
+            subtitle="Crée un code sécurisé, copie-le et partage-le à une seule personne."
             tone="violet"
           />
           <div className="grid gap-3 lg:grid-cols-[220px_auto]">
@@ -1756,15 +1756,15 @@ function AccessCodesTab({ user, isOwner, saving, codeForm, setCodeForm, joinCode
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/10 px-5 py-3 text-sm font-mono text-violet-300 transition-all hover:bg-violet-500/20 disabled:opacity-40"
             >
               {saving === 'code:create' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              {saving === 'code:create' ? 'Generation...' : 'Generer un code'}
+              {saving === 'code:create' ? 'Génération...' : 'Générer un code'}
             </button>
           </div>
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-white/38">
-            Chaque code donne un acces equipe complet, hors sauvegardes et activite privee.
+            Chaque code donne un accès équipe complet, hors sauvegardes et activité privée.
           </div>
           {joinCodes.length === 0 ? (
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-sm text-white/35">
-              Aucun code actif pour l instant.
+              Aucun code actif pour l'instant.
             </div>
           ) : (
             <div className="grid gap-3 xl:grid-cols-2">
@@ -1796,7 +1796,7 @@ function AccessCodesTab({ user, isOwner, saving, codeForm, setCodeForm, joinCode
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/35">
-                    <span>Cree {timeAgo(entry.created_at)}</span>
+                    <span>Créé {timeAgo(entry.created_at)}</span>
                     <span>Par {entry.created_by_display_name || entry.created_by_username || 'Inconnu'}</span>
                     <span className="font-mono">Usage unique</span>
                   </div>
@@ -1818,7 +1818,7 @@ function BackupsTab({ snapshots, saving, snapshotLabel, setSnapshotLabel, locale
       <div className="rounded-2xl border border-amber-400/15 bg-gradient-to-r from-amber-500/[0.06] to-transparent p-4 flex items-center gap-3">
         <Lock className="w-5 h-5 text-amber-300 shrink-0" />
         <div>
-          <p className="text-sm font-display font-600 text-amber-200">Zone privee â€” proprietaire uniquement</p>
+          <p className="text-sm font-display font-600 text-amber-200">Zone privée — propriétaire uniquement</p>
           <p className="text-xs text-amber-200/50 mt-0.5">Les collaborateurs ne voient pas cette section. Tes sauvegardes restent confidentielles.</p>
         </div>
       </div>
@@ -1828,7 +1828,7 @@ function BackupsTab({ snapshots, saving, snapshotLabel, setSnapshotLabel, locale
         <SectionTitle
           icon={Save}
           title="Nouvelle sauvegarde"
-          subtitle="Capture l'etat actuel des commandes, modules et reglages"
+          subtitle="Capture l'état actuel des commandes, modules et réglages"
           tone="violet"
         />
         <div className="flex gap-3">
@@ -1887,8 +1887,8 @@ function BackupsTab({ snapshots, saving, snapshotLabel, setSnapshotLabel, locale
           <EmptyState
             icon={Database}
             message={hasCollaborators
-              ? 'Aucune sauvegarde manuelle. Cree-en une pour proteger ta configuration.'
-              : 'Les sauvegardes apparaitront ici. Une sauvegarde automatique est creee au premier partage.'}
+              ? 'Aucune sauvegarde manuelle. Crée-en une pour protéger ta configuration.'
+              : 'Les sauvegardes apparaîtront ici. Une sauvegarde automatique est créée au premier partage.'}
           />
         ) : (
           <div className="space-y-3">
@@ -1981,8 +1981,8 @@ function AuditTab({ auditData, locale, onPageChange }) {
       <div className="rounded-2xl border border-violet-400/15 bg-gradient-to-r from-violet-500/[0.06] to-transparent p-4 flex items-center gap-3">
         <Eye className="w-5 h-5 text-violet-300 shrink-0" />
         <div>
-          <p className="text-sm font-display font-600 text-violet-200">Journal d'activite â€” proprietaire uniquement</p>
-          <p className="text-xs text-violet-200/50 mt-0.5">Chaque action de l'equipe est enregistree ici pour identifier qui a modifie quoi.</p>
+          <p className="text-sm font-display font-600 text-violet-200">Journal d’activité — propriétaire uniquement</p>
+          <p className="text-xs text-violet-200/50 mt-0.5">Chaque action de l’équipe est enregistrée ici pour identifier qui a modifié quoi.</p>
         </div>
       </div>
 
@@ -1990,7 +1990,7 @@ function AuditTab({ auditData, locale, onPageChange }) {
         <SectionTitle
           icon={ScrollText}
           title={`Historique des actions${total > 0 ? ` (${total})` : ''}`}
-          subtitle="Toutes les modifications de l'equipe, en temps reel"
+          subtitle="Toutes les modifications de l'équipe, en temps réel"
           tone="cyan"
           action={
             totalPages > 1 && (
@@ -2018,7 +2018,7 @@ function AuditTab({ auditData, locale, onPageChange }) {
         />
 
         {items.length === 0 ? (
-          <EmptyState icon={ScrollText} message="Aucune activite enregistree pour le moment." />
+          <EmptyState icon={ScrollText} message="Aucune activité enregistrée pour le moment." />
         ) : (
           <div className="space-y-1.5">
             {items.map((logEntry, index) => {
@@ -2053,7 +2053,7 @@ function AuditTab({ auditData, locale, onPageChange }) {
                       <span className="font-display font-600 text-white text-[13px]">{logEntry.actor_display_name || logEntry.actor_username || 'Inconnu'}</span>
                       <span className={`text-[11px] font-mono ${config.text}`}>{config.label}</span>
                       {logEntry.target && (
-                        <span className="text-[11px] text-white/30 font-mono truncate max-w-[200px]">â†’ {logEntry.target}</span>
+                        <span className="text-[11px] text-white/30 font-mono truncate max-w-[200px]">→ {logEntry.target}</span>
                       )}
                     </div>
                     {logEntry.details && Object.keys(logEntry.details).length > 0 && (

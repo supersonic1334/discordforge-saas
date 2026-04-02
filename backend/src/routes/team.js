@@ -16,6 +16,7 @@ const {
   guildAccessRoleSchema,
   guildAccessSuspendSchema,
   guildSnapshotCreateSchema,
+  guildBackupImportSchema,
   collaborationAuditListSchema,
 } = require('../validators/schemas');
 const guildAccessService = require('../services/guildAccessService');
@@ -241,6 +242,53 @@ router.get('/snapshots', requireGuildPrimaryOwner, (req, res) => {
   res.json({
     snapshots: guildAccessService.listGuildSnapshots(req.guild.id),
   });
+});
+
+router.get('/backups/export', requireGuildPrimaryOwner, (req, res, next) => {
+  try {
+    const backup = guildAccessService.exportGuildBackup({
+      guildId: req.guild.id,
+      ownerUserId: req.guild.user_id,
+      actorUserId: req.user.id,
+    });
+
+    const safeGuildName = String(req.guild.name || 'backup')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9-_]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'backup';
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=\"${safeGuildName}-backup-${new Date().toISOString().slice(0, 10)}.json\"`);
+    res.send(JSON.stringify(backup, null, 2));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/backups/import', requireGuildPrimaryOwner, validate(guildBackupImportSchema), async (req, res, next) => {
+  try {
+    const restored = guildAccessService.importGuildBackup({
+      guildId: req.guild.id,
+      ownerUserId: req.guild.user_id,
+      actorUserId: req.user.id,
+      backup: req.body.backup,
+    });
+
+    await refreshGuildRuntime(req.guild.user_id, req.guild.guild_id);
+    notifyProfileRefresh(req.guild.user_id, 'guild_snapshot_restored');
+    notifyAllCollaborators(req.guild.id, 'team:snapshot_restored', { guildId: req.guild.id }, null);
+
+    res.json({
+      message: 'Sauvegarde importee',
+      restored,
+      ...buildOverview(req),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.post('/snapshots', requireGuildPrimaryOwner, validate(guildSnapshotCreateSchema), (req, res, next) => {

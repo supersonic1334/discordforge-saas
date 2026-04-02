@@ -189,6 +189,10 @@ const guildSnapshotCreateSchema = z.object({
   label: z.string().trim().max(120).optional().default(''),
 });
 
+const guildBackupImportSchema = z.object({
+  backup: z.record(z.unknown()),
+});
+
 const guildAccessSuspendSchema = z.object({
   is_suspended: z.boolean(),
   duration_hours: z.number().int().min(0).max(8760).optional().default(0),
@@ -438,6 +442,7 @@ const ticketGeneratorConfigSchema = z.object({
   enabled: z.boolean().optional().default(true),
   panel_channel_id: optionalDiscordSnowflakeSchema,
   panel_message_id: optionalDiscordSnowflakeSchema,
+  transcript_channel_id: optionalDiscordSnowflakeSchema,
   panel_title: z.string().trim().min(1).max(120),
   panel_description: z.string().trim().max(2000).optional().default(''),
   panel_footer: z.string().trim().max(200).optional().default(''),
@@ -491,6 +496,7 @@ module.exports = {
   guildAccessRoleSchema,
   guildAccessSuspendSchema,
   guildSnapshotCreateSchema,
+  guildBackupImportSchema,
   collaborationAuditListSchema,
   customCommandSchema,
   commandAssistantSchema,

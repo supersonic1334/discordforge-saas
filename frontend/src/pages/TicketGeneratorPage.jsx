@@ -12,15 +12,20 @@ const AUTOSAVE_DELAY_MS = 1500
 const LOCAL_DRAFT_PREFIX = 'ticket-generator-draft:'
 const MAX_TICKET_ASSET_LENGTH = 320000
 const MAX_TICKET_REQUEST_LENGTH = 850000
+const LEGACY_DUPLICATE_FOOTER = 'Une seule demande active par catégorie si la protection anti-doublon est activée.'
+const DEFAULT_PANEL_DESCRIPTION = 'Choisis le bon motif dans le menu ci-dessous pour ouvrir un salon privé avec le staff adapté.'
+const DEFAULT_MENU_PLACEHOLDER = 'Sélectionne la demande à ouvrir'
+const DEFAULT_PARTNERSHIP_TEMPLATE = 'partenaire-{number}'
 
 const PRESETS = [
   {
     key: 'contact_staff',
     label: 'Contact staff',
-    description: 'Parler directement avec l equipe du serveur',
+    emoji: '🛟',
+    description: "Parler directement avec l'équipe du serveur",
     question_label: 'Pourquoi veux-tu contacter le staff ?',
     question_placeholder: 'Explique clairement ta demande...',
-    intro_message: 'Bonjour {mention}, ta demande a bien ete ouverte.\n\nCategorie: {label}\nRaison: {reason}',
+    intro_message: 'Bonjour {mention}, ta demande a bien été ouverte.\n\nCatégorie : {label}\nRaison : {reason}',
     ticket_name_template: 'staff-{number}',
     ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}',
     enabled: true,
@@ -28,10 +33,11 @@ const PRESETS = [
   {
     key: 'report',
     label: 'Report',
+    emoji: '🚨',
     description: 'Signaler un membre ou un incident',
     question_label: 'Que veux-tu signaler ?',
-    question_placeholder: 'Donne le plus de details possible...',
-    intro_message: 'Signalement recu pour {mention}.\n\nRaison: {reason}',
+    question_placeholder: 'Donne le plus de détails possible...',
+    intro_message: 'Signalement reçu pour {mention}.\n\nRaison : {reason}',
     ticket_name_template: 'report-{number}',
     ticket_topic_template: 'Report #{number} | {user_tag}',
     enabled: true,
@@ -39,10 +45,11 @@ const PRESETS = [
   {
     key: 'appeal',
     label: 'Appel sanction',
-    description: 'Contester une sanction ou demander une revision',
+    emoji: '⚖️',
+    description: 'Contester une sanction ou demander une révision',
     question_label: 'Quelle sanction veux-tu contester ?',
     question_placeholder: 'Explique la situation et ajoute le contexte utile...',
-    intro_message: 'Appel de sanction recu pour {mention}.\n\nContexte: {reason}',
+    intro_message: 'Appel de sanction reçu pour {mention}.\n\nContexte : {reason}',
     ticket_name_template: 'appeal-{number}',
     ticket_topic_template: 'Appel #{number} | {user_tag}',
     enabled: true,
@@ -50,21 +57,23 @@ const PRESETS = [
   {
     key: 'partnership',
     label: 'Partenariat',
+    emoji: '🤝',
     description: 'Proposer un partenariat ou une collaboration',
     question_label: 'Parle-nous de ton projet',
-    question_placeholder: 'Serveur, objectifs, lien, idee...',
-    intro_message: 'Demande partenariat ouverte pour {mention}.\n\nDetails: {reason}',
-    ticket_name_template: 'partner-{number}',
+    question_placeholder: 'Serveur, objectifs, lien, idée...',
+    intro_message: 'Demande de partenariat ouverte pour {mention}.\n\nDétails : {reason}',
+    ticket_name_template: DEFAULT_PARTNERSHIP_TEMPLATE,
     ticket_topic_template: 'Partenariat #{number} | {user_tag}',
     enabled: true,
   },
   {
     key: 'purchase',
     label: 'Achat',
+    emoji: '🛒',
     description: 'Question commerciale ou achat de service',
     question_label: 'De quoi as-tu besoin ?',
     question_placeholder: 'Produit, offre, budget, informations...',
-    intro_message: 'Demande commerciale ouverte pour {mention}.\n\nBesoin: {reason}',
+    intro_message: 'Demande commerciale ouverte pour {mention}.\n\nBesoin : {reason}',
     ticket_name_template: 'purchase-{number}',
     ticket_topic_template: 'Achat #{number} | {user_tag}',
     enabled: true,
@@ -72,10 +81,11 @@ const PRESETS = [
   {
     key: 'recruitment',
     label: 'Recrutement',
-    description: 'Candidater ou contacter l equipe recrutement',
-    question_label: 'Pourquoi souhaites-tu rejoindre l equipe ?',
-    question_placeholder: 'Experience, disponibilites, motivations...',
-    intro_message: 'Candidature recue pour {mention}.\n\nProfil: {reason}',
+    emoji: '🧩',
+    description: "Candidater ou contacter l'équipe recrutement",
+    question_label: "Pourquoi souhaites-tu rejoindre l'équipe ?",
+    question_placeholder: 'Expérience, disponibilités, motivations...',
+    intro_message: 'Candidature reçue pour {mention}.\n\nProfil : {reason}',
     ticket_name_template: 'recruit-{number}',
     ticket_topic_template: 'Recrutement #{number} | {user_tag}',
     enabled: false,
@@ -88,19 +98,20 @@ const DEFAULT_CONFIG = {
   enabled: true,
   panel_channel_id: '',
   panel_message_id: '',
+  transcript_channel_id: '',
   panel_title: 'Support & tickets',
-  panel_description: 'Besoin d aide ? Ouvre un ticket depuis le menu ci-dessous et notre equipe te repondra dans un salon prive des que possible.',
-  panel_footer: 'Une seule demande active par categorie si la protection anti-doublon est active.',
-  menu_placeholder: 'Choisir le type de ticket',
+  panel_description: DEFAULT_PANEL_DESCRIPTION,
+  panel_footer: '',
+  menu_placeholder: DEFAULT_MENU_PLACEHOLDER,
   panel_color: '#7c3aed',
   panel_thumbnail_url: '',
   panel_image_url: '',
   default_category_id: '',
   ticket_name_template: 'ticket-{number}',
   ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}',
-  intro_message: 'Bonjour {mention}, ton ticket est bien cree.\n\nCategorie: {label}\nRaison: {reason}',
+  intro_message: 'Bonjour {mention}, ton ticket est bien créé.\n\nCatégorie : {label}\nRaison : {reason}',
   claim_message: 'Ticket pris en charge par {claimer}.',
-  close_message: 'Ticket ferme par {closer}.',
+  close_message: 'Ticket fermé par {closer}.',
   auto_ping_support: true,
   allow_user_close: true,
   prevent_duplicates: true,
@@ -150,6 +161,19 @@ function clearStoredDraft(guildId) {
   }
 }
 
+function normalizeLegacyPanelFooter(value) {
+  const normalized = String(value || '').trim()
+  return normalized === LEGACY_DUPLICATE_FOOTER ? '' : normalized
+}
+
+function normalizeLegacyTicketTemplate(optionKey, value, fallback = '') {
+  const normalized = String(value || fallback || '').trim()
+  if (String(optionKey || '').trim() === 'partnership' && normalized === 'partner-{number}') {
+    return DEFAULT_PARTNERSHIP_TEMPLATE
+  }
+  return normalized
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -172,7 +196,7 @@ async function buildOptimizedImageAsset(file) {
   const rawDataUrl = await readFileAsDataUrl(file)
   if (rawDataUrl.length <= MAX_TICKET_ASSET_LENGTH) return rawDataUrl
   if (String(file.type || '').toLowerCase() === 'image/gif') {
-    throw new Error('GIF trop lourd. Choisis une image plus legere.')
+    throw new Error('GIF trop lourd. Choisis une image plus légère.')
   }
 
   const image = await loadImageElement(rawDataUrl)
@@ -195,7 +219,7 @@ async function buildOptimizedImageAsset(file) {
   }
 
   if (output.length > MAX_TICKET_ASSET_LENGTH) {
-    throw new Error('Image trop lourde. Reduis sa taille avant envoi.')
+    throw new Error('Image trop lourde. Réduis sa taille avant envoi.')
   }
 
   return output
@@ -242,11 +266,12 @@ function mergeOptions(options = []) {
       key: preset.key,
       label: String(current.label || preset.label),
       description: String(current.description || preset.description),
+      emoji: String(current.emoji || preset.emoji || ''),
       question_label: String(current.question_label || preset.question_label),
       question_placeholder: String(current.question_placeholder || preset.question_placeholder),
       modal_title: String(current.modal_title || current.label || preset.label),
       intro_message: String(current.intro_message || preset.intro_message),
-      ticket_name_template: String(current.ticket_name_template || preset.ticket_name_template),
+      ticket_name_template: normalizeLegacyTicketTemplate(preset.key, current.ticket_name_template, preset.ticket_name_template),
       ticket_topic_template: String(current.ticket_topic_template || preset.ticket_topic_template),
       role_ids: roleIds,
       enabled: typeof current.enabled === 'boolean' ? current.enabled : preset.enabled,
@@ -265,9 +290,10 @@ function buildTicketSavePayload(value = {}) {
     enabled: Boolean(source.enabled),
     panel_channel_id: String(source.panel_channel_id || '').trim(),
     panel_message_id: String(source.panel_message_id || '').trim(),
+    transcript_channel_id: String(source.transcript_channel_id || '').trim(),
     panel_title: String(source.panel_title || DEFAULT_CONFIG.panel_title).trim(),
     panel_description: String(source.panel_description || '').trim(),
-    panel_footer: String(source.panel_footer || DEFAULT_CONFIG.panel_footer).trim(),
+    panel_footer: normalizeLegacyPanelFooter(String(source.panel_footer || DEFAULT_CONFIG.panel_footer).trim()),
     menu_placeholder: String(source.menu_placeholder || DEFAULT_CONFIG.menu_placeholder).trim(),
     panel_color: String(source.panel_color || DEFAULT_CONFIG.panel_color).trim(),
     panel_thumbnail_url: String(source.panel_thumbnail_url || '').trim(),
@@ -287,7 +313,7 @@ function buildTicketSavePayload(value = {}) {
         key: preset.key,
         label: String(current.label || preset.label).trim(),
         description: String(current.description || preset.description || '').trim(),
-        emoji: String(current.emoji || '').trim(),
+        emoji: String(current.emoji || preset.emoji || '').trim(),
         category_id: String(current.category_id || '').trim(),
         role_ids: [...new Set((Array.isArray(current.role_ids) ? current.role_ids : []).map((roleId) => String(roleId || '').trim()).filter(Boolean))],
         ping_roles: Boolean(current.ping_roles),
@@ -295,7 +321,7 @@ function buildTicketSavePayload(value = {}) {
         question_placeholder: String(current.question_placeholder || preset.question_placeholder || '').trim(),
         modal_title: String(current.modal_title || current.label || preset.label).trim(),
         intro_message: String(current.intro_message || preset.intro_message).trim(),
-        ticket_name_template: String(current.ticket_name_template || preset.ticket_name_template).trim(),
+        ticket_name_template: normalizeLegacyTicketTemplate(preset.key, current.ticket_name_template, preset.ticket_name_template),
         ticket_topic_template: String(current.ticket_topic_template || preset.ticket_topic_template).trim(),
         enabled: Boolean(current.enabled),
       }
@@ -318,7 +344,7 @@ async function buildTicketSavePayloadForRequest(value = {}) {
     serialized = JSON.stringify(payload)
   }
   if (serialized.length > MAX_TICKET_REQUEST_LENGTH) {
-    throw new Error('Le panel est trop lourd. Reduis la miniature ou la banniere.')
+    throw new Error('Le panel est trop lourd. Réduis la miniature ou la bannière.')
   }
 
   return payload
@@ -432,7 +458,7 @@ export default function TicketGeneratorPage() {
       setChannels(Array.isArray(channelsResponse.data?.channels) ? channelsResponse.data.channels : [])
       setRoles(Array.isArray(rolesResponse.data?.roles) ? rolesResponse.data.roles : [])
       setLoadError('')
-      if (showToast) toast.success('Configuration tickets rechargee')
+      if (showToast) toast.success('Configuration tickets rechargée')
     } catch (error) {
       const message = getErrorMessage(error)
       setLoadError(message)
@@ -506,33 +532,43 @@ export default function TicketGeneratorPage() {
     setDraft((current) => normalizeConfig({ ...(current || {}), ...patch }))
   }
 
-  const toggleOption = (key) => setDraft((current) => {
-    const source = normalizeConfig(current || {})
-    return {
-      ...source,
-      options: source.options.map((item) => item.key === key ? { ...item, enabled: !item.enabled } : item),
-    }
-  })
-
-  const toggleRole = (roleId) => setDraft((current) => {
-    const source = normalizeConfig(current || {})
-    const nextRoleIds = new Set()
-    source.options.forEach((item) => {
-      ;(item.role_ids || []).forEach((currentRoleId) => nextRoleIds.add(currentRoleId))
+  const toggleOption = (key) => {
+    hasUserEditedRef.current = true
+    autosaveBlockedFingerprintRef.current = ''
+    setLoadError('')
+    setDraft((current) => {
+      const source = normalizeConfig(current || {})
+      return {
+        ...source,
+        options: source.options.map((item) => item.key === key ? { ...item, enabled: !item.enabled } : item),
+      }
     })
+  }
+
+  const toggleRole = (roleId) => {
+    hasUserEditedRef.current = true
+    autosaveBlockedFingerprintRef.current = ''
+    setLoadError('')
+    setDraft((current) => {
+      const source = normalizeConfig(current || {})
+      const nextRoleIds = new Set()
+      source.options.forEach((item) => {
+        ;(item.role_ids || []).forEach((currentRoleId) => nextRoleIds.add(currentRoleId))
+      })
     if (nextRoleIds.has(roleId)) nextRoleIds.delete(roleId)
     else nextRoleIds.add(roleId)
     const mergedRoleIds = [...nextRoleIds]
-    return {
-      ...source,
-      auto_ping_support: mergedRoleIds.length > 0,
-      options: source.options.map((item) => ({
-        ...item,
+      return {
+        ...source,
+        auto_ping_support: mergedRoleIds.length > 0,
+        options: source.options.map((item) => ({
+          ...item,
         role_ids: mergedRoleIds,
-        ping_roles: mergedRoleIds.length > 0,
-      })),
-    }
-  })
+          ping_roles: mergedRoleIds.length > 0,
+        })),
+      }
+    })
+  }
 
   const saveConfig = async ({ silent = false, throwOnError = true, mode = 'manual' } = {}) => {
     if (!selectedGuildId || !normalizedDraft) return
@@ -547,7 +583,7 @@ export default function TicketGeneratorPage() {
       setLoadError('')
       autosaveBlockedFingerprintRef.current = ''
       hasUserEditedRef.current = false
-      if (!silent) toast.success('Configuration tickets sauvegardee')
+      if (!silent) toast.success('Configuration tickets sauvegardée')
     } catch (error) {
       const message = getErrorMessage(error)
       setLoadError(message)
@@ -567,7 +603,7 @@ export default function TicketGeneratorPage() {
       const response = await ticketGeneratorAPI.publish(selectedGuildId)
       applyOverview(response.data, false)
       setLoadError('')
-      toast.success('Panel tickets publie')
+      toast.success('Panel tickets publié')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -592,7 +628,7 @@ export default function TicketGeneratorPage() {
         <div className="glass-card p-10 text-center">
           <Ticket className="mx-auto mb-4 h-12 w-12 text-white/10" />
           <p className="font-display text-xl font-700 text-white">Choisis d'abord un serveur</p>
-          <p className="mt-2 text-white/40">Le systeme tickets se configure serveur par serveur.</p>
+          <p className="mt-2 text-white/40">Le système tickets se configure serveur par serveur.</p>
           <Link to="/dashboard/servers" className="mt-5 inline-flex items-center gap-2 rounded-xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-3 font-mono text-sm text-neon-cyan transition-all hover:bg-neon-cyan/20">
             Choisir un serveur
             <ArrowRight className="h-4 w-4" />
@@ -644,7 +680,7 @@ export default function TicketGeneratorPage() {
               <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
                   <h2 className="font-display text-2xl font-700 text-white">Panel</h2>
-                  <p className="mt-1 text-sm text-white/45">Le minimum utile pour publier un panel propre et facile a utiliser.</p>
+                  <p className="mt-1 text-sm text-white/45">Le minimum utile pour publier un panel propre et facile à utiliser.</p>
                 </div>
                 <label className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/80">
                   <input type="checkbox" checked={Boolean(normalizedDraft.enabled)} onChange={(event) => updateDraft({ enabled: event.target.checked })} className="h-4 w-4 accent-cyan-400" />
@@ -654,6 +690,7 @@ export default function TicketGeneratorPage() {
 
               <div className="grid gap-4">
                 <SelectField label="Salon du panel" value={normalizedDraft.panel_channel_id} onChange={(value) => updateDraft({ panel_channel_id: value })} options={textChannels} emptyLabel="Aucun salon" />
+                <SelectField label="Salon transcript" value={normalizedDraft.transcript_channel_id} onChange={(value) => updateDraft({ transcript_channel_id: value })} options={textChannels} emptyLabel="Aucun transcript" />
                 <InputField label="Titre du panel" value={normalizedDraft.panel_title} onChange={(value) => updateDraft({ panel_title: value })} />
                 <InputField label="Texte du menu" value={normalizedDraft.menu_placeholder} onChange={(value) => updateDraft({ menu_placeholder: value })} />
                 <InputField label="Message du panel" value={normalizedDraft.panel_description} onChange={(value) => updateDraft({ panel_description: value })} multiline rows={5} />
@@ -671,7 +708,7 @@ export default function TicketGeneratorPage() {
 
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
                 <AssetBox label="Miniature" value={normalizedDraft.panel_thumbnail_url} onValue={(value) => updateDraft({ panel_thumbnail_url: value })} onUpload={(file) => uploadAsset('panel_thumbnail_url', file)} onClear={() => updateDraft({ panel_thumbnail_url: '' })} inputRef={thumbnailRef} />
-                <AssetBox label="Banniere" value={normalizedDraft.panel_image_url} onValue={(value) => updateDraft({ panel_image_url: value })} onUpload={(file) => uploadAsset('panel_image_url', file)} onClear={() => updateDraft({ panel_image_url: '' })} inputRef={imageRef} />
+                <AssetBox label="Bannière" value={normalizedDraft.panel_image_url} onValue={(value) => updateDraft({ panel_image_url: value })} onUpload={(file) => uploadAsset('panel_image_url', file)} onClear={() => updateDraft({ panel_image_url: '' })} inputRef={imageRef} />
               </div>
             </div>
 
@@ -702,12 +739,12 @@ export default function TicketGeneratorPage() {
 
             <div className="glass-card border border-white/[0.08] p-5">
               <div className="mb-5">
-                <h2 className="font-display text-2xl font-700 text-white">Roles a notifier</h2>
-                <p className="mt-1 text-sm text-white/45">Les roles coches seront ajoutes et pinges automatiquement dans tous les tickets.</p>
+                <h2 className="font-display text-2xl font-700 text-white">Rôles à notifier</h2>
+                <p className="mt-1 text-sm text-white/45">Les rôles cochés seront ajoutés et pingés automatiquement dans tous les tickets.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {visibleRoles.length === 0 ? (
-                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-sm text-white/45">Aucun role disponible.</div>
+                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-sm text-white/45">Aucun rôle disponible.</div>
                 ) : visibleRoles.map((role) => {
                   const active = selectedRoleIds.includes(role.id)
                   return (
@@ -724,30 +761,50 @@ export default function TicketGeneratorPage() {
             <div className="glass-card border border-white/[0.08] p-5">
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
-                  <h2 className="font-display text-2xl font-700 text-white">Apercu Discord</h2>
-                  <p className="mt-1 text-sm text-white/45">Ce que les membres verront avant d ouvrir leur ticket.</p>
+                  <h2 className="font-display text-2xl font-700 text-white">Aperçu Discord</h2>
+                  <p className="mt-1 text-sm text-white/45">Ce que les membres verront avant d'ouvrir leur ticket.</p>
                 </div>
                 <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/65">{activeOptions.length} types actifs</div>
               </div>
               <div className="rounded-[28px] border border-white/10 bg-[#111827] p-4 shadow-[0_20px_40px_rgba(2,8,23,0.25)]">
-                <div className="rounded-[24px] border border-white/10 bg-[#101826] p-4" style={{ boxShadow: `inset 3px 0 0 ${normalizedDraft.panel_color || '#7c3aed'}` }}>
+                <div className="space-y-4 rounded-[24px] border border-white/10 bg-[#101826] p-4" style={{ boxShadow: `inset 3px 0 0 ${normalizedDraft.panel_color || '#7c3aed'}` }}>
                   <div className="flex items-start gap-3">
                     {normalizedDraft.panel_thumbnail_url ? <img src={normalizedDraft.panel_thumbnail_url} alt="" className="h-14 w-14 rounded-2xl border border-white/10 object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.03] text-white/25"><ImagePlus className="h-4 w-4" /></div>}
                     <div className="min-w-0 flex-1">
-                      <div className="text-lg font-display font-700 text-white">{normalizedDraft.panel_title}</div>
+                      <div className="text-[11px] uppercase tracking-[0.22em] text-cyan-200/70">Centre support</div>
+                      <div className="mt-1 text-lg font-display font-700 text-white">{normalizedDraft.panel_title}</div>
                       <div className="mt-2 whitespace-pre-wrap text-sm text-white/65">{normalizedDraft.panel_description}</div>
                     </div>
                   </div>
-                  {normalizedDraft.panel_image_url && <img src={normalizedDraft.panel_image_url} alt="" className="mt-4 h-32 w-full rounded-2xl border border-white/10 object-cover" />}
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-3">
+
+                  {normalizedDraft.panel_image_url && <img src={normalizedDraft.panel_image_url} alt="" className="h-32 w-full rounded-2xl border border-white/10 object-cover" />}
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">Ouverture</div>
+                      <div className="mt-2 text-sm text-white/70">Menu déroulant interactif et salon privé créé automatiquement.</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">Staff notifié</div>
+                      <div className="mt-2 text-sm text-white/70">{selectedRoleIds.length > 0 ? `${selectedRoleIds.length} rôle(s) ping automatiquement` : 'Aucun rôle staff configuré'}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
                     <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-white/35">{normalizedDraft.menu_placeholder}</div>
                     <div className="space-y-2">
                       {activeOptions.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-sm text-white/35">Aucun type selectionne.</div>
+                        <div className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-sm text-white/35">Aucun type sélectionné.</div>
                       ) : activeOptions.map((option) => (
-                        <div key={option.key} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70">
-                          <span>{option.label}</span>
-                          <span className="text-xs text-white/35">{option.description}</span>
+                        <div key={option.key} className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-sm text-white/70">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-white">
+                              <span>{option.emoji || '🎫'}</span>
+                              <span className="font-medium">{option.label}</span>
+                            </div>
+                            <div className="mt-1 text-xs text-white/40">{option.description}</div>
+                          </div>
+                          <div className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/45">Actif</div>
                         </div>
                       ))}
                     </div>
@@ -757,8 +814,8 @@ export default function TicketGeneratorPage() {
             </div>
 
             <div className="glass-card border border-white/[0.08] p-5">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">Panel publie</div>
-              <div className="mt-2 text-sm text-white/70">{normalizedDraft.panel_message_id ? `${normalizedDraft.panel_channel_id || '--'} / ${normalizedDraft.panel_message_id}` : 'Pas encore publie'}</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">Panel publié</div>
+              <div className="mt-2 text-sm text-white/70">{normalizedDraft.panel_message_id ? `${normalizedDraft.panel_channel_id || '--'} / ${normalizedDraft.panel_message_id}` : 'Pas encore publié'}</div>
             </div>
           </div>
         </section>
