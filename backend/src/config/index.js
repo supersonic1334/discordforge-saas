@@ -9,6 +9,19 @@ require('dotenv').config({
 
 const { z } = require('zod');
 
+function booleanish(defaultValue = false) {
+  return z.preprocess((value) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+      if (['0', 'false', 'no', 'off', ''].includes(normalized)) return false;
+    }
+    return value;
+  }, z.boolean().default(defaultValue));
+}
+
 // ── Schema ────────────────────────────────────────────────────────────────────
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -23,6 +36,7 @@ const envSchema = z.object({
   DATABASE_PATH: z.string().optional(),
 
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+  BACKEND_PUBLIC_URL: z.string().url().optional(),
   ALLOWED_ORIGINS: z.string().default('http://localhost:5173'),
 
   DISCORD_CLIENT_ID: z.string().optional(),
@@ -32,6 +46,24 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CALLBACK_URL: z.string().url().optional(),
+
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_SECURE: booleanish(false),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM_EMAIL: z.string().email().optional(),
+  SMTP_FROM_NAME: z.string().default('DiscordForger Security'),
+
+  AUTH_REQUIRE_EMAIL_VERIFICATION: booleanish(true),
+  AUTH_REQUIRE_LOGIN_APPROVAL_NEW_DEVICE: booleanish(true),
+  AUTH_REQUIRE_ALLOWED_EMAIL_DOMAIN: booleanish(true),
+  AUTH_LOOKUP_LOGIN_LOCATION: booleanish(true),
+  AUTH_VERIFICATION_TTL_MINUTES: z.coerce.number().min(5).max(1440).default(30),
+  AUTH_LOGIN_APPROVAL_TTL_MINUTES: z.coerce.number().min(5).max(1440).default(20),
+  AUTH_ALLOWED_EMAIL_DOMAINS: z.string().default('gmail.com,googlemail.com,outlook.com,hotmail.com,live.com,msn.com,yahoo.com,yahoo.fr,icloud.com,me.com,mac.com,orange.fr,orange.com,wanadoo.fr,free.fr,laposte.net,sfr.fr,bbox.fr,bouyguestelecom.fr,proton.me,protonmail.com'),
+  AUTH_BLOCKED_EMAIL_DOMAINS: z.string().default('mailinator.com,maildrop.cc,maildrop.cf,guerrillamail.com,guerrillamailblock.com,10minutemail.com,10minutemail.net,temp-mail.org,temp-mail.io,tempmail.plus,dispostable.com,yopmail.com,trashmail.com,mail.tm,moakt.com,fakemail.net,getnada.com,sharklasers.com'),
+  AUTH_GEOLOOKUP_ENDPOINT: z.string().default('https://ipwho.is/{ip}'),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),
   RATE_LIMIT_MAX: z.coerce.number().default(1800),
@@ -72,6 +104,7 @@ try {
 config.isDev = config.NODE_ENV === 'development';
 config.isProd = config.NODE_ENV === 'production';
 config.allowedOrigins = config.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
+config.publicBackendUrl = config.BACKEND_PUBLIC_URL || config.FRONTEND_URL;
 
 const renderPersistentRoot = process.env.RENDER_DISK_ROOT
   || process.env.PERSISTENT_DATA_DIR

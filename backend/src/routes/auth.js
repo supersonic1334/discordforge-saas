@@ -288,9 +288,13 @@ router.post('/discord/link', requireAuth, validate(discordLinkSchema), (req, res
 // ── POST /register ────────────────────────────────────────────────────────────
 router.post('/register', validate(registerSchema), async (req, res, next) => {
   try {
-    const result = await authService.register(req.body);
-    recordUserAccess(result.user.id, req);
-    res.status(201).json(result);
+    const result = await authService.register({ ...req.body, req });
+    if (result?.user?.id) {
+      recordUserAccess(result.user.id, req);
+      return res.status(201).json(result);
+    }
+
+    return res.status(202).json(result);
   } catch (err) {
     next(err);
   }
@@ -299,11 +303,45 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
 // ── POST /login ───────────────────────────────────────────────────────────────
 router.post('/login', validate(loginSchema), async (req, res, next) => {
   try {
-    const result = await authService.login(req.body);
-    recordUserAccess(result.user.id, req);
-    res.json(result);
+    const result = await authService.login({ ...req.body, req });
+    if (result?.user?.id) {
+      recordUserAccess(result.user.id, req);
+      return res.json(result);
+    }
+
+    return res.status(202).json(result);
   } catch (err) {
     next(err);
+  }
+});
+
+router.get('/verify-email', async (req, res) => {
+  try {
+    const token = String(req.query.token || '').trim();
+    const result = await authService.completeEmailVerification(token);
+    return res.redirect(buildFrontendRedirect('/auth/callback', {
+      token: result.token,
+      verified: '1',
+    }));
+  } catch (error) {
+    return res.redirect(buildFrontendRedirect('/auth', {
+      error: error.message || 'verification_failed',
+    }));
+  }
+});
+
+router.get('/approve-login', async (req, res) => {
+  try {
+    const token = String(req.query.token || '').trim();
+    const result = await authService.approveLoginChallenge(token);
+    return res.redirect(buildFrontendRedirect('/auth/callback', {
+      token: result.token,
+      login_approved: '1',
+    }));
+  } catch (error) {
+    return res.redirect(buildFrontendRedirect('/auth', {
+      error: error.message || 'login_approval_failed',
+    }));
   }
 });
 

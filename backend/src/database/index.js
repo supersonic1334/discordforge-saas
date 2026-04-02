@@ -69,6 +69,8 @@ function ensureUsersRoleConstraint() {
           password_hash     TEXT,
           avatar_url        TEXT,
           role              TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin','founder','api_provider')),
+          email_verified    INTEGER NOT NULL DEFAULT 1,
+          email_verified_at TEXT,
           site_language     TEXT NOT NULL DEFAULT 'auto',
           ai_language       TEXT NOT NULL DEFAULT 'auto',
           analytics_layout  TEXT,
@@ -81,6 +83,7 @@ function ensureUsersRoleConstraint() {
           is_active         INTEGER NOT NULL DEFAULT 1,
           last_seen_ip_hash TEXT,
           last_seen_device_hash TEXT,
+          last_seen_client_signature_hash TEXT,
           last_seen_user_agent TEXT,
           last_seen_at      TEXT,
           last_login_at     TEXT,
@@ -92,8 +95,9 @@ function ensureUsersRoleConstraint() {
       db.exec(`
         INSERT INTO users__next (
           id, email, username, password_hash, avatar_url, role,
+          email_verified, email_verified_at,
           site_language, ai_language, analytics_layout, discord_id, discord_username, discord_global_name, discord_avatar_url, google_id, discord_token,
-          is_active, last_seen_ip_hash, last_seen_device_hash, last_seen_user_agent,
+          is_active, last_seen_ip_hash, last_seen_device_hash, last_seen_client_signature_hash, last_seen_user_agent,
           last_seen_at, last_login_at, created_at, updated_at
         )
         SELECT
@@ -108,6 +112,8 @@ function ensureUsersRoleConstraint() {
             WHEN role = 'api_provider' THEN 'api_provider'
             ELSE 'member'
           END,
+          COALESCE(email_verified, 1),
+          COALESCE(email_verified_at, last_login_at, created_at, datetime('now')),
           COALESCE(site_language, 'auto'),
           COALESCE(ai_language, 'auto'),
           analytics_layout,
@@ -120,6 +126,7 @@ function ensureUsersRoleConstraint() {
           COALESCE(is_active, 1),
           last_seen_ip_hash,
           last_seen_device_hash,
+          last_seen_client_signature_hash,
           last_seen_user_agent,
           last_seen_at,
           last_login_at,
@@ -278,6 +285,10 @@ function runMigrations() {
   ensureColumn('users', 'site_language', "TEXT NOT NULL DEFAULT 'auto'");
   ensureColumn('users', 'ai_language', "TEXT NOT NULL DEFAULT 'auto'");
   ensureColumn('users', 'analytics_layout', 'TEXT');
+  const hadEmailVerifiedColumn = columnExists('users', 'email_verified');
+  const hadEmailVerifiedAtColumn = columnExists('users', 'email_verified_at');
+  ensureColumn('users', 'email_verified', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'email_verified_at', 'TEXT');
   ensureColumn('users', 'last_seen_ip_hash', 'TEXT');
   ensureColumn('users', 'last_seen_device_hash', 'TEXT');
   ensureColumn('users', 'last_seen_client_signature_hash', 'TEXT');
@@ -302,6 +313,19 @@ function runMigrations() {
   ensureColumn('guild_ticket_generators', 'panel_thumbnail_url', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('guild_ticket_generators', 'panel_image_url', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('guild_ticket_generators', 'transcript_channel_id', "TEXT NOT NULL DEFAULT ''");
+  if (!hadEmailVerifiedColumn) {
+    db.exec(`
+      UPDATE users
+      SET email_verified = 1,
+          email_verified_at = COALESCE(email_verified_at, last_login_at, created_at, datetime('now'))
+    `);
+  } else if (!hadEmailVerifiedAtColumn) {
+    db.exec(`
+      UPDATE users
+      SET email_verified_at = COALESCE(email_verified_at, last_login_at, created_at, datetime('now'))
+      WHERE email_verified = 1
+    `);
+  }
   db.exec(`
     UPDATE support_tickets
     SET claimed_once_at = claimed_at
@@ -312,6 +336,42 @@ function runMigrations() {
   ensureUsersRoleConstraint();
   ensureAccessBlockTypes();
   ensureAIConfigProviderConstraint();
+  db.exec(`
+    INSERT INTO auth_trusted_devices (
+      id,
+      user_id,
+      device_hash,
+      client_signature_hash,
+      user_agent,
+      label,
+      last_ip_hash,
+      last_seen_at,
+      created_at,
+      updated_at
+    )
+    SELECT
+      lower(hex(randomblob(16))),
+      u.id,
+      u.last_seen_device_hash,
+      u.last_seen_client_signature_hash,
+      u.last_seen_user_agent,
+      'Appareil historique',
+      u.last_seen_ip_hash,
+      COALESCE(u.last_seen_at, u.last_login_at, u.created_at, datetime('now')),
+      COALESCE(u.last_seen_at, u.last_login_at, u.created_at, datetime('now')),
+      datetime('now')
+    FROM users u
+    WHERE (u.last_seen_device_hash IS NOT NULL OR u.last_seen_client_signature_hash IS NOT NULL)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM auth_trusted_devices td
+        WHERE td.user_id = u.id
+          AND (
+            (u.last_seen_device_hash IS NOT NULL AND td.device_hash = u.last_seen_device_hash)
+            OR (u.last_seen_client_signature_hash IS NOT NULL AND td.client_signature_hash = u.last_seen_client_signature_hash)
+          )
+      )
+  `);
   ensureColumn('ai_config', 'user_quota_tokens', 'INTEGER DEFAULT 4000');
   ensureColumn('ai_config', 'site_quota_tokens', 'INTEGER DEFAULT 20000');
   ensureColumn('ai_config', 'quota_window_hours', 'INTEGER DEFAULT 5');

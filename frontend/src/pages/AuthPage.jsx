@@ -234,6 +234,7 @@ export default function AuthPage() {
   const [activeFeature, setActiveFeature] = useState('secure')
   const [form, setForm] = useState({ email: '', username: '', password: '' })
   const [error, setError] = useState('')
+  const [pendingNotice, setPendingNotice] = useState('')
   const [accessChecked, setAccessChecked] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const [oauthProviders, setOauthProviders] = useState({ discord: false, google: false })
@@ -348,11 +349,13 @@ export default function AuthPage() {
   const set = (key, value) => {
     setForm((previous) => ({ ...previous, [key]: value }))
     setError('')
+    setPendingNotice('')
   }
 
   const submit = async (event) => {
     event.preventDefault()
     setError('')
+    setPendingNotice('')
     const normalizedEmail = form.email.trim().toLowerCase()
     const data = mode === 'login'
       ? { email: normalizedEmail, password: form.password }
@@ -361,6 +364,25 @@ export default function AuthPage() {
     const response = await fn(data)
 
     if (response.success) {
+      if (response.requiresVerification) {
+        const message = response.emailMasked
+          ? `Verification envoyee a ${response.emailMasked}. Clique sur le lien dans ton e-mail pour activer l acces.`
+          : 'Verification envoyee. Clique sur le lien dans ton e-mail pour activer l acces.'
+        setPendingNotice(message)
+        toast.success('Verification e-mail envoyee')
+        setMode('login')
+        return
+      }
+
+      if (response.requiresLoginApproval) {
+        const message = response.emailMasked
+          ? `Connexion en attente. Autorise cette tentative depuis ${response.emailMasked}.`
+          : 'Connexion en attente. Autorise cette tentative depuis ton e-mail.'
+        setPendingNotice(message)
+        toast.success('Validation de connexion envoyee')
+        return
+      }
+
       toast.success(mode === 'login' ? t('auth.loginSuccess') : t('auth.registerSuccess'))
       navigate('/dashboard')
     } else {
@@ -601,6 +623,20 @@ export default function AuthPage() {
                       className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
                     >
                       <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                  {pendingNotice && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-start gap-2 p-3 rounded-xl bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan text-sm"
+                    >
+                      <Shield className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{pendingNotice}</span>
                     </motion.div>
                   )}
                 </AnimatePresence>

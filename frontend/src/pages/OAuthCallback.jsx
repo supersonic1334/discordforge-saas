@@ -13,10 +13,19 @@ export default function OAuthCallback() {
     const params = new URLSearchParams(window.location.search)
     const token = params.get('token')
     const error = params.get('error')
+    const verified = params.get('verified') === '1'
+    const loginApproved = params.get('login_approved') === '1'
     if (token) {
       localStorage.setItem('token', token)
       setToken(token)
-      fetchMe().then(() => navigate('/dashboard'))
+      fetchMe().then(() => {
+        if (verified) {
+          toast.success('Adresse e-mail validee')
+        } else if (loginApproved) {
+          toast.success('Connexion approuvee')
+        }
+        navigate('/dashboard')
+      })
     } else {
       toast.error(error || t('oauth.failed'))
       navigate('/auth')

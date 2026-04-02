@@ -99,11 +99,30 @@ export const useAuthStore = create(
         set({ isLoading: true })
         try {
           const res = await authAPI.login(data)
-          const { token, user } = res.data
-          localStorage.setItem('token', token)
-          set({ token, user: sanitizePersistedUser(user), isLoading: false })
-          await get().fetchMe()
-          return { success: true }
+          const {
+            token,
+            user,
+            requires_verification,
+            requires_login_approval,
+            email_masked,
+            message,
+          } = res.data
+
+          if (token && user) {
+            localStorage.setItem('token', token)
+            set({ token, user: sanitizePersistedUser(user), isLoading: false })
+            await get().fetchMe()
+            return { success: true }
+          }
+
+          set({ isLoading: false })
+          return {
+            success: true,
+            requiresVerification: !!requires_verification,
+            requiresLoginApproval: !!requires_login_approval,
+            emailMasked: email_masked || '',
+            message: message || '',
+          }
         } catch (err) {
           set({ isLoading: false })
           return { success: false, error: extractAuthError(err, 'login') }
@@ -114,10 +133,21 @@ export const useAuthStore = create(
         set({ isLoading: true })
         try {
           const res = await authAPI.register(data)
-          const { token, user } = res.data
-          localStorage.setItem('token', token)
-          set({ token, user: sanitizePersistedUser(user), hasBotToken: false, isLoading: false })
-          return { success: true }
+          const { token, user, requires_verification, email_masked, message } = res.data
+
+          if (token && user) {
+            localStorage.setItem('token', token)
+            set({ token, user: sanitizePersistedUser(user), hasBotToken: false, isLoading: false })
+            return { success: true }
+          }
+
+          set({ isLoading: false })
+          return {
+            success: true,
+            requiresVerification: !!requires_verification,
+            emailMasked: email_masked || '',
+            message: message || '',
+          }
         } catch (err) {
           set({ isLoading: false })
           return { success: false, error: extractAuthError(err, 'register') }

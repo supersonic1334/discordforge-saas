@@ -7,12 +7,16 @@ const db = require('../database');
 const config = require('../config');
 const logger = require('../utils/logger').child('AuthService');
 const { SITE_LANGUAGES, AI_LANGUAGES } = require('../constants/languages');
+const emailPolicyService = require('./emailPolicyService');
+const mailService = require('./mailService');
+const authChallengeService = require('./authChallengeService');
+const { buildRequestInsight } = require('./requestInsightService');
 
 const BCRYPT_ROUNDS = 12;
 const FULLY_HIDDEN_EMAIL = '********@********.***';
 
 function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
+  return emailPolicyService.normalizeEmail(email);
 }
 
 function isPrimaryFounderEmail(email) {
@@ -67,6 +71,169 @@ function buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl
   };
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildSecurityEmailTemplate({ title, lead, buttonLabel, buttonUrl, details = [], footer }) {
+  const listHtml = details
+    .filter((item) => item?.label && item?.value)
+    .map((item) => `
+      <tr>
+        <td style="padding:8px 0;color:#94a3b8;font-size:13px;font-family:Arial,sans-serif;">${escapeHtml(item.label)}</td>
+        <td style="padding:8px 0;color:#f8fafc;font-size:13px;font-family:Arial,sans-serif;text-align:right;">${escapeHtml(item.value)}</td>
+      </tr>
+    `)
+    .join('');
+
+  const html = `<!doctype html>
+  <html lang="fr">
+    <body style="margin:0;padding:24px;background:#05070d;font-family:Arial,sans-serif;color:#f8fafc;">
+      <div style="max-width:640px;margin:0 auto;background:linear-gradient(180deg,#111827,#090c14);border:1px solid rgba(255,255,255,.08);border-radius:28px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.45);">
+        <div style="padding:28px 28px 14px;background:linear-gradient(135deg,rgba(0,229,255,.14),rgba(124,58,237,.14));border-bottom:1px solid rgba(255,255,255,.06);">
+          <div style="display:inline-block;padding:8px 14px;border-radius:999px;background:rgba(0,229,255,.12);border:1px solid rgba(0,229,255,.28);color:#67e8f9;font-size:11px;letter-spacing:.24em;text-transform:uppercase;font-weight:700;">DiscordForger Security</div>
+          <h1 style="margin:18px 0 10px;font-size:28px;line-height:1.1;">${escapeHtml(title)}</h1>
+          <p style="margin:0;color:#cbd5e1;font-size:15px;line-height:1.7;">${escapeHtml(lead)}</p>
+        </div>
+        <div style="padding:28px;">
+          <div style="margin:0 0 22px;">
+            <a href="${escapeHtml(buttonUrl)}" style="display:inline-block;padding:14px 22px;border-radius:14px;background:linear-gradient(135deg,#00e5ff,#7c3aed);color:#fff;text-decoration:none;font-weight:700;">${escapeHtml(buttonLabel)}</a>
+          </div>
+          ${listHtml ? `<table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid rgba(255,255,255,.06);border-radius:18px;background:rgba(255,255,255,.03);padding:16px 18px;">${listHtml}</table>` : ''}
+          <p style="margin:${listHtml ? '20px' : '0'} 0 0;color:#94a3b8;font-size:13px;line-height:1.7;">${escapeHtml(footer)}</p>
+        </div>
+      </div>
+    </body>
+  </html>`;
+
+  const text = [
+    title,
+    '',
+    lead,
+    '',
+    `${buttonLabel}: ${buttonUrl}`,
+    '',
+    ...details.filter((item) => item?.label && item?.value).map((item) => `${item.label}: ${item.value}`),
+    '',
+    footer,
+  ].join('\n');
+
+  return { html, text };
+}
+
+function buildRequestEmailDetails(requestInsight) {
+  return [
+    { label: 'Adresse IP', value: requestInsight?.ipAddress || 'Inconnue' },
+    { label: 'Localisation approx.', value: requestInsight?.locationLabel || 'Indisponible' },
+    { label: 'Appareil', value: requestInsight?.userAgentLabel || 'Navigateur inconnu' },
+  ];
+}
+
+async function sendRegistrationVerificationEmail({ email, username, passwordHash, requestInsight }) {
+  if (!mailService.isMailConfigured()) {
+    throw Object.assign(new Error('La verification e-mail est indisponible pour le moment'), { status: 503 });
+  }
+
+  const challenge = authChallengeService.createEmailChallenge({
+    userId: null,
+    email,
+    challengeType: 'register_verify',
+    requestInsight,
+    metadata: {
+      email,
+      username,
+      password_hash: passwordHash,
+    },
+    ttlMinutes: config.AUTH_VERIFICATION_TTL_MINUTES,
+  });
+
+  const verifyUrl = authChallengeService.buildVerificationUrl(challenge.token, 'register_verify');
+  const mail = buildSecurityEmailTemplate({
+    title: 'Valide ton adresse e-mail',
+    lead: 'Confirme ton inscription pour activer ton acces au site et finaliser la creation du compte.',
+    buttonLabel: 'Valider mon adresse',
+    buttonUrl: verifyUrl,
+    details: buildRequestEmailDetails(requestInsight),
+    footer: 'Si ce n etait pas toi, ignore simplement cet e-mail. Aucun compte ne sera active sans validation.',
+  });
+
+  await mailService.sendEmail({
+    to: email,
+    subject: 'Validation e-mail DiscordForger',
+    html: mail.html,
+    text: mail.text,
+  });
+}
+
+async function sendExistingAccountVerificationEmail(user, requestInsight) {
+  if (!mailService.isMailConfigured()) {
+    throw Object.assign(new Error('La verification e-mail est indisponible pour le moment'), { status: 503 });
+  }
+
+  const challenge = authChallengeService.createEmailChallenge({
+    userId: user.id,
+    email: user.email,
+    challengeType: 'register_verify',
+    requestInsight,
+    metadata: {},
+    ttlMinutes: config.AUTH_VERIFICATION_TTL_MINUTES,
+  });
+
+  const verifyUrl = authChallengeService.buildVerificationUrl(challenge.token, 'register_verify');
+  const mail = buildSecurityEmailTemplate({
+    title: 'Confirme cette adresse e-mail',
+    lead: 'Un acces au compte a ete demande. Valide cette adresse pour autoriser la connexion.',
+    buttonLabel: 'Confirmer mon e-mail',
+    buttonUrl: verifyUrl,
+    details: buildRequestEmailDetails(requestInsight),
+    footer: 'Si tu n es pas a l origine de cette demande, ignore cet e-mail et change ton mot de passe.',
+  });
+
+  await mailService.sendEmail({
+    to: user.email,
+    subject: 'Confirmation d adresse e-mail DiscordForger',
+    html: mail.html,
+    text: mail.text,
+  });
+}
+
+async function sendLoginApprovalEmail(user, requestInsight) {
+  if (!mailService.isMailConfigured()) {
+    throw Object.assign(new Error('La validation de connexion est indisponible pour le moment'), { status: 503 });
+  }
+
+  const challenge = authChallengeService.createEmailChallenge({
+    userId: user.id,
+    email: user.email,
+    challengeType: 'login_approve',
+    requestInsight,
+    metadata: {},
+    ttlMinutes: config.AUTH_LOGIN_APPROVAL_TTL_MINUTES,
+  });
+
+  const approveUrl = authChallengeService.buildVerificationUrl(challenge.token, 'login_approve');
+  const mail = buildSecurityEmailTemplate({
+    title: 'Nouvelle connexion a approuver',
+    lead: 'Une tentative de connexion depuis un appareil non reconnu vient d etre detectee. Autorise-la uniquement si c est bien toi.',
+    buttonLabel: 'Autoriser cette connexion',
+    buttonUrl: approveUrl,
+    details: buildRequestEmailDetails(requestInsight),
+    footer: 'Si tu ne reconnais pas cette tentative, n approuve rien et change immediatement ton mot de passe.',
+  });
+
+  await mailService.sendEmail({
+    to: user.email,
+    subject: 'Nouvelle connexion DiscordForger',
+    html: mail.html,
+    text: mail.text,
+  });
+}
+
 // ── JWT ───────────────────────────────────────────────────────────────────────
 function signToken(userId, role) {
   return jwt.sign({ userId, role }, config.JWT_SECRET, { expiresIn: config.JWT_EXPIRES_IN });
@@ -81,6 +248,7 @@ function safeUser(user) {
   safe.is_discord_oauth_account = isDiscordOauthAccount;
   safe.display_avatar_url = safe.avatar_url || (isDiscordOauthAccount ? safe.discord_avatar_url || null : null);
   safe.is_primary_founder = isPrimaryFounderEmail(safe.email);
+  safe.email_verified = !!safe.email_verified;
   if (isPrimaryFounderEmail(safe.email)) {
     safe.email = maskEmail(safe.email, { hideCompletely: true });
   }
@@ -88,34 +256,61 @@ function safeUser(user) {
 }
 
 // ── Register ──────────────────────────────────────────────────────────────────
-async function register({ email, username, password }) {
+async function register({ email, username, password, req }) {
   const normalizedEmail = normalizeEmail(email);
+  const emailVerificationEnabled = config.AUTH_REQUIRE_EMAIL_VERIFICATION && mailService.isMailConfigured();
+  await emailPolicyService.assertAllowedRegistrationEmail(normalizedEmail, {
+    allowKnownBypass: isPrimaryFounderEmail(normalizedEmail),
+  });
   const existing = findUserByEmail(normalizedEmail);
   if (existing) throw Object.assign(new Error('Email already in use'), { status: 409 });
 
   const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const id = uuidv4();
+  const requestInsight = await buildRequestInsight(req);
 
-  db.insert('users', {
-    id,
+  if (!emailVerificationEnabled) {
+    const id = uuidv4();
+
+    db.insert('users', {
+      id,
+      email: normalizedEmail,
+      username,
+      password_hash,
+      role: 'member',
+      email_verified: 1,
+      email_verified_at: new Date().toISOString(),
+      is_active: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    authChallengeService.trustDevice(id, requestInsight, 'Appareil d inscription');
+
+    const user = db.findOne('users', { id });
+    const token = signToken(id, 'member');
+    logger.info(`New user registered: ${normalizedEmail}`);
+    return { token, user: safeUser(user) };
+  }
+
+  await sendRegistrationVerificationEmail({
     email: normalizedEmail,
     username,
-    password_hash,
-    role: 'member',
-    is_active: 1,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    passwordHash: password_hash,
+    requestInsight,
   });
 
-  const user = db.findOne('users', { id });
-  const token = signToken(id, 'member');
-  logger.info(`New user registered: ${normalizedEmail}`);
-  return { token, user: safeUser(user) };
+  logger.info(`Registration pending email verification: ${normalizedEmail}`);
+  return {
+    requires_verification: true,
+    email_masked: maskEmail(normalizedEmail),
+    message: 'Verification e-mail requise',
+  };
 }
 
 // ── Login ─────────────────────────────────────────────────────────────────────
-async function login({ email, password }) {
+async function login({ email, password, req }) {
   const normalizedEmail = normalizeEmail(email);
+  const loginApprovalEnabled = config.AUTH_REQUIRE_LOGIN_APPROVAL_NEW_DEVICE && mailService.isMailConfigured();
   const user = findUserByEmail(normalizedEmail);
   if (!user) {
     logger.warn(`Failed login: unknown email attempted`, { email: normalizedEmail });
@@ -136,6 +331,27 @@ async function login({ email, password }) {
     throw Object.assign(new Error('Invalid credentials'), { status: 401 });
   }
 
+  const requestInsight = await buildRequestInsight(req);
+
+  if (!user.email_verified && mailService.isMailConfigured()) {
+    await sendExistingAccountVerificationEmail(user, requestInsight);
+    return {
+      requires_verification: true,
+      email_masked: maskEmail(user.email),
+      message: 'Validation e-mail requise',
+    };
+  }
+
+  if (loginApprovalEnabled && !authChallengeService.isTrustedDevice(user.id, requestInsight)) {
+    await sendLoginApprovalEmail(user, requestInsight);
+    return {
+      requires_login_approval: true,
+      email_masked: maskEmail(user.email),
+      message: 'Nouvelle connexion a approuver par e-mail',
+    };
+  }
+
+  authChallengeService.trustDevice(user.id, requestInsight, 'Appareil approuve');
   db.update('users', { last_login_at: new Date().toISOString() }, { id: user.id });
 
   const token = signToken(user.id, user.role);
@@ -170,6 +386,8 @@ async function upsertOAuthUser({ provider, providerId, email, username, globalNa
       [providerField]: providerId,
       username: username ?? user.username,
       avatar_url: avatarUrl ?? user.avatar_url,
+      email_verified: 1,
+      email_verified_at: user.email_verified_at || now,
       last_login_at: now,
       ...discordIdentityPatch,
     }, { id: user.id });
@@ -186,6 +404,8 @@ async function upsertOAuthUser({ provider, providerId, email, username, globalNa
       password_hash: null,
       avatar_url: avatarUrl,
       role: 'member',
+      email_verified: 1,
+      email_verified_at: now,
       [providerField]: providerId,
       ...discordIdentityPatch,
       is_active: 1,
@@ -268,6 +488,10 @@ async function ensureFounder() {
     const updates = {};
     if (existing.role !== 'founder') updates.role = 'founder';
     if (existing.email !== founderEmail) updates.email = founderEmail;
+    if (!existing.email_verified) {
+      updates.email_verified = 1;
+      updates.email_verified_at = existing.email_verified_at || new Date().toISOString();
+    }
     if (Object.keys(updates).length) {
       db.update('users', updates, { id: existing.id });
       logger.info(`Upgraded ${founderEmail} to founder`);
@@ -282,11 +506,95 @@ async function ensureFounder() {
     username: founderUsername,
     password_hash: hash,
     role: 'founder',
+    email_verified: 1,
+    email_verified_at: new Date().toISOString(),
     is_active: 1,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
   logger.info(`Founder account created: ${founderEmail}`);
+}
+
+async function completeEmailVerification(token) {
+  const challenge = authChallengeService.getActiveChallengeByToken(token, 'register_verify');
+  if (!challenge) {
+    throw Object.assign(new Error('Lien de verification invalide ou expire'), { status: 400 });
+  }
+
+  const metadata = authChallengeService.parseChallengeMetadata(challenge);
+  const now = new Date().toISOString();
+  let user = challenge.user_id ? db.findOne('users', { id: challenge.user_id }) : findUserByEmail(challenge.email);
+
+  if (!user) {
+    if (!metadata?.email || !metadata?.username || !metadata?.password_hash) {
+      throw Object.assign(new Error('Verification invalide'), { status: 400 });
+    }
+
+    user = db.insert('users', {
+      id: uuidv4(),
+      email: normalizeEmail(metadata.email),
+      username: metadata.username,
+      password_hash: metadata.password_hash,
+      role: 'member',
+      email_verified: 1,
+      email_verified_at: now,
+      is_active: 1,
+      last_login_at: now,
+      created_at: now,
+      updated_at: now,
+    });
+  } else {
+    db.update('users', {
+      email_verified: 1,
+      email_verified_at: user.email_verified_at || now,
+      last_login_at: now,
+    }, { id: user.id });
+    user = db.findOne('users', { id: user.id });
+  }
+
+  authChallengeService.consumeChallenge(challenge.id);
+  authChallengeService.trustDevice(user.id, {
+    deviceHash: challenge.device_hash || null,
+    clientSignatureHash: challenge.client_signature_hash || null,
+    userAgent: challenge.user_agent || null,
+    ipHash: challenge.ip_hash || null,
+  }, 'Appareil verifie');
+
+  const freshUser = db.findOne('users', { id: user.id });
+  return {
+    token: signToken(freshUser.id, freshUser.role),
+    user: safeUser(freshUser),
+  };
+}
+
+async function approveLoginChallenge(token) {
+  const challenge = authChallengeService.getActiveChallengeByToken(token, 'login_approve');
+  if (!challenge) {
+    throw Object.assign(new Error('Lien d approbation invalide ou expire'), { status: 400 });
+  }
+
+  const user = db.findOne('users', { id: challenge.user_id });
+  if (!user || !user.is_active) {
+    throw Object.assign(new Error('Compte introuvable ou desactive'), { status: 404 });
+  }
+  if (!user.email_verified) {
+    throw Object.assign(new Error('Adresse e-mail non verifiee'), { status: 403 });
+  }
+
+  authChallengeService.consumeChallenge(challenge.id);
+  authChallengeService.trustDevice(user.id, {
+    deviceHash: challenge.device_hash || null,
+    clientSignatureHash: challenge.client_signature_hash || null,
+    userAgent: challenge.user_agent || null,
+    ipHash: challenge.ip_hash || null,
+  }, 'Connexion approuvee par e-mail');
+  db.update('users', { last_login_at: new Date().toISOString() }, { id: user.id });
+
+  const freshUser = db.findOne('users', { id: user.id });
+  return {
+    token: signToken(freshUser.id, freshUser.role),
+    user: safeUser(freshUser),
+  };
 }
 
 module.exports = {
@@ -302,6 +610,8 @@ module.exports = {
   signToken,
   safeUser,
   ensureFounder,
+  completeEmailVerification,
+  approveLoginChallenge,
   maskEmail,
   isPrimaryFounderEmail,
 };

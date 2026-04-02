@@ -15,6 +15,8 @@ const SCHEMA = [
     password_hash   TEXT,                   -- null for OAuth-only accounts
     avatar_url      TEXT,
     role            TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin','founder','api_provider')),
+    email_verified  INTEGER NOT NULL DEFAULT 0,
+    email_verified_at TEXT,
     site_language   TEXT NOT NULL DEFAULT 'auto',
     ai_language     TEXT NOT NULL DEFAULT 'auto',
     analytics_layout TEXT,
@@ -47,6 +49,38 @@ const SCHEMA = [
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, block_type, value_hash)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS auth_email_challenges (
+    id                TEXT PRIMARY KEY,
+    user_id           TEXT REFERENCES users(id) ON DELETE CASCADE,
+    email             TEXT NOT NULL,
+    challenge_type    TEXT NOT NULL CHECK(challenge_type IN ('register_verify','login_approve')),
+    token_hash        TEXT NOT NULL UNIQUE,
+    device_hash       TEXT,
+    client_signature_hash TEXT,
+    ip_hash           TEXT,
+    ip_address        TEXT,
+    location_label    TEXT,
+    user_agent        TEXT,
+    metadata          TEXT NOT NULL DEFAULT '{}',
+    expires_at        TEXT NOT NULL,
+    consumed_at       TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS auth_trusted_devices (
+    id                TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_hash       TEXT,
+    client_signature_hash TEXT,
+    user_agent        TEXT,
+    label             TEXT NOT NULL DEFAULT '',
+    last_ip_hash      TEXT,
+    last_seen_at      TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -552,6 +586,9 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_site_reviews_updated_at ON site_reviews(updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_user_id ON access_blocks(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_lookup ON access_blocks(block_type, value_hash, is_active)`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_email_challenges_user_type ON auth_email_challenges(user_id, challenge_type, consumed_at, expires_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_email_challenges_email ON auth_email_challenges(email, challenge_type, consumed_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_trusted_devices_user_id ON auth_trusted_devices(user_id, updated_at DESC)`,
 ];
 
 module.exports = SCHEMA;
