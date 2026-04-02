@@ -375,6 +375,7 @@ export default function Layout() {
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },
     { icon: Sparkles, label: t('layout.nav.commandsAi', 'Commandes IA'), path: '/dashboard/commands-ai', needsGuild: true },
     { icon: Ticket, label: t('layout.nav.tickets', 'Tickets'), path: '/dashboard/tickets', needsGuild: true },
+    { icon: UserPlus, label: t('layout.nav.captcha', 'CAPTCHA'), path: '/dashboard/captcha', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]

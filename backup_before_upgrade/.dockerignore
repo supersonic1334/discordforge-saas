@@ -1,0 +1,14 @@
+frontend/node_modules
+frontend/dist
+frontend/.npm-cache
+backend/node_modules
+backend/.npm-cache
+backend/logs
+backend/data/*.db-shm
+backend/data/*.db-wal
+backend/public-*.log
+logs
+*.log
+.git
+.DS_Store
+Thumbs.db

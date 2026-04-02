@@ -465,6 +465,31 @@ const ticketGeneratorConfigSchema = z.object({
   options: z.array(ticketGeneratorOptionSchema).min(1).max(10),
 });
 
+const captchaChallengeTypeSchema = z.object({
+  key: z.enum(['image_code', 'quick_math']),
+  label: z.string().trim().min(1).max(40),
+  description: z.string().trim().max(140).optional().default(''),
+  enabled: z.boolean().optional().default(true),
+});
+
+const captchaConfigSchema = z.object({
+  enabled: z.boolean().optional().default(true),
+  channel_mode: z.enum(['existing', 'create']).optional().default('existing'),
+  panel_channel_id: optionalDiscordSnowflakeSchema,
+  panel_channel_name: z.string().trim().min(1).max(90),
+  panel_message_id: optionalDiscordSnowflakeSchema,
+  panel_title: z.string().trim().min(1).max(120),
+  panel_description: z.string().trim().max(2000).optional().default(''),
+  panel_color: z.string().trim().regex(/^#?[0-9a-fA-F]{6}$/, 'Invalid color'),
+  panel_thumbnail_url: optionalImageAssetSchema,
+  panel_image_url: optionalImageAssetSchema,
+  verified_role_ids: z.array(discordSnowflakeSchema).max(12).optional().default([]),
+  log_channel_id: optionalDiscordSnowflakeSchema,
+  success_message: z.string().trim().min(1).max(240),
+  failure_message: z.string().trim().min(1).max(240),
+  challenge_types: z.array(captchaChallengeTypeSchema).min(1).max(4),
+});
+
 // ── Site reviews ─────────────────────────────────────────────────────────────
 const siteReviewCreateSchema = z.object({
   rating_half: z.number().int().min(1).max(10),
@@ -524,6 +549,7 @@ module.exports = {
   supportTicketUpdateSchema,
   ticketGeneratorOptionSchema,
   ticketGeneratorConfigSchema,
+  captchaConfigSchema,
   siteReviewCreateSchema,
   siteReviewUpdateSchema,
 };

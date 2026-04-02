@@ -1,0 +1,595 @@
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion'
+import { Eye, EyeOff, Bot, Shield, Zap, AlertCircle, Ban } from 'lucide-react'
+import toast from 'react-hot-toast'
+import SnowCanvas from '../components/SnowCanvas'
+import { authAPI } from '../services/api'
+import { useAuthStore } from '../stores'
+import { useI18n } from '../i18n'
+
+function DiscordMark(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M20.317 4.369A19.791 19.791 0 0 0 15.885 3c-.191.335-.403.78-.554 1.135a18.27 18.27 0 0 0-5.098 0A12.64 12.64 0 0 0 9.677 3a19.736 19.736 0 0 0-4.434 1.37C2.44 8.603 1.681 12.73 2.06 16.8a19.9 19.9 0 0 0 5.433 2.73c.437-.59.826-1.214 1.16-1.87a12.85 12.85 0 0 1-1.826-.873c.154-.113.305-.23.45-.35 3.52 1.65 7.34 1.65 10.819 0 .148.12.299.237.45.35-.58.34-1.192.633-1.829.874.335.654.724 1.279 1.162 1.868a19.867 19.867 0 0 0 5.435-2.73c.445-4.716-.76-8.805-3.562-12.43ZM9.05 14.595c-1.057 0-1.924-.97-1.924-2.16 0-1.19.847-2.16 1.922-2.16 1.084 0 1.94.98 1.923 2.16 0 1.19-.848 2.16-1.922 2.16Zm5.906 0c-1.058 0-1.923-.97-1.923-2.16 0-1.19.846-2.16 1.923-2.16 1.083 0 1.939.98 1.922 2.16 0 1.19-.847 2.16-1.922 2.16Z" />
+    </svg>
+  )
+}
+
+function GoogleMark(props) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="#EA4335" d="M12.24 10.285v3.955h5.496c-.242 1.272-.967 2.35-2.059 3.075l3.327 2.583c1.94-1.787 3.058-4.42 3.058-7.553 0-.725-.065-1.421-.185-2.06H12.24Z" />
+      <path fill="#34A853" d="M12 22c2.76 0 5.078-.913 6.77-2.47l-3.327-2.583c-.924.62-2.103.988-3.443.988-2.647 0-4.89-1.786-5.69-4.19H2.87v2.666A9.997 9.997 0 0 0 12 22Z" />
+      <path fill="#4A90E2" d="M6.31 13.745A5.996 5.996 0 0 1 6 11.82c0-.668.114-1.318.31-1.925V7.229H2.87A9.997 9.997 0 0 0 2 11.82c0 1.61.386 3.134.87 4.591l3.44-2.666Z" />
+      <path fill="#FBBC05" d="M12 5.706c1.5 0 2.847.516 3.907 1.529l2.928-2.928C17.073 2.668 14.755 1.64 12 1.64a9.997 9.997 0 0 0-9.13 5.589l3.44 2.666c.8-2.404 3.043-4.19 5.69-4.19Z" />
+    </svg>
+  )
+}
+
+function AuthAtmosphere({ pointerX, pointerY }) {
+  const driftX = useSpring(useTransform(pointerX, [0, 100], [-36, 36]), { stiffness: 120, damping: 18, mass: 0.6 })
+  const driftY = useSpring(useTransform(pointerY, [0, 100], [-26, 26]), { stiffness: 120, damping: 18, mass: 0.6 })
+  const reverseX = useSpring(useTransform(pointerX, [0, 100], [28, -28]), { stiffness: 110, damping: 20, mass: 0.7 })
+  const reverseY = useSpring(useTransform(pointerY, [0, 100], [18, -18]), { stiffness: 110, damping: 20, mass: 0.7 })
+  const cursorGlowX = useSpring(useTransform(pointerX, [0, 100], [-140, 140]), { stiffness: 95, damping: 18, mass: 0.8 })
+  const cursorGlowY = useSpring(useTransform(pointerY, [0, 100], [-90, 90]), { stiffness: 95, damping: 18, mass: 0.8 })
+  const panelOneX = useSpring(useTransform(pointerX, [0, 100], [-24, 24]), { stiffness: 110, damping: 20 })
+  const panelOneY = useSpring(useTransform(pointerY, [0, 100], [-14, 14]), { stiffness: 110, damping: 20 })
+  const panelTwoX = useSpring(useTransform(pointerX, [0, 100], [18, -18]), { stiffness: 110, damping: 20 })
+  const panelTwoY = useSpring(useTransform(pointerY, [0, 100], [12, -12]), { stiffness: 110, damping: 20 })
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(10,18,26,0.88),rgba(4,7,14,0.98)_64%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.03),transparent_24%,transparent_72%,rgba(255,255,255,0.015))]" />
+      <div className="absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:140px_140px]" />
+
+      <motion.div
+        style={{ x: driftX, y: driftY }}
+        className="absolute left-[6%] top-[4%] h-[clamp(18rem,34vw,34rem)] w-[clamp(18rem,42vw,42rem)] rounded-full bg-[radial-gradient(circle,rgba(60,210,255,0.22),rgba(60,210,255,0.10)_34%,rgba(78,102,255,0.08)_58%,transparent_76%)] blur-[88px] md:blur-[120px]"
+      />
+      <motion.div
+        style={{ x: reverseX, y: reverseY }}
+        className="absolute right-[-6%] top-[18%] h-[clamp(16rem,32vw,30rem)] w-[clamp(16rem,34vw,34rem)] rounded-full bg-[radial-gradient(circle,rgba(168,104,255,0.22),rgba(176,78,255,0.10)_36%,rgba(83,130,255,0.08)_60%,transparent_78%)] blur-[90px] md:blur-[128px]"
+      />
+      <motion.div
+        style={{ x: cursorGlowX, y: cursorGlowY }}
+        className="absolute left-1/2 top-[20%] h-[20rem] w-[20rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.10),rgba(100,221,255,0.08)_28%,rgba(176,78,255,0.06)_56%,transparent_74%)] blur-[90px]"
+      />
+
+      <motion.div
+        animate={{ opacity: [0.14, 0.22, 0.16], scale: [1, 1.04, 0.99] }}
+        transition={{ duration: 8.5, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute inset-x-[22%] top-[12%] h-24 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.16),transparent_72%)] blur-3xl"
+      />
+
+      <motion.div
+        style={{ x: panelOneX, y: panelOneY }}
+        className="absolute left-[8%] top-[18%] hidden h-[18rem] w-[15rem] rounded-[34px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.01))] shadow-[0_28px_60px_rgba(0,0,0,0.22)] backdrop-blur-[2px] lg:block"
+      />
+      <motion.div
+        style={{ x: panelTwoX, y: panelTwoY }}
+        className="absolute right-[10%] top-[14%] hidden h-[14rem] w-[17rem] rounded-[30px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] shadow-[0_28px_60px_rgba(0,0,0,0.2)] backdrop-blur-[2px] lg:block"
+      />
+
+      <motion.div
+        style={{ x: driftX }}
+        className="absolute -left-[8%] top-[28%] h-px w-[44rem] rotate-[12deg] bg-[linear-gradient(90deg,transparent,rgba(88,186,255,0.52),rgba(176,78,255,0.22),transparent)] blur-[0.6px]"
+      />
+      <motion.div
+        style={{ x: reverseX }}
+        className="absolute right-[-12%] top-[62%] h-px w-[38rem] -rotate-[10deg] bg-[linear-gradient(90deg,transparent,rgba(176,78,255,0.46),rgba(88,186,255,0.20),transparent)] blur-[0.6px]"
+      />
+    </div>
+  )
+}
+
+export default function AuthPage() {
+  const { t } = useI18n()
+  const [mode, setMode] = useState('login')
+  const [showPass, setShowPass] = useState(false)
+  const [activeFeature, setActiveFeature] = useState('secure')
+  const [form, setForm] = useState({ email: '', username: '', password: '' })
+  const [error, setError] = useState('')
+  const [accessChecked, setAccessChecked] = useState(false)
+  const [blocked, setBlocked] = useState(false)
+  const [oauthProviders, setOauthProviders] = useState({ discord: false, google: false })
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { login, register, isLoading } = useAuthStore()
+  const blockedHint = useMemo(() => new URLSearchParams(location.search).get('blocked') === '1', [location.search])
+  const formRef = useRef(null)
+  const pointerX = useMotionValue(50)
+  const pointerY = useMotionValue(24)
+
+  const featureCards = [
+    {
+      key: 'secure',
+      icon: Shield,
+      label: t('auth.features.secure'),
+      description: t('auth.features.secureDesc', 'Connexion protégée et accès verrouillé en toute sécurité.'),
+      iconClass: 'text-neon-cyan',
+      iconBgClass: 'border-neon-cyan/20 bg-neon-cyan/10',
+      activeClass: 'border-neon-cyan/30 bg-gradient-to-br from-neon-cyan/16 to-neon-cyan/4 shadow-[0_0_30px_rgba(0,229,255,0.14)]',
+      lineClass: 'from-neon-cyan/0 via-neon-cyan/70 to-neon-cyan/0',
+    },
+    {
+      key: 'realtime',
+      icon: Zap,
+      label: t('auth.features.realtime'),
+      description: t('auth.features.realtimeDesc', 'Statuts, synchronisation et actions instantanées sur ton bot.'),
+      iconClass: 'text-neon-violet',
+      iconBgClass: 'border-neon-violet/20 bg-neon-violet/10',
+      activeClass: 'border-neon-violet/30 bg-gradient-to-br from-neon-violet/16 to-neon-violet/4 shadow-[0_0_30px_rgba(176,78,255,0.14)]',
+      lineClass: 'from-neon-violet/0 via-neon-violet/70 to-neon-violet/0',
+    },
+    {
+      key: 'ai',
+      icon: Bot,
+      label: t('auth.features.ai'),
+      description: t('auth.features.aiDesc', 'Assistant intégré pour configurer et piloter ton site plus vite.'),
+      iconClass: 'text-green-400',
+      iconBgClass: 'border-green-400/20 bg-green-400/10',
+      activeClass: 'border-green-400/25 bg-gradient-to-br from-green-400/16 to-green-400/4 shadow-[0_0_30px_rgba(74,222,128,0.14)]',
+      lineClass: 'from-green-400/0 via-green-400/70 to-green-400/0',
+    },
+  ]
+  const activeFeatureCard = featureCards.find((feature) => feature.key === activeFeature) || featureCards[0]
+
+  // Auto-rotate features
+  useEffect(() => {
+    const keys = featureCards.map((f) => f.key)
+    let idx = keys.indexOf(activeFeature)
+    const interval = window.setInterval(() => {
+      idx = (idx + 1) % keys.length
+      setActiveFeature(keys[idx])
+    }, 5000)
+    return () => window.clearInterval(interval)
+  }, [activeFeature])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const checkAccess = async () => {
+      try {
+        const res = await authAPI.accessStatus()
+        if (cancelled) return
+
+        const isBlocked = !!res.data?.blocked
+        setBlocked(isBlocked)
+        setAccessChecked(true)
+
+        if (!isBlocked && blockedHint) {
+          const token = localStorage.getItem('token')
+          window.location.replace(token ? '/dashboard' : '/auth')
+        }
+      } catch (err) {
+        if (cancelled) return
+
+        const isBlocked = err?.response?.data?.code === 'ACCESS_BLOCKED'
+        setBlocked(isBlocked || blockedHint)
+        setAccessChecked(true)
+      }
+    }
+
+    checkAccess()
+    const intervalId = window.setInterval(checkAccess, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [blockedHint])
+
+  useEffect(() => {
+    let cancelled = false
+
+    authAPI.providers().then((res) => {
+      if (!cancelled) {
+        setOauthProviders({
+          discord: !!res.data?.discord,
+          google: !!res.data?.google,
+        })
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setOauthProviders({ discord: false, google: false })
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const set = (key, value) => {
+    setForm((previous) => ({ ...previous, [key]: value }))
+    setError('')
+  }
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setError('')
+    const normalizedEmail = form.email.trim().toLowerCase()
+    const data = mode === 'login'
+      ? { email: normalizedEmail, password: form.password }
+      : { email: normalizedEmail, username: form.username.trim(), password: form.password }
+    const fn = mode === 'login' ? login : register
+    const response = await fn(data)
+
+    if (response.success) {
+      toast.success(mode === 'login' ? t('auth.loginSuccess') : t('auth.registerSuccess'))
+      navigate('/dashboard')
+    } else {
+      setError(response.error || t('auth.unexpectedError'))
+    }
+  }
+
+  const startDiscordLogin = () => {
+    window.location.href = '/api/v1/auth/discord'
+  }
+
+  const startGoogleLogin = () => {
+    window.location.href = '/api/v1/auth/google'
+  }
+
+  const handleAuthPointerMove = (event) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (!bounds.width || !bounds.height) return
+
+    pointerX.set(((event.clientX - bounds.left) / bounds.width) * 100)
+    pointerY.set(((event.clientY - bounds.top) / bounds.height) * 100)
+  }
+
+  const resetAuthPointer = () => {
+    pointerX.set(50)
+    pointerY.set(24)
+  }
+
+  const oauthButtons = [
+    oauthProviders.discord ? {
+      key: 'discord',
+      label: t('auth.discordButton', 'Discord'),
+      onClick: startDiscordLogin,
+      className: 'bg-[#5865F2] hover:bg-[#6773f6] shadow-[0_12px_30px_rgba(88,101,242,0.28)] hover:shadow-[0_16px_38px_rgba(88,101,242,0.36)]',
+      icon: DiscordMark,
+    } : null,
+    oauthProviders.google ? {
+      key: 'google',
+      label: t('auth.googleButton', 'Google'),
+      onClick: startGoogleLogin,
+      className: 'bg-white text-[#111827] hover:bg-white/90 shadow-[0_12px_30px_rgba(255,255,255,0.12)] hover:shadow-[0_16px_38px_rgba(255,255,255,0.18)]',
+      icon: GoogleMark,
+    } : null,
+  ].filter(Boolean)
+
+  return (
+    <div
+      className="min-h-screen min-h-[100dvh] bg-surface-0 relative overflow-x-hidden p-4 md:px-6 md:py-8"
+      onMouseMove={handleAuthPointerMove}
+      onMouseLeave={resetAuthPointer}
+    >
+      <SnowCanvas />
+      <AuthAtmosphere pointerX={pointerX} pointerY={pointerY} />
+
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 md:gap-10">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-[min(28rem,100%)] pt-4 sm:pt-6 md:pt-10"
+        >
+          {/* Logo section */}
+            <div className="text-center mb-6 sm:mb-8">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 18 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: 'easeOut' }}
+                whileHover={{ y: -5, scale: 1.01 }}
+                className="relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,85vw)]"
+              >
+              <motion.div
+                aria-hidden="true"
+                animate={{
+                  scale: [1, 1.05, 0.99, 1],
+                  opacity: [0.14, 0.24, 0.16, 0.14],
+                }}
+                transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute inset-x-[18%] top-[12%] h-[62%] rounded-full bg-[radial-gradient(circle,rgba(78,205,255,0.22),rgba(176,78,255,0.08)_58%,transparent_78%)] blur-3xl"
+              />
+
+              <motion.div
+                animate={{
+                  y: [0, -10, 0, 7, 0],
+                  rotate: [0, -1.8, 1.6, 0],
+                  scale: [1, 1.018, 0.996, 1.01, 1],
+                }}
+                transition={{ duration: 7.2, repeat: Infinity, ease: 'easeInOut' }}
+                className="relative"
+              >
+                <motion.img
+                  src="/discordforger-logo-full.png"
+                  alt="DiscordForger"
+                  animate={{
+                    filter: [
+                      'drop-shadow(0 22px 52px rgba(68,118,255,0.20))',
+                      'drop-shadow(0 30px 74px rgba(68,118,255,0.28))',
+                      'drop-shadow(0 24px 60px rgba(255,153,92,0.20))',
+                      'drop-shadow(0 22px 52px rgba(68,118,255,0.20))',
+                    ],
+                  }}
+                  transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
+                  className="relative z-10 w-full h-auto object-contain"
+                  loading="eager"
+                />
+              </motion.div>
+
+              <motion.div
+                aria-hidden="true"
+                animate={{
+                  opacity: [0.12, 0.2, 0.12],
+                  scale: [0.98, 1.02, 0.98],
+                }}
+                transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute inset-x-[24%] bottom-[18%] h-10 rounded-full bg-[radial-gradient(circle,rgba(88,129,255,0.24),transparent_72%)] blur-2xl"
+              />
+            </motion.div>
+            <p className="text-white/40 text-sm">{t('auth.tagline')}</p>
+          </div>
+
+          {/* Access check / Blocked / Form */}
+          {!accessChecked ? (
+            <motion.div whileHover={{ y: -4, scale: 1.005 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="gradient-border">
+              <div className="bg-surface-1 rounded-2xl p-6 sm:p-8 text-center space-y-4">
+                <div className="mx-auto w-10 h-10 border-2 border-white/15 border-t-neon-cyan rounded-full animate-spin" />
+                <p className="text-sm text-white/45 font-mono">
+                  {t('auth.blockedChecking', 'Verification de l acces...')}
+                </p>
+              </div>
+            </motion.div>
+          ) : (blocked || blockedHint) ? (
+            <motion.div whileHover={{ y: -4, scale: 1.005 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="gradient-border">
+              <div className="bg-surface-1 rounded-2xl p-6 sm:p-8 text-center space-y-5">
+                <motion.div
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  className="mx-auto w-16 h-16 rounded-2xl border border-red-500/25 bg-red-500/10 text-red-400 flex items-center justify-center shadow-[0_0_30px_rgba(248,113,113,0.12)]"
+                >
+                  <Ban className="w-8 h-8" />
+                </motion.div>
+                <div>
+                  <h2 className="font-display font-700 text-2xl text-white">{t('auth.blockedTitle', 'Acces bloque')}</h2>
+                  <p className="text-white/45 text-sm mt-2">
+                    {t('auth.blockedBody', 'Ton acces au site est actuellement bloque. Tant que le staff ne retablit pas l acces, tu ne peux pas utiliser le site ni te connecter.')}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
+                  <p className="text-xs font-mono text-white/45">
+                    {t('auth.blockedAutoRefresh', 'Verification automatique toutes les 5 secondes. Des que l acces est retabli, le site revient automatiquement.')}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={{ y: -6, scale: 1.006 }}
+            className="gradient-border"
+          >
+            <div className="bg-surface-1 rounded-2xl p-5 sm:p-8">
+              {/* Tab switcher */}
+              <div className="flex bg-white/[0.04] rounded-xl p-1 mb-5 sm:mb-6 border border-white/[0.06]">
+                {[
+                  ['login', t('auth.tabs.login')],
+                  ['register', t('auth.tabs.register')],
+                ].map(([currentMode, label]) => (
+                  <button
+                    key={currentMode}
+                    onClick={() => { setMode(currentMode); setError('') }}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-display font-600 transition-all duration-250 ${
+                      mode === currentMode
+                        ? 'bg-gradient-to-r from-neon-cyan/20 to-neon-violet/20 text-white border border-neon-cyan/30 shadow-[0_0_16px_rgba(0,229,255,0.08)]'
+                        : 'text-white/40 hover:text-white/60'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Auth form */}
+              <form ref={formRef} onSubmit={submit} className="space-y-4" autoComplete="on">
+                <AnimatePresence mode="wait">
+                  {mode === 'register' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25 }}
+                    >
+                      <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
+                      <input
+                        className="input-field"
+                        placeholder={t('auth.usernamePlaceholder')}
+                        value={form.username}
+                        onChange={(event) => set('username', event.target.value)}
+                        required
+                        minLength={2}
+                        maxLength={32}
+                        name="username"
+                        autoComplete="nickname"
+                        inputMode="text"
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div>
+                  <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.email')}</label>
+                  <input
+                    type="email"
+                    className="input-field"
+                    placeholder={t('auth.emailPlaceholder')}
+                    value={form.email}
+                    onChange={(event) => set('email', event.target.value)}
+                    required
+                    name="email"
+                    autoComplete={mode === 'login' ? 'username' : 'email'}
+                    inputMode="email"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.password')}</label>
+                  <div className="relative">
+                    <input
+                      type={showPass ? 'text' : 'password'}
+                      className="input-field pr-12"
+                      placeholder={mode === 'register' ? t('auth.registerPasswordPlaceholder') : '........'}
+                      value={form.password}
+                      onChange={(event) => set('password', event.target.value)}
+                      required
+                      name={mode === 'login' ? 'account-password' : 'new-account-password'}
+                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPass((value) => !value)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors p-1"
+                      aria-label={showPass ? 'Hide password' : 'Show password'}
+                    >
+                      {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
+                    >
+                      <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.button
+                  type="submit"
+                  disabled={isLoading}
+                  whileTap={{ scale: 0.97 }}
+                  className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 hover:shadow-[0_0_28px_rgba(0,229,255,0.3),0_0_56px_rgba(0,229,255,0.1)]"
+                >
+                  {isLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                      {mode === 'login' ? t('auth.loginLoading') : t('auth.registerLoading')}
+                    </span>
+                  ) : mode === 'login' ? t('auth.loginSubmit') : t('auth.registerSubmit')}
+                </motion.button>
+
+                {oauthButtons.length > 0 && (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-white/[0.08]" />
+                      <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">
+                        {t('auth.oauthDivider', 'Ou')}
+                      </span>
+                      <div className="h-px flex-1 bg-white/[0.08]" />
+                    </div>
+
+                    <div className={`grid gap-3 ${oauthButtons.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                      {oauthButtons.map((provider) => {
+                        const Icon = provider.icon
+                        return (
+                          <motion.button
+                            key={provider.key}
+                            type="button"
+                            onClick={provider.onClick}
+                            whileHover={{ y: -1 }}
+                            whileTap={{ scale: 0.97 }}
+                            className={`w-full py-3 rounded-xl font-display font-600 text-sm transition-all duration-250 flex items-center justify-center gap-2 ${provider.className}`}
+                          >
+                            <Icon className="w-4 h-4 shrink-0" />
+                            {provider.label}
+                          </motion.button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </form>
+
+              {/* Feature cards */}
+              <div className="mt-5 sm:mt-6 space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {featureCards.map((feature) => {
+                    const active = feature.key === activeFeature
+                    const Icon = feature.icon
+
+                    return (
+                      <motion.button
+                        key={feature.key}
+                        type="button"
+                        onMouseEnter={() => setActiveFeature(feature.key)}
+                        onFocus={() => setActiveFeature(feature.key)}
+                        onClick={() => setActiveFeature(feature.key)}
+                        whileHover={{ y: -3, scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`group relative overflow-hidden rounded-xl border px-2 sm:px-3 py-3 sm:py-3.5 text-left transition-all duration-300 ${
+                          active
+                            ? feature.activeClass
+                            : 'border-white/[0.04] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        <div className={`absolute inset-x-3 top-0 h-px bg-gradient-to-r ${feature.lineClass} ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'} transition-opacity`} />
+                        <div className="flex flex-col items-center gap-2 text-center">
+                          <motion.div
+                            animate={active ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                            transition={{ duration: 0.35 }}
+                            className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl border transition-all ${
+                              active ? feature.iconBgClass : 'border-white/[0.06] bg-white/[0.03]'
+                            }`}
+                          >
+                            <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${feature.iconClass}`} />
+                          </motion.div>
+                          <span className={`text-[10px] sm:text-xs font-mono transition-colors leading-tight ${active ? 'text-white' : 'text-white/35 group-hover:text-white/65'}`}>
+                            {feature.label}
+                          </span>
+                        </div>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeFeatureCard.key}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
+                    className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3"
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <activeFeatureCard.icon className={`w-4 h-4 ${activeFeatureCard.iconClass}`} />
+                      <span className="text-sm font-display font-600 text-white">{activeFeatureCard.label}</span>
+                    </div>
+                    <p className="text-xs text-white/45 leading-relaxed">{activeFeatureCard.description}</p>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
+          </motion.div>
+          )}
+        </motion.div>
+
+      </div>
+    </div>
+  )
+}

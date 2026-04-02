@@ -1,0 +1,41 @@
+{
+  "name": "discord-saas-backend",
+  "version": "1.0.0",
+  "description": "Discord Bot Management SaaS - Backend",
+  "main": "src/app.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "public": "node src/publicGateway.js",
+    "migrate": "node src/database/migrate.js",
+    "seed": "node src/database/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "http-proxy": "^1.18.1",
+    "ioredis": "^5.3.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^2.7.0",
+    "p-queue": "^6.6.2",
+    "passport": "^0.7.0",
+    "passport-discord": "^0.1.4",
+    "passport-google-oauth20": "^2.0.0",
+    "uuid": "^9.0.1",
+    "winston": "^3.13.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "ws": "^8.17.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

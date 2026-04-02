@@ -473,6 +473,47 @@ const SCHEMA = [
     UNIQUE(guild_id, ticket_number)
   )`,
 
+  `CREATE TABLE IF NOT EXISTS guild_captcha_configs (
+    id                TEXT PRIMARY KEY,
+    guild_id          TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    channel_mode      TEXT NOT NULL DEFAULT 'existing' CHECK(channel_mode IN ('existing','create')),
+    panel_channel_id  TEXT NOT NULL DEFAULT '',
+    panel_channel_name TEXT NOT NULL DEFAULT 'verification',
+    panel_message_id  TEXT NOT NULL DEFAULT '',
+    panel_title       TEXT NOT NULL DEFAULT 'Verification CAPTCHA',
+    panel_description TEXT NOT NULL DEFAULT '',
+    panel_color       TEXT NOT NULL DEFAULT '#06b6d4',
+    panel_thumbnail_url TEXT NOT NULL DEFAULT '',
+    panel_image_url   TEXT NOT NULL DEFAULT '',
+    verified_role_ids TEXT NOT NULL DEFAULT '[]',
+    log_channel_id    TEXT NOT NULL DEFAULT '',
+    success_message   TEXT NOT NULL DEFAULT 'Verification reussie. Acces debloque.',
+    failure_message   TEXT NOT NULL DEFAULT 'Code invalide. Reessaie avec une nouvelle verification.',
+    challenge_types_json TEXT NOT NULL DEFAULT '[]',
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(guild_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS guild_captcha_challenges (
+    id                TEXT PRIMARY KEY,
+    guild_id          TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    config_id         TEXT NOT NULL REFERENCES guild_captcha_configs(id) ON DELETE CASCADE,
+    discord_user_id   TEXT NOT NULL,
+    discord_channel_id TEXT NOT NULL DEFAULT '',
+    challenge_type    TEXT NOT NULL,
+    prompt_text       TEXT NOT NULL DEFAULT '',
+    expected_answer_hash TEXT NOT NULL,
+    attempt_count     INTEGER NOT NULL DEFAULT 0,
+    metadata_json     TEXT NOT NULL DEFAULT '{}',
+    status            TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','completed','expired')),
+    expires_at        TEXT NOT NULL,
+    consumed_at       TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
   // ────────────────────────────────────────────────────────────────────────────
   // SITE REVIEWS
   // ────────────────────────────────────────────────────────────────────────────
@@ -583,6 +624,9 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_guild_ticket_generators_guild_id ON guild_ticket_generators(guild_id)`,
   `CREATE INDEX IF NOT EXISTS idx_guild_ticket_entries_guild_status ON guild_ticket_entries(guild_id, status, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_guild_ticket_entries_creator ON guild_ticket_entries(guild_id, creator_discord_user_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_captcha_configs_guild_id ON guild_captcha_configs(guild_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_captcha_challenges_lookup ON guild_captcha_challenges(guild_id, discord_user_id, status, expires_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_captcha_challenges_config ON guild_captcha_challenges(config_id, status, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_site_reviews_updated_at ON site_reviews(updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_user_id ON access_blocks(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_lookup ON access_blocks(block_type, value_hash, is_active)`,

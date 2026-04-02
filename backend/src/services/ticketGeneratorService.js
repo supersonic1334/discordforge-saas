@@ -5,20 +5,24 @@ const db = require('../database');
 
 const MAX_OPTIONS = 10;
 const DEFAULT_COLOR = '#7c3aed';
+const LEGACY_DUPLICATE_FOOTER = 'Une seule demande active par catégorie si la protection anti-doublon est activée.';
+const DEFAULT_MENU_PLACEHOLDER = 'Sélectionne la demande à ouvrir';
+const DEFAULT_PANEL_DESCRIPTION = 'Choisis le bon motif dans le menu ci-dessous pour ouvrir un salon privé avec le staff adapté.';
+const DEFAULT_PARTNERSHIP_TEMPLATE = 'partenaire-{number}';
 
 const DEFAULT_OPTIONS = Object.freeze([
   {
     key: 'contact_staff',
     label: 'Contact staff',
-    description: 'Parler directement avec l equipe du serveur',
-    emoji: '',
+    description: "Parler directement avec l'équipe du serveur",
+    emoji: '🛟',
     category_id: '',
     role_ids: [],
     ping_roles: true,
     question_label: 'Pourquoi veux-tu contacter le staff ?',
     question_placeholder: 'Explique clairement ta demande...',
     modal_title: 'Contact staff',
-    intro_message: 'Bonjour {mention}, ta demande a bien ete ouverte.\n\nCategorie: {label}\nRaison: {reason}',
+    intro_message: 'Bonjour {mention}, ta demande a bien été ouverte.\n\nCatégorie : {label}\nRaison : {reason}',
     ticket_name_template: 'staff-{number}',
     ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}',
     enabled: true,
@@ -27,14 +31,14 @@ const DEFAULT_OPTIONS = Object.freeze([
     key: 'report',
     label: 'Report',
     description: 'Signaler un membre ou un incident',
-    emoji: '',
+    emoji: '🚨',
     category_id: '',
     role_ids: [],
     ping_roles: true,
     question_label: 'Que veux-tu signaler ?',
-    question_placeholder: 'Donne le plus de details possible...',
+    question_placeholder: 'Donne le plus de détails possible...',
     modal_title: 'Report',
-    intro_message: 'Signalement recu pour {mention}.\n\nRaison: {reason}',
+    intro_message: 'Signalement reçu pour {mention}.\n\nRaison : {reason}',
     ticket_name_template: 'report-{number}',
     ticket_topic_template: 'Report #{number} | {user_tag}',
     enabled: true,
@@ -42,15 +46,15 @@ const DEFAULT_OPTIONS = Object.freeze([
   {
     key: 'appeal',
     label: 'Appel sanction',
-    description: 'Demander une revision de sanction',
-    emoji: '',
+    description: 'Demander une révision de sanction',
+    emoji: '⚖️',
     category_id: '',
     role_ids: [],
     ping_roles: true,
     question_label: 'Quelle sanction veux-tu contester ?',
     question_placeholder: 'Explique la sanction et pourquoi tu fais appel...',
     modal_title: 'Appel sanction',
-    intro_message: 'Appel de sanction recu pour {mention}.\n\nContexte: {reason}',
+    intro_message: 'Appel de sanction reçu pour {mention}.\n\nContexte : {reason}',
     ticket_name_template: 'appeal-{number}',
     ticket_topic_template: 'Appel #{number} | {user_tag}',
     enabled: true,
@@ -59,15 +63,15 @@ const DEFAULT_OPTIONS = Object.freeze([
     key: 'partnership',
     label: 'Partenariat',
     description: 'Proposer un partenariat ou une collaboration',
-    emoji: '',
+    emoji: '🤝',
     category_id: '',
     role_ids: [],
     ping_roles: false,
     question_label: 'Parle-nous de ton partenariat',
-    question_placeholder: 'Serveur, objectifs, lien, idee...',
+    question_placeholder: 'Serveur, objectifs, lien, idée...',
     modal_title: 'Partenariat',
-    intro_message: 'Demande partenariat ouverte pour {mention}.\n\nDetails: {reason}',
-    ticket_name_template: 'partner-{number}',
+    intro_message: 'Demande de partenariat ouverte pour {mention}.\n\nDétails : {reason}',
+    ticket_name_template: DEFAULT_PARTNERSHIP_TEMPLATE,
     ticket_topic_template: 'Partenariat #{number} | {user_tag}',
     enabled: true,
   },
@@ -75,14 +79,14 @@ const DEFAULT_OPTIONS = Object.freeze([
     key: 'purchase',
     label: 'Achat',
     description: 'Question commerciale ou achat de service',
-    emoji: '',
+    emoji: '🛒',
     category_id: '',
     role_ids: [],
     ping_roles: false,
     question_label: 'De quoi as-tu besoin ?',
     question_placeholder: 'Produit, offre, budget, informations...',
     modal_title: 'Achat',
-    intro_message: 'Demande commerciale ouverte pour {mention}.\n\nBesoin: {reason}',
+    intro_message: 'Demande commerciale ouverte pour {mention}.\n\nBesoin : {reason}',
     ticket_name_template: 'purchase-{number}',
     ticket_topic_template: 'Achat #{number} | {user_tag}',
     enabled: true,
@@ -90,15 +94,15 @@ const DEFAULT_OPTIONS = Object.freeze([
   {
     key: 'recruitment',
     label: 'Recrutement',
-    description: 'Postuler ou contacter l equipe recrutement',
-    emoji: '',
+    description: "Postuler ou contacter l'équipe recrutement",
+    emoji: '🧩',
     category_id: '',
     role_ids: [],
     ping_roles: false,
-    question_label: 'Pourquoi souhaites-tu rejoindre l equipe ?',
-    question_placeholder: 'Experience, disponibilites, motivations...',
+    question_label: "Pourquoi souhaites-tu rejoindre l'équipe ?",
+    question_placeholder: 'Expérience, disponibilités, motivations...',
     modal_title: 'Recrutement',
-    intro_message: 'Candidature recue pour {mention}.\n\nProfil: {reason}',
+    intro_message: 'Candidature reçue pour {mention}.\n\nProfil : {reason}',
     ticket_name_template: 'recruit-{number}',
     ticket_topic_template: 'Recrutement #{number} | {user_tag}',
     enabled: false,
@@ -106,15 +110,15 @@ const DEFAULT_OPTIONS = Object.freeze([
   {
     key: 'other_request',
     label: 'Autre demande',
-    description: 'Toute autre demande a traiter par le staff',
-    emoji: '',
+    description: 'Toute autre demande à traiter par le staff',
+    emoji: '💬',
     category_id: '',
     role_ids: [],
     ping_roles: false,
     question_label: 'Explique ta demande',
-    question_placeholder: 'Decris precisement ce dont tu as besoin...',
+    question_placeholder: 'Décris précisément ce dont tu as besoin...',
     modal_title: 'Autre demande',
-    intro_message: 'Nouvelle demande ouverte pour {mention}.\n\nDetails: {reason}',
+    intro_message: 'Nouvelle demande ouverte pour {mention}.\n\nDétails : {reason}',
     ticket_name_template: 'request-{number}',
     ticket_topic_template: 'Demande #{number} | {user_tag}',
     enabled: true,
@@ -125,19 +129,20 @@ const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   panel_channel_id: '',
   panel_message_id: '',
+  transcript_channel_id: '',
   panel_title: 'Support & tickets',
-  panel_description: 'Besoin d aide ? Ouvre un ticket depuis le menu ci-dessous et notre equipe te repondra dans un salon prive des que possible.',
-  panel_footer: 'Une seule demande active par categorie si la protection anti-doublon est active.',
-  menu_placeholder: 'Choisir le type de ticket',
+  panel_description: DEFAULT_PANEL_DESCRIPTION,
+  panel_footer: '',
+  menu_placeholder: DEFAULT_MENU_PLACEHOLDER,
   panel_color: DEFAULT_COLOR,
   panel_thumbnail_url: '',
   panel_image_url: '',
   default_category_id: '',
   ticket_name_template: 'ticket-{number}',
   ticket_topic_template: 'Ticket #{number} | {label} | {user_tag}',
-  intro_message: 'Bonjour {mention}, ton ticket est bien cree.\n\nCategorie: {label}\nRaison: {reason}',
+  intro_message: 'Bonjour {mention}, ton ticket est bien créé.\n\nCatégorie : {label}\nRaison : {reason}',
   claim_message: 'Ticket pris en charge par {claimer}.',
-  close_message: 'Ticket ferme par {closer}.',
+  close_message: 'Ticket fermé par {closer}.',
   auto_ping_support: true,
   allow_user_close: true,
   prevent_duplicates: true,
@@ -202,10 +207,24 @@ function normalizeText(value, maxLength, fallback = '') {
   return trimmed.slice(0, maxLength);
 }
 
+function normalizePanelFooter(value, fallback = '') {
+  const normalized = normalizeText(value, 200, fallback);
+  return normalized === LEGACY_DUPLICATE_FOOTER ? '' : normalized;
+}
+
+function normalizeTicketTemplateForOption(optionKey, value, fallback = '') {
+  const normalized = normalizeText(value, 80, fallback);
+  if (String(optionKey || '').trim() === 'partnership' && normalized === 'partner-{number}') {
+    return DEFAULT_PARTNERSHIP_TEMPLATE;
+  }
+  return normalized;
+}
+
 function normalizeOption(rawOption = {}, fallback = {}, index = 0) {
+  const optionKey = sanitizeOptionKey(rawOption.key, fallback.key || `ticket_${index + 1}`);
   const baseLabel = normalizeText(rawOption.label, 40, fallback.label || `Ticket ${index + 1}`) || `Ticket ${index + 1}`;
   return {
-    key: sanitizeOptionKey(rawOption.key, fallback.key || `ticket_${index + 1}`),
+    key: optionKey,
     label: baseLabel,
     description: normalizeText(rawOption.description, 100, fallback.description || ''),
     emoji: normalizeText(rawOption.emoji, 10, fallback.emoji || ''),
@@ -216,7 +235,7 @@ function normalizeOption(rawOption = {}, fallback = {}, index = 0) {
     question_placeholder: normalizeText(rawOption.question_placeholder, 100, fallback.question_placeholder || 'Explique ta demande...'),
     modal_title: normalizeText(rawOption.modal_title, 45, fallback.modal_title || baseLabel) || baseLabel,
     intro_message: normalizeText(rawOption.intro_message, 1600, fallback.intro_message || ''),
-    ticket_name_template: normalizeText(rawOption.ticket_name_template, 80, fallback.ticket_name_template || ''),
+    ticket_name_template: normalizeTicketTemplateForOption(optionKey, rawOption.ticket_name_template, fallback.ticket_name_template || ''),
     ticket_topic_template: normalizeText(rawOption.ticket_topic_template, 220, fallback.ticket_topic_template || ''),
     enabled: normalizeBoolean(rawOption.enabled, fallback.enabled ?? true),
   };
@@ -257,6 +276,7 @@ function ensureGeneratorRow(internalGuildId) {
     enabled: 1,
     panel_channel_id: '',
     panel_message_id: '',
+    transcript_channel_id: '',
     panel_title: DEFAULT_CONFIG.panel_title,
     panel_description: DEFAULT_CONFIG.panel_description,
     panel_footer: DEFAULT_CONFIG.panel_footer,
@@ -289,9 +309,10 @@ function mapGeneratorRow(row) {
     enabled: !!source.enabled,
     panel_channel_id: normalizeSnowflake(source.panel_channel_id),
     panel_message_id: normalizeSnowflake(source.panel_message_id),
+    transcript_channel_id: normalizeSnowflake(source.transcript_channel_id),
     panel_title: normalizeText(source.panel_title, 120, DEFAULT_CONFIG.panel_title) || DEFAULT_CONFIG.panel_title,
     panel_description: normalizeText(source.panel_description, 2000, DEFAULT_CONFIG.panel_description),
-    panel_footer: normalizeText(source.panel_footer, 200, DEFAULT_CONFIG.panel_footer),
+    panel_footer: normalizePanelFooter(source.panel_footer, DEFAULT_CONFIG.panel_footer),
     menu_placeholder: normalizeText(source.menu_placeholder, 120, DEFAULT_CONFIG.menu_placeholder) || DEFAULT_CONFIG.menu_placeholder,
     panel_color: normalizeColor(source.panel_color, DEFAULT_CONFIG.panel_color),
     panel_thumbnail_url: normalizeAssetUrl(source.panel_thumbnail_url, DEFAULT_CONFIG.panel_thumbnail_url),
@@ -404,9 +425,10 @@ function saveGuildTicketGenerator(internalGuildId, payload = {}) {
     enabled: normalizeBoolean(payload.enabled, current.enabled),
     panel_channel_id: normalizeSnowflake(payload.panel_channel_id, current.panel_channel_id),
     panel_message_id: normalizeSnowflake(payload.panel_message_id, current.panel_message_id),
+    transcript_channel_id: normalizeSnowflake(payload.transcript_channel_id, current.transcript_channel_id),
     panel_title: normalizeText(payload.panel_title, 120, current.panel_title) || current.panel_title,
     panel_description: normalizeText(payload.panel_description, 2000, current.panel_description),
-    panel_footer: normalizeText(payload.panel_footer, 200, current.panel_footer),
+    panel_footer: normalizePanelFooter(payload.panel_footer, current.panel_footer),
     menu_placeholder: normalizeText(payload.menu_placeholder, 120, current.menu_placeholder) || current.menu_placeholder,
     panel_color: normalizeColor(payload.panel_color, current.panel_color),
     panel_thumbnail_url: normalizeAssetUrl(payload.panel_thumbnail_url, current.panel_thumbnail_url),
@@ -428,6 +450,7 @@ function saveGuildTicketGenerator(internalGuildId, payload = {}) {
     enabled: nextConfig.enabled ? 1 : 0,
     panel_channel_id: nextConfig.panel_channel_id,
     panel_message_id: nextConfig.panel_message_id,
+    transcript_channel_id: nextConfig.transcript_channel_id,
     panel_title: nextConfig.panel_title,
     panel_description: nextConfig.panel_description,
     panel_footer: nextConfig.panel_footer,

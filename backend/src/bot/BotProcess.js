@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const {
   Client,
@@ -52,6 +52,16 @@ const {
   replaceTicketTemplate,
   buildTicketChannelName,
 } = require('../services/ticketGeneratorService');
+const {
+  buildCaptchaCode,
+  getGuildCaptchaConfig,
+  getGuildCaptchaConfigById,
+  saveGuildCaptchaConfig,
+  recordPublishedCaptchaPanel,
+  createCaptchaChallenge,
+  getActiveCaptchaChallengeById,
+  validateCaptchaChallenge,
+} = require('../services/captchaGeneratorService');
 const config = require('../config');
 
 // ── Status enum ───────────────────────────────────────────────────────────────
@@ -66,6 +76,12 @@ const BotStatus = {
 
 const TICKET_GENERATOR_PREFIX = 'ticketgen';
 const TICKET_REASON_INPUT_ID = 'reason';
+const LEGACY_TICKET_DUPLICATE_FOOTER = 'Une seule demande active par categorie si la protection anti-doublon est active.';
+const TICKET_DELETE_DELAY_MS = 2000;
+const MAX_TICKET_TRANSCRIPT_BYTES = 7_500_000;
+const MAX_TICKET_TRANSCRIPT_MESSAGES = 5000;
+const CAPTCHA_GENERATOR_PREFIX = 'captcha';
+const CAPTCHA_ANSWER_INPUT_ID = 'captcha_answer';
 
 function parseJsonArray(rawValue) {
   try {
@@ -1175,7 +1191,7 @@ class BotProcess extends EventEmitter {
   }
 
   async _replyToNativeSource(source, content, { ephemeral = true, preferReply = true } = {}) {
-    const payload = { content: String(content || '').slice(0, 2000) || 'Commande executee.' };
+    const payload = { content: String(content || '').slice(0, 2000) || 'Commande exécutée.' };
     if (typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()) {
       if (source.deferred && !source.replied && typeof source.editReply === 'function') {
         return source.editReply(payload);
@@ -1203,12 +1219,46 @@ class BotProcess extends EventEmitter {
       || await guild.channels.fetch(targetChannelId).catch(() => null);
     if (!channel?.isTextBased?.()) return;
 
+    const fields = [];
+    const extras = [];
+    for (const entry of Array.isArray(lines) ? lines : []) {
+      const line = String(entry || '').trim();
+      if (!line) continue;
+
+      const separatorIndex = line.indexOf(':');
+      if (separatorIndex > 0 && separatorIndex < 60) {
+        const name = line.slice(0, separatorIndex).trim().slice(0, 256) || 'Info';
+        const value = line.slice(separatorIndex + 1).trim().slice(0, 1024) || '-';
+        fields.push({
+          name,
+          value,
+          inline: value.length <= 90 && !/raison|contenu|message|historique|details/i.test(name),
+        });
+      } else {
+        extras.push(line);
+      }
+    }
+
+    const guildIconUrl = guild.iconURL?.({ size: 128 }) || null;
+    const description = extras.length > 0
+      ? extras.join('\n').slice(0, 4000)
+      : 'Action native exécutée et synchronisée avec Discord.';
+
     await channel.send({
       embeds: [{
+        author: {
+          name: `Journal natif • ${guild.name}`,
+          icon_url: guildIconUrl || undefined,
+        },
         title: String(title || 'Journal de commande native').slice(0, 256),
-        description: lines.filter(Boolean).join('\n').slice(0, 4000),
+        description,
         color,
-      timestamp: new Date().toISOString(),
+        thumbnail: guildIconUrl ? { url: guildIconUrl } : undefined,
+        fields: fields.slice(0, 10),
+        footer: {
+          text: 'Exécution Discord native',
+        },
+        timestamp: new Date().toISOString(),
       }],
     }).catch(() => {});
   }
@@ -1216,6 +1266,11 @@ class BotProcess extends EventEmitter {
   _hexColorToInt(value, fallback = 0x22d3ee) {
     const normalized = String(value || '').trim().replace(/^#/, '');
     return /^[0-9a-fA-F]{6}$/.test(normalized) ? Number.parseInt(normalized, 16) : fallback;
+  }
+
+  _sanitizeTicketPanelFooter(value) {
+    const normalized = String(value || '').trim();
+    return normalized === LEGACY_TICKET_DUPLICATE_FOOTER ? '' : normalized;
   }
 
   async _resolveTextChannel(source, actionConfig = {}, optionName = 'channel') {
@@ -1289,13 +1344,262 @@ class BotProcess extends EventEmitter {
     };
   }
 
+  _sanitizeTranscriptFileToken(value, fallback = 'ticket') {
+    const normalized = String(value || fallback)
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9-_]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+
+    return normalized || fallback;
+  }
+
+  _getTicketCloseContext(interaction, entryId, internalGuildId) {
+    const entry = getTicketEntryById(internalGuildId, entryId);
+    if (!entry) {
+      return { error: 'Ticket introuvable.' };
+    }
+    if (entry.status === 'closed') {
+      return { error: 'Ce ticket est déjà fermé.' };
+    }
+
+    const generator = getGuildTicketGeneratorById(entry.generator_id);
+    if (!generator?.id) {
+      return { error: 'Configuration ticket introuvable.' };
+    }
+
+    const option = (generator.options || []).find((item) => item.key === entry.option_key);
+    const isSupport = this._hasTicketSupportAccess(interaction.member, option);
+    const isCreator = String(entry.creator_discord_user_id) === String(interaction.user.id);
+    if (!isSupport && !(generator.allow_user_close && isCreator)) {
+      return { error: 'Tu ne peux pas fermer ce ticket.' };
+    }
+
+    return { entry, generator, option };
+  }
+
+  async _resolveTicketTextChannel(guild, channelId) {
+    const normalizedChannelId = normalizeSnowflake(channelId);
+    if (!guild || !normalizedChannelId) return null;
+
+    const channel = guild.channels.cache.get(normalizedChannelId)
+      || await guild.channels.fetch(normalizedChannelId).catch(() => null);
+    return channel?.isTextBased?.() ? channel : null;
+  }
+
+  async _resolveTicketTranscriptChannel(guild, generator, ticketChannelId) {
+    const transcriptChannelId = normalizeSnowflake(generator?.transcript_channel_id);
+    if (!transcriptChannelId) {
+      throw new Error('Choisis un salon transcript avant de fermer avec transcript.');
+    }
+    if (transcriptChannelId === normalizeSnowflake(ticketChannelId)) {
+      throw new Error('Le salon transcript doit être différent du salon ticket.');
+    }
+
+    const channel = await this._resolveTicketTextChannel(guild, transcriptChannelId);
+    if (!channel) {
+      throw new Error('Le salon transcript configuré est introuvable ou invalide.');
+    }
+
+    const permissions = channel.permissionsFor?.(guild.members.me);
+    if (!permissions?.has(PermissionFlagsBits.ViewChannel)) {
+      throw new Error('Le bot ne peut pas voir le salon transcript.');
+    }
+    if (!permissions?.has(PermissionFlagsBits.SendMessages)) {
+      throw new Error('Le bot ne peut pas envoyer de transcript dans ce salon.');
+    }
+    if (!permissions?.has(PermissionFlagsBits.AttachFiles)) {
+      throw new Error('Le bot doit pouvoir joindre des fichiers dans le salon transcript.');
+    }
+
+    return channel;
+  }
+
+  async _fetchTicketTranscriptMessages(channel) {
+    const collected = [];
+    let before = null;
+    let truncated = false;
+
+    while (true) {
+      const batch = await channel.messages.fetch({
+        limit: 100,
+        ...(before ? { before } : {}),
+      }).catch(() => null);
+
+      if (!batch?.size) break;
+      const items = [...batch.values()];
+      collected.push(...items);
+      if (collected.length >= MAX_TICKET_TRANSCRIPT_MESSAGES) {
+        truncated = true;
+        break;
+      }
+
+      before = items[items.length - 1]?.id;
+      if (!before || batch.size < 100) break;
+    }
+
+    return {
+      messages: collected.slice(0, MAX_TICKET_TRANSCRIPT_MESSAGES).reverse(),
+      truncated,
+    };
+  }
+
+  _buildTicketTranscriptAttachment({ guild, channel, entry, option, closer, messages, truncated }) {
+    const headerLines = [
+      `Transcript ticket #${entry.ticket_number}`,
+      `Serveur: ${guild?.name || guild?.id || 'Serveur inconnu'}`,
+      `Salon: #${channel?.name || entry.channel_id}`,
+      `Categorie: ${String(option?.label || entry.option_key || 'Ticket')}`,
+      `Createur: ${entry.creator_username || entry.creator_discord_user_id}`,
+      `Ferme par: ${closer?.tag || closer?.username || closer?.id || entry.closed_by_username || entry.closed_by_discord_user_id || 'Inconnu'}`,
+      `Raison: ${entry.reason || 'Aucune raison'}`,
+      `Cree le: ${entry.created_at || new Date().toISOString()}`,
+      `Ferme le: ${new Date().toISOString()}`,
+      '',
+      '----- Conversation -----',
+      '',
+    ];
+
+    const lines = [...headerLines];
+    let byteLength = Buffer.byteLength(lines.join('\n'), 'utf8');
+    let includedMessages = 0;
+    let transcriptTruncated = !!truncated;
+
+    for (const message of messages) {
+      const authorLabel = message.author?.tag
+        || message.author?.username
+        || message.member?.displayName
+        || message.author?.id
+        || 'Utilisateur inconnu';
+      const blockLines = [
+        `[${message.createdAt?.toISOString?.() || new Date().toISOString()}] ${authorLabel}`,
+      ];
+
+      const content = String(message.content || '').trim();
+      if (content) {
+        blockLines.push(content);
+      }
+
+      const attachmentUrls = [...(message.attachments?.values?.() || [])]
+        .map((attachment) => attachment?.url)
+        .filter(Boolean);
+      if (attachmentUrls.length > 0) {
+        blockLines.push(`Pieces jointes: ${attachmentUrls.join(', ')}`);
+      }
+
+      const embedSummaries = [...(message.embeds || [])]
+        .map((embed) => [embed.title, embed.description].filter(Boolean).join(' - ').trim())
+        .filter(Boolean);
+      if (embedSummaries.length > 0) {
+        blockLines.push(`Embeds: ${embedSummaries.join(' | ')}`);
+      }
+
+      if (blockLines.length === 1) {
+        blockLines.push('[Message sans texte]');
+      }
+
+      blockLines.push('');
+      const block = blockLines.join('\n');
+      const nextBytes = Buffer.byteLength(block, 'utf8');
+      if ((byteLength + nextBytes) > MAX_TICKET_TRANSCRIPT_BYTES) {
+        transcriptTruncated = true;
+        break;
+      }
+
+      lines.push(block);
+      byteLength += nextBytes;
+      includedMessages += 1;
+    }
+
+    if (transcriptTruncated) {
+      lines.push('[Transcript tronqué pour rester dans la limite d envoi Discord.]');
+    }
+
+    const optionToken = this._sanitizeTranscriptFileToken(option?.label || option?.key || 'ticket');
+    const fileName = `transcript-${optionToken}-${String(entry.ticket_number || '1').padStart(4, '0')}.txt`;
+    const buffer = Buffer.from(lines.join('\n'), 'utf8');
+
+    return {
+      attachment: new AttachmentBuilder(buffer, { name: fileName }),
+      messageCount: includedMessages,
+      truncated: transcriptTruncated,
+    };
+  }
+
+  async _sendTicketTranscript({ guild, generator, entry, option, channel, closer }) {
+    const transcriptChannel = await this._resolveTicketTranscriptChannel(guild, generator, channel.id);
+    const transcriptData = await this._fetchTicketTranscriptMessages(channel);
+    const transcriptFile = this._buildTicketTranscriptAttachment({
+      guild,
+      channel,
+      entry,
+      option,
+      closer,
+      messages: transcriptData.messages,
+      truncated: transcriptData.truncated,
+    });
+
+    const canEmbed = transcriptChannel.permissionsFor?.(guild.members.me)?.has(PermissionFlagsBits.EmbedLinks);
+    const summaryEmbed = {
+      author: {
+        name: `${guild?.name || 'Serveur'} • Transcript ticket`,
+        icon_url: guild?.iconURL?.({ size: 128 }) || undefined,
+      },
+      title: `Transcript • Ticket #${entry.ticket_number}`,
+      description: `Le ticket **${String(option?.label || entry.option_key || 'Ticket')}** a ete ferme et exporte.`,
+      color: this._hexColorToInt(generator?.panel_color, 0x7c3aed),
+      fields: [
+        {
+          name: 'Salon ferme',
+          value: `#${channel?.name || entry.channel_id}`,
+          inline: true,
+        },
+        {
+          name: 'Demandeur',
+          value: entry.creator_discord_user_id ? `<@${entry.creator_discord_user_id}>` : (entry.creator_username || 'Inconnu'),
+          inline: true,
+        },
+        {
+          name: 'Ferme par',
+          value: closer?.id ? `<@${closer.id}>` : (closer?.tag || closer?.username || closer?.id || 'Inconnu'),
+          inline: true,
+        },
+        {
+          name: 'Raison',
+          value: String(entry.reason || 'Aucune raison').slice(0, 1024),
+          inline: false,
+        },
+      ],
+      footer: transcriptFile.truncated
+        ? { text: 'Transcript tronqué pour respecter la limite de taille Discord.' }
+        : undefined,
+      timestamp: new Date().toISOString(),
+    };
+
+    await transcriptChannel.send({
+      content: canEmbed ? undefined : `Transcript ticket #${entry.ticket_number} - ${String(option?.label || entry.option_key || 'Ticket')}`,
+      embeds: canEmbed ? [summaryEmbed] : undefined,
+      files: [transcriptFile.attachment],
+    });
+
+    return {
+      channel: transcriptChannel,
+      truncated: transcriptFile.truncated,
+      messageCount: transcriptFile.messageCount,
+    };
+  }
+
   _buildTicketGeneratorComponents(generator) {
     const enabledOptions = (generator?.options || []).filter((option) => option.enabled).slice(0, 10);
     if (enabledOptions.length === 0) return [];
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId(this._buildTicketGeneratorCustomId('open', generator.id))
-      .setPlaceholder(String(generator.menu_placeholder || 'Choisis une categorie de ticket').slice(0, 120))
+      .setPlaceholder(String(generator.menu_placeholder || 'Choisis une catégorie de ticket').slice(0, 120))
       .setMinValues(1)
       .setMaxValues(1);
 
@@ -1319,28 +1623,54 @@ class BotProcess extends EventEmitter {
     return [new ActionRowBuilder().addComponents(menu)];
   }
 
-  _buildTicketGeneratorPanelPayload(generator) {
+  _buildTicketGeneratorPanelPayload(generator, guild = null) {
     const assets = this._buildTicketGeneratorAssets(generator, `ticket-panel-${generator?.id || 'default'}`);
-    const embed = {
+    const enabledOptions = (generator?.options || []).filter((option) => option.enabled).slice(0, 10);
+    const footerText = this._sanitizeTicketPanelFooter(generator?.panel_footer);
+    const guildIconUrl = guild?.iconURL?.({ size: 128 }) || null;
+    const mainEmbed = {
+      author: {
+        name: guild?.name ? `${guild.name} • Centre support` : 'Centre support',
+        icon_url: guildIconUrl || undefined,
+      },
       title: String(generator.panel_title || 'Ticket Generator').slice(0, 256),
-      description: String(generator.panel_description || 'Choisis une categorie de ticket puis remplis le formulaire.').slice(0, 4000),
+      description: String(generator.panel_description || 'Choisis une catégorie de ticket puis remplis le formulaire.').slice(0, 4000),
       color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
-      footer: generator.panel_footer
-        ? { text: String(generator.panel_footer).slice(0, 2048) }
-        : undefined,
+      fields: [
+        {
+          name: 'Ouverture',
+          value: "Menu déroulant interactif avec création automatique d'un salon privé.",
+          inline: true,
+        },
+        {
+          name: 'Prise en charge',
+          value: 'Le staff configuré est notifié selon la catégorie choisie.',
+          inline: true,
+        },
+      ],
       timestamp: new Date().toISOString(),
+    };
+    const detailEmbed = {
+      title: 'Demandes disponibles',
+      description: enabledOptions.length > 0
+        ? enabledOptions.map((option) => `${option.emoji ? `${option.emoji} ` : ''}**${String(option.label || 'Ticket').slice(0, 80)}**\n${String(option.description || 'Ouvre un ticket privé avec le staff.').slice(0, 140)}`).join('\n\n').slice(0, 4000)
+        : 'Aucun type de ticket actif.',
+      color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
+      footer: footerText
+        ? { text: footerText.slice(0, 2048) }
+        : undefined,
     };
 
     if (assets.thumbnail?.url) {
-      embed.thumbnail = { url: assets.thumbnail.url };
+      mainEmbed.thumbnail = { url: assets.thumbnail.url };
     }
 
     if (assets.image?.url) {
-      embed.image = { url: assets.image.url };
+      mainEmbed.image = { url: assets.image.url };
     }
 
     return {
-      embeds: [embed],
+      embeds: [mainEmbed, detailEmbed],
       components: this._buildTicketGeneratorComponents(generator),
       files: assets.files,
     };
@@ -1360,7 +1690,7 @@ class BotProcess extends EventEmitter {
 
     const generator = getGuildTicketGeneratorForDiscord(this.userId, discordGuildId);
     if (!generator?.id || !generator.enabled) {
-      throw new Error('Le generateur de tickets est desactive');
+      throw new Error('Le générateur de tickets est désactivé');
     }
 
     const enabledOptions = (generator.options || []).filter((option) => option.enabled);
@@ -1376,7 +1706,7 @@ class BotProcess extends EventEmitter {
     const channel = guild.channels.cache.get(targetChannelId)
       || await guild.channels.fetch(targetChannelId).catch(() => null);
     if (!channel?.isTextBased?.()) {
-      throw new Error('Le salon de publication tickets doit etre un salon texte');
+      throw new Error('Le salon de publication tickets doit être un salon texte');
     }
 
     const botPermissions = channel.permissionsFor?.(guild.members.me);
@@ -1387,10 +1717,10 @@ class BotProcess extends EventEmitter {
       throw new Error('Le bot ne peut pas envoyer de messages dans le salon tickets choisi');
     }
     if (!botPermissions?.has(PermissionFlagsBits.EmbedLinks)) {
-      throw new Error('Le bot doit avoir la permission d integrer des liens dans le salon tickets choisi');
+      throw new Error("Le bot doit avoir la permission d'intégrer des liens dans le salon tickets choisi");
     }
 
-    const payload = this._buildTicketGeneratorPanelPayload(generator);
+    const payload = this._buildTicketGeneratorPanelPayload(generator, guild);
     let message = null;
 
     if (generator.panel_message_id) {
@@ -1456,7 +1786,7 @@ class BotProcess extends EventEmitter {
     if (duplicate) {
       const existingChannelLabel = duplicate.channel_id ? `<#${duplicate.channel_id}>` : `#${duplicate.ticket_number}`;
       await interaction.editReply({
-        content: `Tu as deja un ticket ouvert pour cette categorie: ${existingChannelLabel}`,
+        content: `Tu as déjà un ticket ouvert pour cette catégorie : ${existingChannelLabel}`,
       }).catch(() => {});
       return true;
     }
@@ -1464,7 +1794,7 @@ class BotProcess extends EventEmitter {
     const guild = interaction.guild;
     const botMember = guild.members.me;
     if (!botMember) {
-      await interaction.editReply({ content: 'Le bot est indisponible pour creer ce ticket.' }).catch(() => {});
+      await interaction.editReply({ content: 'Le bot est indisponible pour créer ce ticket.' }).catch(() => {});
       return true;
     }
 
@@ -1568,27 +1898,48 @@ class BotProcess extends EventEmitter {
     const shouldPingRoles = !!generator.auto_ping_support && !!option.ping_roles && supportRoleIds.length > 0;
     const claimButton = new ButtonBuilder()
       .setCustomId(this._buildTicketGeneratorCustomId('claim', entry.id))
-      .setLabel('Claim')
-      .setStyle(ButtonStyle.Primary);
+      .setLabel('Prendre en charge')
+      .setEmoji('🛠️')
+      .setStyle(ButtonStyle.Success);
     const closeButton = new ButtonBuilder()
       .setCustomId(this._buildTicketGeneratorCustomId('close', entry.id))
       .setLabel('Fermer')
+      .setEmoji('🔒')
       .setStyle(ButtonStyle.Danger);
 
     const openingEmbed = {
-      title: `${String(option.label || 'Ticket').slice(0, 80)} | #${entry.ticket_number}`,
+      author: {
+        name: `${option.emoji ? `${option.emoji} ` : ''}${String(option.label || 'Ticket').slice(0, 80)} • Ticket #${entry.ticket_number}`,
+        icon_url: interaction.user?.displayAvatarURL?.({ size: 128 }) || undefined,
+      },
+      title: 'Nouvelle demande reçue',
       description: introMessage,
       color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
       fields: [
         {
-          name: 'Auteur',
+          name: 'Demandeur',
           value: interaction.user.id ? `<@${interaction.user.id}>` : (interaction.user.tag || interaction.user.username || interaction.user.id),
           inline: true,
         },
         {
-          name: 'Categorie',
+          name: 'Catégorie',
           value: String(option.label || 'Ticket').slice(0, 1024),
           inline: true,
+        },
+        {
+          name: 'Statut',
+          value: 'Ouvert',
+          inline: true,
+        },
+        {
+          name: 'Salon',
+          value: `<#${channel.id}>`,
+          inline: true,
+        },
+        {
+          name: 'Équipe notifiée',
+          value: supportRoleIds.length > 0 ? supportRoleIds.map((roleId) => `<@&${roleId}>`).join(' ') : 'Aucun rôle staff configuré',
+          inline: false,
         },
         {
           name: 'Raison',
@@ -1596,7 +1947,7 @@ class BotProcess extends EventEmitter {
         },
       ],
       footer: {
-        text: `Ticket ${entry.ticket_number}`,
+        text: `${String(generator.panel_title || 'Support & tickets').slice(0, 120)} • Ticket ${entry.ticket_number}`,
       },
       timestamp: new Date().toISOString(),
     };
@@ -1617,7 +1968,7 @@ class BotProcess extends EventEmitter {
     }).catch(() => {});
 
     await interaction.editReply({
-      content: `Ticket cree: <#${channel.id}>`,
+      content: `Ticket créé : <#${channel.id}>`,
     }).catch(() => {});
 
     return true;
@@ -1632,24 +1983,24 @@ class BotProcess extends EventEmitter {
       return true;
     }
     if (entry.status === 'closed') {
-      await interaction.editReply({ content: 'Ce ticket est deja ferme.' }).catch(() => {});
+      await interaction.editReply({ content: 'Ce ticket est déjà fermé.' }).catch(() => {});
       return true;
     }
 
     const generator = getGuildTicketGeneratorById(entry.generator_id);
     const option = (generator?.options || []).find((item) => item.key === entry.option_key);
     if (!this._hasTicketSupportAccess(interaction.member, option)) {
-      await interaction.editReply({ content: 'Tu n as pas acces a la prise en charge de ce ticket.' }).catch(() => {});
+      await interaction.editReply({ content: "Tu n'as pas accès à la prise en charge de ce ticket." }).catch(() => {});
       return true;
     }
     if (entry.claimed_by_discord_user_id && entry.claimed_by_discord_user_id !== interaction.user.id) {
       await interaction.editReply({
-        content: `Ce ticket est deja pris par ${entry.claimed_by_username || 'un autre membre du staff'}.`,
+        content: `Ce ticket est déjà pris par ${entry.claimed_by_username || 'un autre membre du staff'}.`,
       }).catch(() => {});
       return true;
     }
     if (entry.claimed_by_discord_user_id === interaction.user.id) {
-      await interaction.editReply({ content: 'Tu as deja pris ce ticket.' }).catch(() => {});
+      await interaction.editReply({ content: 'Tu as déjà pris ce ticket.' }).catch(() => {});
       return true;
     }
 
@@ -1685,25 +2036,91 @@ class BotProcess extends EventEmitter {
   }
 
   async _handleTicketGeneratorClose(interaction, entryId, internalGuildId) {
+    const context = this._getTicketCloseContext(interaction, entryId, internalGuildId);
+    if (context.error) {
+      await interaction.reply({ content: context.error, ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const transcriptConfigured = !!normalizeSnowflake(context.generator?.transcript_channel_id);
+    const actions = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(this._buildTicketGeneratorCustomId('closeconfirm', context.entry.id, 'with'))
+        .setLabel('Fermer + transcript')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(!transcriptConfigured),
+      new ButtonBuilder()
+        .setCustomId(this._buildTicketGeneratorCustomId('closeconfirm', context.entry.id, 'without'))
+        .setLabel('Fermer sans transcript')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(this._buildTicketGeneratorCustomId('closecancel', context.entry.id))
+        .setLabel('Annuler')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.reply({
+      content: transcriptConfigured
+        ? 'Veux-tu envoyer le transcript avant de supprimer ce ticket ?'
+        : "Aucun salon transcript n'est configuré. Tu peux fermer directement ou annuler.",
+      components: [actions],
+      ephemeral: true,
+    }).catch(() => {});
+    return true;
+  }
+
+  async _handleTicketGeneratorCloseCancel(interaction) {
+    await interaction.update({
+      content: 'Fermeture du ticket annulée.',
+      components: [],
+    }).catch(() => {});
+    return true;
+  }
+
+  async _handleTicketGeneratorCloseConfirm(interaction, entryId, mode, internalGuildId) {
     await interaction.deferReply({ ephemeral: true }).catch(() => {});
 
-    const entry = getTicketEntryById(internalGuildId, entryId);
-    if (!entry) {
-      await interaction.editReply({ content: 'Ticket introuvable.' }).catch(() => {});
-      return true;
-    }
-    if (entry.status === 'closed') {
-      await interaction.editReply({ content: 'Ce ticket est deja ferme.' }).catch(() => {});
+    const context = this._getTicketCloseContext(interaction, entryId, internalGuildId);
+    if (context.error) {
+      await interaction.editReply({ content: context.error }).catch(() => {});
       return true;
     }
 
-    const generator = getGuildTicketGeneratorById(entry.generator_id);
-    const option = (generator?.options || []).find((item) => item.key === entry.option_key);
-    const isSupport = this._hasTicketSupportAccess(interaction.member, option);
-    const isCreator = String(entry.creator_discord_user_id) === String(interaction.user.id);
-    if (!isSupport && !(generator?.allow_user_close && isCreator)) {
-      await interaction.editReply({ content: 'Tu ne peux pas fermer ce ticket.' }).catch(() => {});
+    const { entry, generator, option } = context;
+    const guild = interaction.guild;
+    const channel = await this._resolveTicketTextChannel(guild, entry.channel_id);
+    if (!channel) {
+      await interaction.editReply({ content: 'Le salon ticket est introuvable ou déjà supprimé.' }).catch(() => {});
       return true;
+    }
+    const channelPermissions = channel.permissionsFor?.(guild.members.me);
+    if (!channelPermissions?.has(PermissionFlagsBits.ViewChannel) || !channelPermissions?.has(PermissionFlagsBits.ReadMessageHistory)) {
+      await interaction.editReply({ content: 'Le bot ne peut pas relire ce ticket pour le fermer proprement.' }).catch(() => {});
+      return true;
+    }
+    if (!channelPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+      await interaction.editReply({ content: 'Le bot doit avoir la permission de gérer ce salon pour supprimer le ticket.' }).catch(() => {});
+      return true;
+    }
+
+    const wantsTranscript = String(mode || '').trim().toLowerCase() === 'with';
+    let transcriptResult = null;
+    if (wantsTranscript) {
+      try {
+        transcriptResult = await this._sendTicketTranscript({
+          guild,
+          generator,
+          entry,
+          option,
+          channel,
+          closer: interaction.user,
+        });
+      } catch (error) {
+        await interaction.editReply({
+          content: String(error?.message || 'Impossible de générer le transcript pour le moment.'),
+        }).catch(() => {});
+        return true;
+      }
     }
 
     closeTicketEntry(
@@ -1713,8 +2130,8 @@ class BotProcess extends EventEmitter {
       interaction.user.tag || interaction.user.username || interaction.user.id
     );
 
-    if (interaction.channel?.permissionOverwrites?.edit && entry.creator_discord_user_id) {
-      await interaction.channel.permissionOverwrites.edit(entry.creator_discord_user_id, {
+    if (channel.permissionOverwrites?.edit && entry.creator_discord_user_id) {
+      await channel.permissionOverwrites.edit(entry.creator_discord_user_id, {
         SendMessages: false,
         AddReactions: false,
         AttachFiles: false,
@@ -1734,17 +2151,536 @@ class BotProcess extends EventEmitter {
     const closeMessage = replaceTicketTemplate(
       generator?.close_message || 'Ticket ferme par {closer}.',
       values
-    ).slice(0, 2000);
+    ).slice(0, 1700);
 
-    await interaction.editReply({ content: 'Ticket ferme.' }).catch(() => {});
-    if (interaction.channel?.isTextBased?.()) {
-      await interaction.channel.send({
-        content: closeMessage,
-        allowedMentions: { users: [interaction.user.id] },
-      }).catch(() => {});
-    }
+    await channel.send({
+      content: [
+        closeMessage,
+        transcriptResult?.channel?.id ? `Transcript envoyé dans <#${transcriptResult.channel.id}>.` : '',
+        `Suppression du salon dans ${Math.max(1, Math.round(TICKET_DELETE_DELAY_MS / 1000))} seconde(s).`,
+      ].filter(Boolean).join('\n\n'),
+      allowedMentions: { users: [interaction.user.id] },
+    }).catch(() => {});
+
+    await interaction.editReply({
+      content: transcriptResult?.channel?.id
+        ? `Ticket fermé. Transcript envoyé dans <#${transcriptResult.channel.id}>.`
+        : 'Ticket fermé. Suppression du salon lancée.',
+    }).catch(() => {});
+
+    setTimeout(() => {
+      channel.delete(`Ticket ferme par ${interaction.user.tag || interaction.user.username || interaction.user.id}`).catch(() => {});
+    }, TICKET_DELETE_DELAY_MS);
 
     return true;
+  }
+
+  _buildCaptchaCustomId(type, ...args) {
+    return [CAPTCHA_GENERATOR_PREFIX, type, ...args].filter(Boolean).join(':');
+  }
+
+  _parseCaptchaCustomId(customId) {
+    const parts = String(customId || '').split(':').filter(Boolean);
+    if (parts[0] !== CAPTCHA_GENERATOR_PREFIX || parts.length < 2) return null;
+    return {
+      type: parts[1],
+      args: parts.slice(2),
+    };
+  }
+
+  _sanitizeCaptchaChannelName(value) {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-_ ]+/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 90);
+
+    return normalized || 'verification';
+  }
+
+  _buildCaptchaPanelAssets(configRow) {
+    const files = [];
+    let thumbnailUrl = String(configRow?.panel_thumbnail_url || '').trim();
+    let imageUrl = String(configRow?.panel_image_url || '').trim();
+
+    const thumbnailAsset = parseImageDataUrl(thumbnailUrl);
+    if (thumbnailAsset) {
+      const fileName = `captcha-thumb-${configRow.id}.${thumbnailAsset.extension}`;
+      files.push(new AttachmentBuilder(thumbnailAsset.buffer, { name: fileName }));
+      thumbnailUrl = `attachment://${fileName}`;
+    }
+
+    const imageAsset = parseImageDataUrl(imageUrl);
+    if (imageAsset) {
+      const fileName = `captcha-banner-${configRow.id}.${imageAsset.extension}`;
+      files.push(new AttachmentBuilder(imageAsset.buffer, { name: fileName }));
+      imageUrl = `attachment://${fileName}`;
+    }
+
+    return {
+      files,
+      thumbnailUrl,
+      imageUrl,
+    };
+  }
+
+  _buildCaptchaPanelComponents(configRow) {
+    const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled).slice(0, 5);
+    if (!enabledTypes.length) return [];
+
+    const buttons = enabledTypes.map((item, index) => new ButtonBuilder()
+      .setCustomId(this._buildCaptchaCustomId('start', configRow.id, item.key))
+      .setLabel(String(item.label || 'CAPTCHA').slice(0, 80))
+      .setStyle(index === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary));
+
+    return [
+      new ActionRowBuilder().addComponents(...buttons),
+    ];
+  }
+
+  _buildCaptchaPanelPayload(configRow) {
+    const assets = this._buildCaptchaPanelAssets(configRow);
+    const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled);
+    const roleMentions = (configRow?.verified_role_ids || []).map((roleId) => `<@&${roleId}>`).join(', ');
+
+    const embed = {
+      color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
+      title: String(configRow.panel_title || 'Verification CAPTCHA'),
+      description: [
+        String(configRow.panel_description || '').trim(),
+        '',
+        enabledTypes.length
+          ? enabledTypes.map((item) => `• **${String(item.label || 'CAPTCHA')}** — ${String(item.description || '').trim() || 'Verification rapide.'}`).join('\n')
+          : 'Aucune verification active.',
+      ].filter(Boolean).join('\n'),
+      fields: [
+        {
+          name: 'Acces debloque',
+          value: roleMentions || 'Configure au moins un role valide.',
+          inline: false,
+        },
+      ],
+      footer: {
+        text: 'Le membre doit valider une verification pour recevoir son acces.',
+      },
+    };
+
+    if (assets.thumbnailUrl) {
+      embed.thumbnail = { url: assets.thumbnailUrl };
+    }
+    if (assets.imageUrl) {
+      embed.image = { url: assets.imageUrl };
+    }
+
+    return {
+      embeds: [embed],
+      components: this._buildCaptchaPanelComponents(configRow),
+      files: assets.files,
+    };
+  }
+
+  _buildCaptchaImageAttachment(code, challengeId) {
+    const fileName = `captcha-${challengeId}.svg`;
+    const characters = String(code || '').split('');
+    const textNodes = characters.map((char, index) => {
+      const x = 105 + (index * 86);
+      const y = 138 + ((index % 2 === 0) ? -8 : 12);
+      const rotate = (index % 2 === 0) ? -8 : 7;
+      return `<text x="${x}" y="${y}" font-size="68" font-weight="700" fill="#f8fafc" transform="rotate(${rotate} ${x} ${y})">${char}</text>`;
+    }).join('');
+
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220">',
+      '<defs>',
+      '<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">',
+      '<stop offset="0%" stop-color="#08121f" />',
+      '<stop offset="100%" stop-color="#1f1340" />',
+      '</linearGradient>',
+      '</defs>',
+      '<rect width="640" height="220" rx="28" fill="url(#bg)" />',
+      '<rect x="12" y="12" width="616" height="196" rx="22" fill="none" stroke="rgba(255,255,255,0.16)" />',
+      '<path d="M40 78 C120 120, 180 28, 270 84 S430 144, 600 70" stroke="#22d3ee" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.28" />',
+      '<path d="M30 168 C130 110, 230 206, 340 144 S500 70, 610 150" stroke="#a855f7" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.24" />',
+      '<circle cx="82" cy="46" r="12" fill="#22d3ee" opacity="0.16" />',
+      '<circle cx="548" cy="174" r="18" fill="#a855f7" opacity="0.14" />',
+      '<text x="42" y="44" font-size="16" fill="#7dd3fc" font-family="Arial, sans-serif" letter-spacing="3">CAPTCHA</text>',
+      textNodes,
+      '<text x="42" y="192" font-size="16" fill="#cbd5e1" font-family="Arial, sans-serif">Recopie le code visible exactement.</text>',
+      '</svg>',
+    ].join('');
+
+    return new AttachmentBuilder(Buffer.from(svg, 'utf8'), { name: fileName });
+  }
+
+  _buildCaptchaChallengePrompt(challengeType) {
+    if (challengeType === 'quick_math') {
+      const left = 4 + Math.floor(Math.random() * 6);
+      const right = 1 + Math.floor(Math.random() * 5);
+      const useSubtraction = Math.random() > 0.5;
+      const larger = Math.max(left, right);
+      const smaller = Math.min(left, right);
+      const promptText = useSubtraction
+        ? `Combien font ${larger} - ${smaller} ?`
+        : `Combien font ${left} + ${right} ?`;
+      const expectedAnswer = String(useSubtraction ? (larger - smaller) : (left + right));
+      return {
+        challengeType,
+        promptText,
+        expectedAnswer,
+      };
+    }
+
+    const expectedAnswer = buildCaptchaCode(5);
+    return {
+      challengeType: 'image_code',
+      promptText: 'Recopie le code visible sur l image.',
+      expectedAnswer,
+      visualCode: expectedAnswer,
+    };
+  }
+
+  _memberHasCaptchaAccess(member, configRow) {
+    const grantedRoles = Array.isArray(configRow?.verified_role_ids) ? configRow.verified_role_ids : [];
+    if (!member?.roles?.cache || !grantedRoles.length) return false;
+    return grantedRoles.some((roleId) => member.roles.cache.has(roleId));
+  }
+
+  async _resolveCaptchaPublishChannel(guild, configRow) {
+    if (!guild || !configRow) {
+      throw new Error('Serveur CAPTCHA introuvable.');
+    }
+
+    if (configRow.channel_mode === 'create') {
+      const desiredName = this._sanitizeCaptchaChannelName(configRow.panel_channel_name);
+      const existing = guild.channels.cache.find((channel) => (
+        [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel?.type)
+        && this._sanitizeCaptchaChannelName(channel?.name) === desiredName
+      ));
+
+      if (existing) return existing;
+
+      if (!guild.members.me?.permissions?.has(PermissionFlagsBits.ManageChannels)) {
+        throw new Error('Le bot doit avoir la permission de gerer les salons pour creer le salon CAPTCHA.');
+      }
+
+      return guild.channels.create({
+        name: desiredName,
+        type: ChannelType.GuildText,
+        reason: 'Creation du salon CAPTCHA',
+      });
+    }
+
+    const channel = await this._resolveTicketTextChannel(guild, configRow.panel_channel_id);
+    if (!channel) {
+      throw new Error('Choisis un salon texte valide pour le panel CAPTCHA.');
+    }
+    return channel;
+  }
+
+  async publishCaptchaPanel(discordGuildId) {
+    const guild = this.client?.guilds?.cache?.get(discordGuildId) || await this.client?.guilds?.fetch(discordGuildId);
+    if (!guild) {
+      throw new Error('Serveur Discord introuvable.');
+    }
+
+    const internalGuildId = this._resolveInternalGuildId(discordGuildId);
+    if (!internalGuildId) {
+      throw new Error('Serveur interne introuvable.');
+    }
+
+    const configRow = getGuildCaptchaConfig(internalGuildId);
+    const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled);
+    if (!configRow?.enabled) {
+      throw new Error('Le module CAPTCHA est desactive.');
+    }
+    if (!enabledTypes.length) {
+      throw new Error('Active au moins une methode CAPTCHA.');
+    }
+
+    const validRoles = (configRow.verified_role_ids || [])
+      .map((roleId) => guild.roles.cache.get(roleId))
+      .filter((role) => role && role.editable);
+    if (!validRoles.length) {
+      throw new Error('Choisis au moins un role verifiable que le bot peut attribuer.');
+    }
+
+    const channel = await this._resolveCaptchaPublishChannel(guild, configRow);
+    const permissions = channel.permissionsFor?.(guild.members.me);
+    if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions?.has(PermissionFlagsBits.SendMessages)) {
+      throw new Error('Le bot ne peut pas envoyer le panel CAPTCHA dans ce salon.');
+    }
+    if (!permissions?.has(PermissionFlagsBits.EmbedLinks)) {
+      throw new Error('Le bot doit pouvoir integrer des liens dans le salon CAPTCHA.');
+    }
+    if (!permissions?.has(PermissionFlagsBits.AttachFiles)) {
+      throw new Error('Le bot doit pouvoir joindre des fichiers dans le salon CAPTCHA.');
+    }
+
+    const payload = this._buildCaptchaPanelPayload(configRow);
+    let message = null;
+
+    if (configRow.panel_message_id) {
+      message = await channel.messages.fetch(configRow.panel_message_id).catch(() => null);
+    }
+
+    if (message) {
+      await message.edit(payload);
+    } else {
+      message = await channel.send(payload);
+    }
+
+    const saved = recordPublishedCaptchaPanel(internalGuildId, {
+      panel_channel_id: channel.id,
+      panel_message_id: message.id,
+    });
+
+    if (configRow.channel_mode === 'create' && saved.panel_channel_id !== channel.id) {
+      saveGuildCaptchaConfig(internalGuildId, {
+        panel_channel_id: channel.id,
+      });
+    }
+
+    return {
+      channelId: channel.id,
+      channelName: channel.name,
+      messageId: message.id,
+    };
+  }
+
+  async _showCaptchaAnswerModal(interaction, challenge) {
+    const modal = new ModalBuilder()
+      .setCustomId(this._buildCaptchaCustomId('submit', challenge.id))
+      .setTitle('Verification CAPTCHA');
+
+    const input = new TextInputBuilder()
+      .setCustomId(CAPTCHA_ANSWER_INPUT_ID)
+      .setLabel(String(challenge?.prompt_text || 'Saisis la reponse').slice(0, 45))
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMaxLength(24)
+      .setPlaceholder(challenge?.challenge_type === 'quick_math' ? 'Entre le resultat' : 'Recopie le code visible');
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    await interaction.showModal(modal);
+  }
+
+  async _sendCaptchaLog({ guild, configRow, member, challengeType, grantedRoleIds = [] }) {
+    if (!configRow?.log_channel_id) return;
+
+    const channel = await this._resolveTicketTextChannel(guild, configRow.log_channel_id);
+    if (!channel?.isTextBased?.()) return;
+
+    await channel.send({
+      embeds: [{
+        color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
+        title: 'Verification CAPTCHA validee',
+        description: `${member} a termine la verification.`,
+        fields: [
+          {
+            name: 'Methode',
+            value: challengeType === 'quick_math' ? 'Calcul rapide' : 'Image aleatoire',
+            inline: true,
+          },
+          {
+            name: 'Roles ajoutes',
+            value: grantedRoleIds.length ? grantedRoleIds.map((roleId) => `<@&${roleId}>`).join(', ') : 'Aucun role ajoute',
+            inline: false,
+          },
+        ],
+        timestamp: new Date().toISOString(),
+      }],
+    }).catch(() => {});
+  }
+
+  async _handleCaptchaStart(interaction, configId, challengeType, internalGuildId) {
+    const configRow = getGuildCaptchaConfigById(configId);
+    if (!configRow?.id || configRow.guild_id !== internalGuildId || !configRow.enabled) {
+      await interaction.reply({ content: 'Ce CAPTCHA est indisponible.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+    if (!member) {
+      await interaction.reply({ content: 'Membre introuvable pour cette verification.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    if (this._memberHasCaptchaAccess(member, configRow)) {
+      await interaction.reply({ content: 'Tu as deja valide ton acces.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const prompt = this._buildCaptchaChallengePrompt(challengeType);
+    const challenge = createCaptchaChallenge({
+      guildId: internalGuildId,
+      configId: configRow.id,
+      discordUserId: interaction.user.id,
+      discordChannelId: interaction.channelId || '',
+      challengeType: prompt.challengeType,
+      promptText: prompt.promptText,
+      expectedAnswer: prompt.expectedAnswer,
+      metadata: prompt.visualCode ? { visualCode: prompt.visualCode } : {},
+    });
+
+    if (prompt.challengeType === 'quick_math') {
+      await this._showCaptchaAnswerModal(interaction, challenge);
+      return true;
+    }
+
+    const attachment = this._buildCaptchaImageAttachment(prompt.visualCode, challenge.id);
+    await interaction.reply({
+      ephemeral: true,
+      embeds: [{
+        color: 0x06b6d4,
+        title: 'Verification image',
+        description: 'Observe l image, puis clique sur le bouton pour recopier le code.',
+        image: { url: `attachment://${attachment.name}` },
+        footer: {
+          text: 'Le code expire apres quelques minutes.',
+        },
+      }],
+      files: [attachment],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(this._buildCaptchaCustomId('answer', challenge.id))
+            .setLabel('Entrer le code')
+            .setStyle(ButtonStyle.Primary)
+        ),
+      ],
+    }).catch(() => {});
+    return true;
+  }
+
+  async _handleCaptchaAnswerButton(interaction, challengeId, internalGuildId) {
+    const challenge = getActiveCaptchaChallengeById(challengeId);
+    if (!challenge || challenge.guild_id !== internalGuildId) {
+      await interaction.reply({ content: 'Ce CAPTCHA a expire. Relance une verification.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    if (String(challenge.discord_user_id) !== String(interaction.user.id)) {
+      await interaction.reply({ content: 'Cette verification ne t appartient pas.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    await this._showCaptchaAnswerModal(interaction, challenge);
+    return true;
+  }
+
+  async _handleCaptchaSubmit(interaction, challengeId, internalGuildId) {
+    const activeChallenge = getActiveCaptchaChallengeById(challengeId);
+    if (!activeChallenge || activeChallenge.guild_id !== internalGuildId) {
+      await interaction.reply({ content: 'Ce CAPTCHA a expire. Relance une verification.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    if (String(activeChallenge.discord_user_id) !== String(interaction.user.id)) {
+      await interaction.reply({ content: 'Cette verification ne t appartient pas.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const configRow = getGuildCaptchaConfigById(activeChallenge.config_id);
+    if (!configRow?.id || configRow.guild_id !== internalGuildId) {
+      await interaction.reply({ content: 'Configuration CAPTCHA introuvable.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const answer = interaction.fields.getTextInputValue(CAPTCHA_ANSWER_INPUT_ID);
+    const result = validateCaptchaChallenge(challengeId, answer);
+
+    if (!result.ok) {
+      const canRetry = ['invalid', 'empty'].includes(result.reason);
+      const content = result.reason === 'max_attempts'
+        ? 'Trop d erreurs. Lance une nouvelle verification depuis le panel.'
+        : result.reason === 'expired'
+          ? 'Ce CAPTCHA a expire. Lance une nouvelle verification.'
+          : configRow.failure_message;
+
+      await interaction.reply({
+        content,
+        ephemeral: true,
+        components: canRetry ? [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(this._buildCaptchaCustomId('answer', challengeId))
+              .setLabel('Reessayer')
+              .setStyle(ButtonStyle.Secondary)
+          ),
+        ] : [],
+      }).catch(() => {});
+      return true;
+    }
+
+    const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+    if (!member) {
+      await interaction.reply({ content: 'Membre introuvable pour finaliser la verification.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const rolesToGrant = (configRow.verified_role_ids || [])
+      .map((roleId) => interaction.guild.roles.cache.get(roleId))
+      .filter((role) => role && role.editable)
+      .map((role) => role.id);
+
+    if (rolesToGrant.length) {
+      await member.roles.add(rolesToGrant, 'CAPTCHA reussi').catch((error) => {
+        throw new Error(`Impossible d attribuer les roles CAPTCHA: ${error.message}`);
+      });
+    }
+
+    await this._sendCaptchaLog({
+      guild: interaction.guild,
+      configRow,
+      member,
+      challengeType: activeChallenge.challenge_type,
+      grantedRoleIds: rolesToGrant,
+    });
+
+    await interaction.reply({
+      content: configRow.success_message,
+      ephemeral: true,
+    }).catch(() => {});
+
+    return true;
+  }
+
+  async _handleCaptchaInteraction(interaction) {
+    const parsed = this._parseCaptchaCustomId(interaction?.customId);
+    if (!parsed || !interaction?.guild) return false;
+
+    const internalGuildId = this._resolveInternalGuildId(interaction.guild.id);
+    if (!internalGuildId) {
+      if (typeof interaction.reply === 'function') {
+        await interaction.reply({ content: 'Serveur CAPTCHA introuvable.', ephemeral: true }).catch(() => {});
+      }
+      return true;
+    }
+
+    try {
+      if (interaction.isButton() && parsed.type === 'start') {
+        return this._handleCaptchaStart(interaction, parsed.args[0], parsed.args[1], internalGuildId);
+      }
+
+      if (interaction.isButton() && parsed.type === 'answer') {
+        return this._handleCaptchaAnswerButton(interaction, parsed.args[0], internalGuildId);
+      }
+
+      if (interaction.isModalSubmit() && parsed.type === 'submit') {
+        return this._handleCaptchaSubmit(interaction, parsed.args[0], internalGuildId);
+      }
+    } catch (error) {
+      logger.error(`Captcha interaction error: ${error.message}`);
+      if (!interaction.replied && !interaction.deferred && typeof interaction.reply === 'function') {
+        await interaction.reply({ content: 'Impossible de traiter ce CAPTCHA pour le moment.', ephemeral: true }).catch(() => {});
+      } else if (typeof interaction.followUp === 'function') {
+        await interaction.followUp({ content: 'Impossible de traiter ce CAPTCHA pour le moment.', ephemeral: true }).catch(() => {});
+      }
+      return true;
+    }
+
+    return false;
   }
 
   async _handleTicketGeneratorInteraction(interaction) {
@@ -1787,6 +2723,14 @@ class BotProcess extends EventEmitter {
 
       if (interaction.isButton() && parsed.type === 'close') {
         return this._handleTicketGeneratorClose(interaction, parsed.args[0], internalGuildId);
+      }
+
+      if (interaction.isButton() && parsed.type === 'closeconfirm') {
+        return this._handleTicketGeneratorCloseConfirm(interaction, parsed.args[0], parsed.args[1], internalGuildId);
+      }
+
+      if (interaction.isButton() && parsed.type === 'closecancel') {
+        return this._handleTicketGeneratorCloseCancel(interaction);
       }
     } catch (error) {
       logger.error(`Ticket interaction error: ${error.message}`);
@@ -1927,7 +2871,7 @@ class BotProcess extends EventEmitter {
       return true;
     }
 
-    const effectiveReason = reason || 'Aucune raison precisee.';
+    const effectiveReason = reason || 'Aucune raison précisée.';
     const visibilityIsPublic = actionConfig.success_visibility === 'public';
     const replyOptions = { ephemeral: !visibilityIsPublic };
     const resolveTargetMember = async () => {
@@ -1963,7 +2907,7 @@ class BotProcess extends EventEmitter {
           command_id: command.id,
           system_key: command.system_key,
         });
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Ban execute', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Ban exécuté', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -1999,7 +2943,7 @@ class BotProcess extends EventEmitter {
           'SYSTEM_COMMAND',
           clampNumber(actionConfig.delete_message_seconds, 0, 604800, 0)
         );
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Blacklist executee', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Blacklist exécutée', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2035,7 +2979,7 @@ class BotProcess extends EventEmitter {
           command_id: command.id,
           system_key: command.system_key,
         });
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Kick execute', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Kick exécuté', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2078,7 +3022,7 @@ class BotProcess extends EventEmitter {
           system_key: command.system_key,
           variant: 'softban',
         });
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Softban execute', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Softban exécuté', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2120,7 +3064,7 @@ class BotProcess extends EventEmitter {
           command_id: command.id,
           system_key: command.system_key,
         });
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Timeout execute', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Timeout appliqué', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2157,7 +3101,7 @@ class BotProcess extends EventEmitter {
           command_id: command.id,
           system_key: command.system_key,
         });
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Untimeout execute', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Timeout retiré', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2194,7 +3138,7 @@ class BotProcess extends EventEmitter {
           }).catch(() => {});
         }
         await checkEscalation(guild.id, targetUser.id, targetName, this.token, guild).catch(() => {});
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Warn execute', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Avertissement envoyé', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2221,7 +3165,7 @@ class BotProcess extends EventEmitter {
           command_id: command.id,
           system_key: command.system_key,
         });
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Unban execute', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Déban effectué', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUserId}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2247,7 +3191,7 @@ class BotProcess extends EventEmitter {
           await this._replyToNativeSource(source, 'Impossible de retirer cette entree de blacklist pour le moment.', { ephemeral: true });
           return true;
         }
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Blacklist retiree', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Blacklist retirée', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUserId}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2273,7 +3217,7 @@ class BotProcess extends EventEmitter {
           return true;
         }
         await targetMember.roles.add(role, effectiveReason);
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Role ajoute', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Rôle ajouté', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Role: <@&${role.id}>`,
@@ -2300,7 +3244,7 @@ class BotProcess extends EventEmitter {
           return true;
         }
         await targetMember.roles.remove(role, effectiveReason);
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Role retire', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Rôle retiré', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Role: <@&${role.id}>`,
@@ -2323,7 +3267,7 @@ class BotProcess extends EventEmitter {
           return true;
         }
         await targetMember.setNickname(nickname, effectiveReason);
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Pseudo modifie', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Pseudo modifié', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Nouveau pseudo: ${nickname}`,
@@ -2351,7 +3295,7 @@ class BotProcess extends EventEmitter {
           SendMessages: shouldLock ? false : null,
           AddReactions: shouldLock ? false : null,
         }, { reason: effectiveReason });
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, shouldLock ? 'Salon verrouille' : 'Salon deverrouille', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, shouldLock ? 'Salon verrouillé' : 'Salon déverrouillé', [
           `Commande: ${command.display_trigger}`,
           `Salon: <#${channel.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2374,7 +3318,7 @@ class BotProcess extends EventEmitter {
         }
         const seconds = clampNumber(source.options.getInteger('seconds') ?? actionConfig.default_seconds, 0, 21600, 30);
         await channel.setRateLimitPerUser(seconds, effectiveReason);
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Slowmode modifie', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Slowmode modifié', [
           `Commande: ${command.display_trigger}`,
           `Salon: <#${channel.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2443,14 +3387,14 @@ class BotProcess extends EventEmitter {
             timestamp: new Date().toISOString(),
           }],
         });
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Annonce publiee', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Annonce publiée', [
           `Commande: ${command.display_trigger}`,
           `Salon: <#${channel.id}>`,
           `Moderateur: <@${source.user.id}>`,
           `Titre: ${title}`,
           `Ping everyone: ${pingEveryone ? 'oui' : 'non'}`,
         ], 0x8b5cf6);
-        await this._replyToNativeSource(source, `Annonce publiee dans <#${channel.id}>.`, replyOptions);
+        await this._replyToNativeSource(source, `Annonce publiée dans <#${channel.id}>.`, replyOptions);
         return true;
       }
 
@@ -2475,7 +3419,7 @@ class BotProcess extends EventEmitter {
           return true;
         }
         await targetMember.voice.setChannel(destinationChannel, effectiveReason);
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Membre deplace', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Membre déplacé', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Destination: <#${destinationChannel.id}>`,
@@ -2497,7 +3441,7 @@ class BotProcess extends EventEmitter {
           return true;
         }
         await targetMember.voice.setChannel(null, effectiveReason);
-        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Membre deconnecte', [
+        await this._logNativeCommandToChannel(guild, actionConfig.log_channel_id, 'Membre déconnecté', [
           `Commande: ${command.display_trigger}`,
           `Cible: <@${targetUser.id}>`,
           `Moderateur: <@${source.user.id}>`,
@@ -2617,6 +3561,10 @@ class BotProcess extends EventEmitter {
 
   async _onInteraction(interaction) {
     if (!interaction.guild) return;
+
+    if (await this._handleCaptchaInteraction(interaction)) {
+      return;
+    }
 
     if (await this._handleTicketGeneratorInteraction(interaction)) {
       return;
@@ -3081,3 +4029,4 @@ class BotProcess extends EventEmitter {
 }
 
 module.exports = { BotProcess, BotStatus };
+

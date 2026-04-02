@@ -1192,6 +1192,29 @@ function normalizeSystemUpdatePayload(body, currentCommand) {
   }, currentCommand);
 }
 
+function updateSystemLogChannelForGuild(guildId, logChannelId) {
+  const rows = db.raw(
+    'SELECT * FROM custom_commands WHERE guild_id = ? AND is_system = 1',
+    [guildId]
+  );
+
+  for (const row of rows) {
+    const current = mapCommandRow(row);
+    if (!current?.action_type) continue;
+
+    const payload = normalizeSystemUpdatePayload({
+      action_config: {
+        ...current.action_config,
+        log_channel_id: logChannelId,
+      },
+    }, current);
+
+    saveCommand(guildId, payload, row.id);
+  }
+
+  return listMappedCommandsForGuild(guildId).filter((command) => command.is_system);
+}
+
 function ensureDefaultCommandsForGuild(guildId) {
   const existingRows = db.raw(
     'SELECT * FROM custom_commands WHERE guild_id = ? AND is_system = 1',
@@ -2146,6 +2169,27 @@ router.post('/', validate(customCommandSchema), async (req, res) => {
   ].filter(Boolean));
 
   res.status(201).json({ message: 'Command created', command: mappedCreated });
+});
+
+router.patch('/system/log-channel', async (req, res) => {
+  ensureDefaultCommandsForGuild(req.guild.id);
+
+  const rawLogChannelId = req.body?.log_channel_id;
+  const trimmedLogChannelId = String(rawLogChannelId ?? '').trim();
+  const logChannelId = normalizeSnowflake(rawLogChannelId);
+
+  if (trimmedLogChannelId && !logChannelId) {
+    return res.status(400).json({ error: 'Salon de logs invalide.' });
+  }
+
+  const commands = updateSystemLogChannelForGuild(req.guild.id, logChannelId);
+  scheduleCommandSync(req.guildOwnerUserId || req.user.id, req.guild.guild_id);
+  notifyGuildCommandSync(req, { commands });
+
+  res.json({
+    log_channel_id: logChannelId,
+    commands,
+  });
 });
 
 router.patch('/:id', validate(customCommandSchema.partial()), async (req, res) => {

@@ -1,0 +1,349 @@
+'use strict';
+
+const { z } = require('zod');
+const { MODULE_TYPES } = require('../bot/modules/definitions');
+const { SITE_LANGUAGES, AI_LANGUAGES } = require('../constants/languages');
+const { AI_PROVIDER_CATALOG } = require('../config/aiCatalog');
+
+const AI_PROVIDER_IDS = AI_PROVIDER_CATALOG.map((provider) => provider.id);
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+const registerSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  username: z.string().min(2).max(32).regex(/^[a-zA-Z0-9_\-. ]+$/, 'Username contains invalid characters'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128)
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
+});
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string()
+    .min(8)
+    .max(128)
+    .regex(/[A-Z]/, 'Must contain uppercase')
+    .regex(/[0-9]/, 'Must contain number'),
+});
+
+const changeUsernameSchema = z.object({
+  username: z.string().min(2).max(32).regex(/^[a-zA-Z0-9_\-. ]+$/),
+});
+
+const avatarUpdateSchema = z.object({
+  avatar_url: z.string()
+    .trim()
+    .max(1_200_000)
+    .refine(
+      (value) => (
+        value === '' ||
+        /^https?:\/\/\S+$/i.test(value) ||
+        /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value)
+      ),
+      'Invalid avatar image'
+    ),
+});
+
+const analyticsLayoutSchema = z.object({
+  version: z.number().int().min(1).max(5).optional(),
+  order: z.array(z.string().trim().min(1).max(64)).max(32).optional(),
+  visible: z.array(z.string().trim().min(1).max(64)).max(32).optional(),
+});
+
+const preferencesSchema = z.object({
+  site_language: z.enum(SITE_LANGUAGES),
+  ai_language: z.enum(AI_LANGUAGES),
+  analytics_layout: analyticsLayoutSchema.optional(),
+});
+
+// ── Bot Token ─────────────────────────────────────────────────────────────────
+const botTokenSchema = z.object({
+  token: z.string()
+    .min(50, 'Token appears too short')
+    .max(100, 'Token appears too long')
+    .regex(/^[A-Za-z0-9._-]+$/, 'Token contains invalid characters'),
+});
+
+// ── Modules ──────────────────────────────────────────────────────────────────
+const moduleToggleSchema = z.object({
+  enabled: z.boolean(),
+});
+
+const moduleConfigSchema = z.object({
+  simple_config: z.record(z.unknown()).optional(),
+  advanced_config: z.record(z.unknown()).optional(),
+});
+
+const moduleTypeSchema = z.enum(MODULE_TYPES);
+
+// ── Moderation ───────────────────────────────────────────────────────────────
+const addWarningSchema = z.object({
+  target_user_id: z.string().regex(/^\d+$/, 'Must be a Discord user ID'),
+  target_username: z.string().optional(),
+  reason: z.string().min(1).max(500),
+  points: z.number().int().min(1).max(10).optional().default(1),
+  moderator_discord_identity: z.string().trim().min(2).max(100).optional(),
+});
+
+const modActionSchema = z.object({
+  target_user_id: z.string().regex(/^\d+$/, 'Must be a Discord user ID'),
+  target_username: z.string().optional(),
+  action: z.enum(['warn', 'timeout', 'kick', 'ban', 'unban', 'untimeout']),
+  reason: z.string().min(1).max(500).optional(),
+  duration_ms: z.number().int().min(60000).max(2419200000).optional(), // 1 min – 28 days
+  points: z.number().int().min(1).max(10).optional().default(1),
+  moderator_discord_identity: z.string().trim().min(2).max(100).optional(),
+});
+
+const guildDmConfigSchema = z.object({
+  auto_dm_warn: z.boolean().optional(),
+  auto_dm_timeout: z.boolean().optional(),
+  auto_dm_kick: z.boolean().optional(),
+  auto_dm_ban: z.boolean().optional(),
+  auto_dm_blacklist: z.boolean().optional(),
+  appeal_server_name: z.string().trim().max(120).optional().default(''),
+  appeal_server_url: z.string().trim().max(500).optional().default('').refine(
+    (value) => value === '' || /^https?:\/\/\S+$/i.test(value),
+    'Invalid appeal server URL'
+  ),
+});
+
+const directMessageSchema = z.object({
+  target_user_id: z.string().regex(/^\d+$/, 'Must be a Discord user ID'),
+  target_username: z.string().trim().max(80).optional(),
+  title: z.string().trim().min(1).max(120).optional(),
+  message: z.string().trim().min(2).max(2000),
+});
+
+const guildAccessInviteSchema = z.object({
+  target: z.string().trim().min(2).max(160),
+  access_role: z.enum(['admin', 'moderator', 'viewer']).optional().default('admin'),
+  expires_in_hours: z.number().int().min(0).max(8760).optional().default(0),
+});
+
+const guildAccessRoleSchema = z.object({
+  access_role: z.enum(['admin', 'moderator', 'viewer']),
+});
+
+const guildSnapshotCreateSchema = z.object({
+  label: z.string().trim().max(120).optional().default(''),
+});
+
+const guildAccessSuspendSchema = z.object({
+  is_suspended: z.boolean(),
+});
+
+const collaborationAuditListSchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(30),
+});
+
+// ── Custom Commands ───────────────────────────────────────────────────────────
+const commandKeySchema = z.string().trim().min(1).max(50).regex(/^\S+$/, 'Trigger cannot contain spaces');
+const commandNameSchema = z.string().trim().min(1).max(32).regex(/^[\w-]+$/, 'Invalid command name');
+const commandPrefixSchema = z.string().trim().min(1).max(5).regex(/^\S+$/, 'Invalid prefix');
+
+const customCommandSchema = z.object({
+  trigger: commandKeySchema,
+  command_type: z.enum(['prefix', 'slash']).optional().default('prefix'),
+  command_prefix: commandPrefixSchema.optional().default('!'),
+  command_name: commandNameSchema.optional(),
+  enabled: z.boolean().optional().default(true),
+  description: z.string().trim().max(120).optional().default(''),
+  aliases: z.array(commandKeySchema).max(15).optional().default([]),
+  response: z.string().trim().min(1).max(2000),
+  response_mode: z.enum(['channel', 'reply', 'dm']).optional().default('channel'),
+  reply_in_dm: z.boolean().optional(),
+  delete_trigger: z.boolean().optional().default(false),
+  allowed_roles: z.array(z.string()).max(50).optional().default([]),
+  allowed_channels: z.array(z.string()).max(100).optional().default([]),
+  cooldown_ms: z.number().int().min(0).max(86400000).optional().default(0),
+  delete_response_after_ms: z.number().int().min(0).max(86400000).optional().default(0),
+  embed_enabled: z.boolean().optional().default(false),
+  embed_title: z.string().trim().max(256).optional().default(''),
+  embed_color: z.string().trim().regex(/^#?[0-9a-fA-F]{6}$/, 'Invalid embed color').optional().default('#22d3ee'),
+  mention_user: z.boolean().optional().default(false),
+  require_args: z.boolean().optional().default(false),
+  usage_hint: z.string().trim().max(200).optional().default(''),
+});
+
+const commandAssistantSchema = z.object({
+  mode: z.enum(['prefix', 'slash']),
+  prefix: commandPrefixSchema.optional(),
+  trigger: z.string().trim().min(1).max(50).optional(),
+  command_name: commandNameSchema.optional(),
+  prompt: z.string().trim().min(1).max(3000),
+  command_id: z.string().trim().optional(),
+  conversation_history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().trim().min(1).max(3000),
+  })).optional().default([]),
+});
+
+const commandToggleSchema = z.object({
+  enabled: z.boolean().optional(),
+});
+
+// ── AI ────────────────────────────────────────────────────────────────────────
+const aiMessageSchema = z.object({
+  message: z.string().min(1).max(2000),
+  guild_id: z.string().optional(),    // internal UUID for context
+  conversation_history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string(),
+  })).optional().default([]),
+});
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+const aiConfigSchema = z.object({
+  provider: z.enum(AI_PROVIDER_IDS),
+  api_key: z.string().trim().optional().default(''),
+  model: z.string().min(1),
+  max_tokens: z.number().int().min(256).max(8192).optional().default(1024),
+  temperature: z.number().min(0).max(2).optional().default(0.7),
+  user_quota_tokens: z.number().int().min(0).max(5_000_000).optional().default(4000),
+  site_quota_tokens: z.number().int().min(0).max(5_000_000).optional().default(20000),
+  quota_window_hours: z.number().int().min(1).max(168).optional().default(5),
+  auto_mode: z.boolean().optional().default(true),
+  active_provider_key_id: z.string().trim().optional().nullable(),
+});
+
+const providerAiKeySchema = z.object({
+  provider: z.enum(AI_PROVIDER_IDS),
+  api_key: z.string().trim().min(10).max(500),
+  model: z.string().trim().min(1).max(120),
+});
+
+const providerAiModelSchema = z.object({
+  model: z.string().trim().min(1).max(120),
+});
+
+const userStatusSchema = z.object({
+  is_active: z.boolean(),
+});
+
+const adminRoleSchema = z.object({
+  role: z.preprocess(
+    (value) => typeof value === 'string' ? value.trim().toLowerCase() : value,
+    z.enum(['member', 'admin', 'founder', 'api_provider'])
+  ),
+});
+
+const adminPasswordSchema = z.object({
+  newPassword: z.string()
+    .min(8)
+    .max(128)
+    .regex(/[A-Z]/, 'Must contain uppercase')
+    .regex(/[0-9]/, 'Must contain number'),
+});
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+const paginationSchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+const moderationSearchSchema = z.object({
+  q: z.string().trim().min(1).max(80),
+  limit: z.coerce.number().int().min(1).max(20).optional().default(8),
+});
+
+// ── Log channel ───────────────────────────────────────────────────────────────
+const logChannelSchema = z.object({
+  channel_id: z.string().regex(/^\d+$/, 'Must be a Discord channel ID'),
+  log_events: z.array(z.string()).optional().default([]),
+  enabled: z.boolean().optional().default(true),
+});
+
+// ── Support ───────────────────────────────────────────────────────────────────
+const supportCategorySchema = z.enum(['bug', 'report', 'account', 'question', 'other']);
+
+const supportTicketListSchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  view: z.enum(['mine', 'staff']).optional().default('mine'),
+  status: z.enum(['all', 'open', 'claimed', 'closed']).optional().default('all'),
+  category: z.enum(['all', 'bug', 'report', 'account', 'question', 'other']).optional().default('all'),
+  claim: z.enum(['all', 'mine', 'unclaimed']).optional().default('all'),
+  q: z.string().trim().max(120).optional().default(''),
+});
+
+const supportTicketCreateSchema = z.object({
+  category: supportCategorySchema,
+  title: z.string().trim().min(4).max(120).optional().or(z.literal('')),
+  message: z.string().trim().min(12).max(2000),
+});
+
+const supportTicketMessageSchema = z.object({
+  message: z.string().trim().min(2).max(3000),
+});
+
+const supportTicketStatusSchema = z.object({
+  status: z.enum(['open', 'closed']),
+});
+
+const supportTicketUpdateSchema = z.object({
+  title: z.string().trim().min(4).max(120).optional(),
+  category: supportCategorySchema.optional(),
+  status: z.enum(['open', 'claimed', 'closed']).optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one field is required',
+});
+
+// ── Site reviews ─────────────────────────────────────────────────────────────
+const siteReviewCreateSchema = z.object({
+  rating_half: z.number().int().min(1).max(10),
+  message: z.string().trim().min(4).max(1500),
+});
+
+const siteReviewUpdateSchema = z.object({
+  message: z.string().trim().min(4).max(1500),
+});
+
+module.exports = {
+  registerSchema,
+  loginSchema,
+  changePasswordSchema,
+  changeUsernameSchema,
+  avatarUpdateSchema,
+  preferencesSchema,
+  botTokenSchema,
+  moduleToggleSchema,
+  moduleConfigSchema,
+  moduleTypeSchema,
+  addWarningSchema,
+  modActionSchema,
+  guildDmConfigSchema,
+  directMessageSchema,
+  guildAccessInviteSchema,
+  guildAccessRoleSchema,
+  guildAccessSuspendSchema,
+  guildSnapshotCreateSchema,
+  collaborationAuditListSchema,
+  customCommandSchema,
+  commandAssistantSchema,
+  commandToggleSchema,
+  aiMessageSchema,
+  aiConfigSchema,
+  providerAiKeySchema,
+  providerAiModelSchema,
+  userStatusSchema,
+  adminRoleSchema,
+  adminPasswordSchema,
+  paginationSchema,
+  moderationSearchSchema,
+  logChannelSchema,
+  supportTicketListSchema,
+  supportTicketCreateSchema,
+  supportTicketMessageSchema,
+  supportTicketStatusSchema,
+  supportTicketUpdateSchema,
+  siteReviewCreateSchema,
+  siteReviewUpdateSchema,
+};

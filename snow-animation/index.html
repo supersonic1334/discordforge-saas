@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animation Neige & Sakura</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      overflow: hidden;
+      background: linear-gradient(180deg, 
+        #0a0a12 0%, 
+        #0d1020 30%,
+        #111428 60%,
+        #0a0a12 100%
+      );
+      min-height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    .scene {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       ÉTOILES EN ARRIÈRE-PLAN
+    ═══════════════════════════════════════════════════════════════ */
+    .stars {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        radial-gradient(2px 2px at 20px 30px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.4), transparent),
+        radial-gradient(2px 2px at 160px 120px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(1px 1px at 230px 80px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(2px 2px at 300px 150px, rgba(255,255,255,0.35), transparent),
+        radial-gradient(1px 1px at 400px 60px, rgba(255,255,255,0.25), transparent),
+        radial-gradient(2px 2px at 500px 200px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(1px 1px at 600px 100px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(2px 2px at 700px 180px, rgba(255,255,255,0.4), transparent);
+      background-size: 800px 300px;
+      animation: twinkle 8s ease-in-out infinite alternate;
+    }
+
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LUNE
+    ═══════════════════════════════════════════════════════════════ */
+    .moon {
+      position: absolute;
+      top: 8%;
+      right: 12%;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, 
+        #fff 0%, 
+        #f0f0ff 20%,
+        #d4d4f0 50%,
+        #b8b8d8 100%
+      );
+      box-shadow: 
+        0 0 60px 20px rgba(255, 255, 255, 0.15),
+        0 0 120px 60px rgba(200, 200, 255, 0.1),
+        inset -15px -10px 30px rgba(0, 0, 0, 0.15);
+      animation: moonGlow 6s ease-in-out infinite alternate;
+    }
+
+    .moon::before {
+      content: '';
+      position: absolute;
+      top: 20%;
+      left: 15%;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(180, 180, 200, 0.3);
+    }
+
+    .moon::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 40%;
+      width: 30px;
+      height: 25px;
+      border-radius: 50%;
+      background: rgba(180, 180, 200, 0.25);
+    }
+
+    @keyframes moonGlow {
+      0% { box-shadow: 0 0 60px 20px rgba(255, 255, 255, 0.15), 0 0 120px 60px rgba(200, 200, 255, 0.1); }
+      100% { box-shadow: 0 0 80px 30px rgba(255, 255, 255, 0.2), 0 0 150px 80px rgba(200, 200, 255, 0.15); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BROUILLARD
+    ═══════════════════════════════════════════════════════════════ */
+    .fog {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 40%;
+      background: linear-gradient(to top,
+        rgba(20, 25, 40, 0.9) 0%,
+        rgba(20, 25, 40, 0.5) 30%,
+        transparent 100%
+      );
+      pointer-events: none;
+    }
+
+    .fog-layer {
+      position: absolute;
+      bottom: 0;
+      width: 200%;
+      height: 200px;
+      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 800 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.02' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.4'/%3E%3C/svg%3E");
+      opacity: 0.3;
+      animation: fogMove 30s linear infinite;
+    }
+
+    .fog-layer:nth-child(2) {
+      animation-duration: 45s;
+      animation-direction: reverse;
+      opacity: 0.2;
+    }
+
+    @keyframes fogMove {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       ARBRES SAKURA (CERISIERS JAPONAIS)
+    ═══════════════════════════════════════════════════════════════ */
+    .tree-container {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .sakura-tree {
+      position: absolute;
+      bottom: 0;
+    }
+
+    .sakura-tree.left {
+      left: -5%;
+      transform: scaleX(-1);
+    }
+
+    .sakura-tree.right {
+      right: -5%;
+    }
+
+    .sakura-tree.center-left {
+      left: 15%;
+      transform: scale(0.6);
+      opacity: 0.7;
+    }
+
+    .sakura-tree.center-right {
+      right: 15%;
+      transform: scale(0.5) scaleX(-1);
+      opacity: 0.6;
+    }
+
+    .trunk {
+      position: absolute;
+      bottom: 0;
+      width: 40px;
+      height: 400px;
+      background: linear-gradient(90deg, 
+        #1a1a1a 0%, 
+        #2d2525 30%,
+        #3d3030 50%,
+        #2d2525 70%,
+        #1a1a1a 100%
+      );
+      border-radius: 20px 20px 30px 30px;
+      transform-origin: bottom center;
+    }
+
+    .branch {
+      position: absolute;
+      background: linear-gradient(90deg, 
+        #2d2525 0%, 
+        #3d3030 50%,
+        #2d2525 100%
+      );
+      border-radius: 10px;
+      transform-origin: left center;
+      animation: branchSway 8s ease-in-out infinite;
+    }
+
+    .branch-1 {
+      width: 250px;
+      height: 15px;
+      top: 80px;
+      left: 35px;
+      transform: rotate(-25deg);
+      animation-delay: 0s;
+    }
+
+    .branch-2 {
+      width: 300px;
+      height: 18px;
+      top: 150px;
+      left: 30px;
+      transform: rotate(-15deg);
+      animation-delay: 0.5s;
+    }
+
+    .branch-3 {
+      width: 200px;
+      height: 12px;
+      top: 50px;
+      right: 30px;
+      left: auto;
+      transform: rotate(20deg) scaleX(-1);
+      transform-origin: right center;
+      animation-delay: 1s;
+    }
+
+    .branch-4 {
+      width: 280px;
+      height: 16px;
+      top: 220px;
+      left: 25px;
+      transform: rotate(-35deg);
+      animation-delay: 1.5s;
+    }
+
+    .branch-5 {
+      width: 180px;
+      height: 10px;
+      top: 120px;
+      right: 35px;
+      left: auto;
+      transform: rotate(30deg) scaleX(-1);
+      transform-origin: right center;
+      animation-delay: 2s;
+    }
+
+    @keyframes branchSway {
+      0%, 100% { transform: rotate(var(--base-rotation, -20deg)); }
+      50% { transform: rotate(calc(var(--base-rotation, -20deg) + 3deg)); }
+    }
+
+    .branch-1 { --base-rotation: -25deg; }
+    .branch-2 { --base-rotation: -15deg; }
+    .branch-3 { --base-rotation: 20deg; }
+    .branch-4 { --base-rotation: -35deg; }
+    .branch-5 { --base-rotation: 30deg; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FLEURS DE CERISIER
+    ═══════════════════════════════════════════════════════════════ */
+    .flower-cluster {
+      position: absolute;
+      animation: flowerSway 4s ease-in-out infinite;
+    }
+
+    @keyframes flowerSway {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      25% { transform: translate(2px, -1px) rotate(1deg); }
+      50% { transform: translate(0, 1px) rotate(-1deg); }
+      75% { transform: translate(-2px, 0) rotate(0.5deg); }
+    }
+
+    .flower {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      animation: flowerPulse 3s ease-in-out infinite;
+    }
+
+    .flower::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center,
+        #fff 0%,
+        #ffeef2 40%,
+        #ffccd5 70%,
+        transparent 100%
+      );
+      border-radius: 50%;
+      box-shadow: 0 0 8px 2px rgba(255, 200, 220, 0.4);
+    }
+
+    @keyframes flowerPulse {
+      0%, 100% { opacity: 0.9; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       NEIGE
+    ═══════════════════════════════════════════════════════════════ */
+    .snow-container {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .snowflake {
+      position: absolute;
+      background: radial-gradient(circle at 30% 30%, 
+        #fff 0%, 
+        rgba(255, 255, 255, 0.9) 30%,
+        rgba(220, 230, 255, 0.7) 60%,
+        transparent 100%
+      );
+      border-radius: 50%;
+      pointer-events: none;
+      filter: blur(0.5px);
+      animation: snowfall linear infinite;
+    }
+
+    @keyframes snowfall {
+      0% {
+        transform: translateY(-10px) translateX(0) rotate(0deg);
+        opacity: 0;
+      }
+      5% {
+        opacity: 1;
+      }
+      95% {
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(100vh) translateX(var(--drift, 50px)) rotate(360deg);
+        opacity: 0;
+      }
+    }
+
+    /* Particules de neige qui s'accumulent */
+    .snow-ground {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 80px;
+      background: linear-gradient(to top,
+        rgba(255, 255, 255, 0.15) 0%,
+        rgba(255, 255, 255, 0.08) 40%,
+        transparent 100%
+      );
+      pointer-events: none;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       PÉTALES TOMBANTS
+    ═══════════════════════════════════════════════════════════════ */
+    .petal {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: radial-gradient(ellipse at center,
+        rgba(255, 220, 230, 0.9) 0%,
+        rgba(255, 180, 200, 0.6) 50%,
+        transparent 100%
+      );
+      border-radius: 50% 0 50% 50%;
+      pointer-events: none;
+      animation: petalFall linear infinite;
+    }
+
+    @keyframes petalFall {
+      0% {
+        transform: translateY(-20px) translateX(0) rotate(0deg) scale(1);
+        opacity: 0;
+      }
+      10% {
+        opacity: 0.8;
+      }
+      90% {
+        opacity: 0.6;
+      }
+      100% {
+        transform: translateY(100vh) translateX(var(--petal-drift, 100px)) rotate(720deg) scale(0.5);
+        opacity: 0;
+      }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       REFLETS DE LUMIÈRE
+    ═══════════════════════════════════════════════════════════════ */
+    .light-rays {
+      position: absolute;
+      top: 5%;
+      right: 8%;
+      width: 300px;
+      height: 500px;
+      background: linear-gradient(
+        135deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.02) 20%,
+        rgba(255, 255, 255, 0.05) 40%,
+        rgba(255, 255, 255, 0.02) 60%,
+        transparent 100%
+      );
+      transform: rotate(25deg);
+      pointer-events: none;
+      animation: raysPulse 10s ease-in-out infinite;
+    }
+
+    @keyframes raysPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 0.8; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       INFO PANEL
+    ═══════════════════════════════════════════════════════════════ */
+    .info-panel {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      padding: 15px 20px;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      color: white;
+      font-size: 14px;
+      z-index: 1000;
+    }
+
+    .info-panel h3 {
+      margin-bottom: 8px;
+      font-size: 16px;
+      color: #ff9eb5;
+    }
+
+    .info-panel p {
+      opacity: 0.7;
+      line-height: 1.5;
+    }
+
+    .controls {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .controls button {
+      padding: 8px 16px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .controls button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .controls button.active {
+      background: rgba(255, 150, 180, 0.3);
+      border-color: rgba(255, 150, 180, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="scene">
+    <!-- Étoiles -->
+    <div class="stars"></div>
+
+    <!-- Lune -->
+    <div class="moon"></div>
+
+    <!-- Rayons de lumière -->
+    <div class="light-rays"></div>
+
+    <!-- Arbres Sakura -->
+    <div class="tree-container">
+      <!-- Arbre gauche -->
+      <div class="sakura-tree left">
+        <div class="trunk">
+          <div class="branch branch-1"></div>
+          <div class="branch branch-2"></div>
+          <div class="branch branch-3"></div>
+          <div class="branch branch-4"></div>
+          <div class="branch branch-5"></div>
+        </div>
+      </div>
+
+      <!-- Arbre droit -->
+      <div class="sakura-tree right">
+        <div class="trunk">
+          <div class="branch branch-1"></div>
+          <div class="branch branch-2"></div>
+          <div class="branch branch-3"></div>
+          <div class="branch branch-4"></div>
+          <div class="branch branch-5"></div>
+        </div>
+      </div>
+
+      <!-- Arbres du fond -->
+      <div class="sakura-tree center-left">
+        <div class="trunk">
+          <div class="branch branch-1"></div>
+          <div class="branch branch-2"></div>
+          <div class="branch branch-4"></div>
+        </div>
+      </div>
+
+      <div class="sakura-tree center-right">
+        <div class="trunk">
+          <div class="branch branch-1"></div>
+          <div class="branch branch-2"></div>
+          <div class="branch branch-3"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Brouillard -->
+    <div class="fog">
+      <div class="fog-layer"></div>
+      <div class="fog-layer"></div>
+    </div>
+
+    <!-- Neige au sol -->
+    <div class="snow-ground"></div>
+
+    <!-- Container neige -->
+    <div class="snow-container" id="snowContainer"></div>
+
+    <!-- Container pétales -->
+    <div class="snow-container" id="petalContainer"></div>
+  </div>
+
+  <!-- Panel info -->
+  <div class="info-panel">
+    <h3>❄️ Animation Neige & Sakura</h3>
+    <p>Flocons: <span id="snowCount">0</span> | Pétales: <span id="petalCount">0</span></p>
+    <div class="controls">
+      <button id="toggleSnow" class="active">Neige</button>
+      <button id="togglePetals" class="active">Pétales</button>
+      <button id="moreSnow">+ Neige</button>
+      <button id="lessSnow">- Neige</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════════
+    // CONFIGURATION
+    // ═══════════════════════════════════════════════════════════════
+    const config = {
+      snow: {
+        enabled: true,
+        count: 150,          // Nombre de flocons
+        minSize: 3,
+        maxSize: 8,
+        minDuration: 8,      // Durée min de chute (secondes)
+        maxDuration: 20,     // Durée max de chute
+        minDrift: -80,       // Dérive horizontale min
+        maxDrift: 80,        // Dérive horizontale max
+      },
+      petals: {
+        enabled: true,
+        count: 30,           // Nombre de pétales
+        minSize: 6,
+        maxSize: 14,
+        minDuration: 12,
+        maxDuration: 25,
+        minDrift: -150,
+        maxDrift: 150,
+      }
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // GÉNÉRATION DES FLOCONS
+    // ═══════════════════════════════════════════════════════════════
+    const snowContainer = document.getElementById('snowContainer');
+    const petalContainer = document.getElementById('petalContainer');
+    const snowCountEl = document.getElementById('snowCount');
+    const petalCountEl = document.getElementById('petalCount');
+
+    let snowflakes = [];
+    let petals = [];
+
+    function createSnowflake() {
+      const snowflake = document.createElement('div');
+      snowflake.className = 'snowflake';
+      
+      const size = config.snow.minSize + Math.random() * (config.snow.maxSize - config.snow.minSize);
+      const duration = config.snow.minDuration + Math.random() * (config.snow.maxDuration - config.snow.minDuration);
+      const drift = config.snow.minDrift + Math.random() * (config.snow.maxDrift - config.snow.minDrift);
+      const startX = Math.random() * 100;
+      const delay = Math.random() * duration;
+      const opacity = 0.4 + Math.random() * 0.6;
+
+      snowflake.style.cssText = `
+        left: ${startX}%;
+        width: ${size}px;
+        height: ${size}px;
+        --drift: ${drift}px;
+        animation-duration: ${duration}s;
+        animation-delay: -${delay}s;
+        opacity: ${opacity};
+      `;
+
+      snowContainer.appendChild(snowflake);
+      snowflakes.push(snowflake);
+    }
+
+    function createPetal() {
+      const petal = document.createElement('div');
+      petal.className = 'petal';
+      
+      const size = config.petals.minSize + Math.random() * (config.petals.maxSize - config.petals.minSize);
+      const duration = config.petals.minDuration + Math.random() * (config.petals.maxDuration - config.petals.minDuration);
+      const drift = config.petals.minDrift + Math.random() * (config.petals.maxDrift - config.petals.minDrift);
+      const startX = Math.random() * 100;
+      const delay = Math.random() * duration;
+
+      petal.style.cssText = `
+        left: ${startX}%;
+        width: ${size}px;
+        height: ${size * 0.7}px;
+        --petal-drift: ${drift}px;
+        animation-duration: ${duration}s;
+        animation-delay: -${delay}s;
+      `;
+
+      petalContainer.appendChild(petal);
+      petals.push(petal);
+    }
+
+    function initSnow() {
+      snowflakes.forEach(s => s.remove());
+      snowflakes = [];
+      
+      if (config.snow.enabled) {
+        for (let i = 0; i < config.snow.count; i++) {
+          createSnowflake();
+        }
+      }
+      snowCountEl.textContent = snowflakes.length;
+    }
+
+    function initPetals() {
+      petals.forEach(p => p.remove());
+      petals = [];
+      
+      if (config.petals.enabled) {
+        for (let i = 0; i < config.petals.count; i++) {
+          createPetal();
+        }
+      }
+      petalCountEl.textContent = petals.length;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GÉNÉRATION DES FLEURS SUR LES BRANCHES
+    // ═══════════════════════════════════════════════════════════════
+    function createFlowers() {
+      const branches = document.querySelectorAll('.branch');
+      
+      branches.forEach(branch => {
+        const branchWidth = parseInt(branch.style.width) || 250;
+        const flowerCount = Math.floor(branchWidth / 20);
+        
+        for (let i = 0; i < flowerCount; i++) {
+          const cluster = document.createElement('div');
+          cluster.className = 'flower-cluster';
+          cluster.style.cssText = `
+            left: ${10 + (i / flowerCount) * 80}%;
+            top: ${-5 + Math.random() * 10}px;
+            animation-delay: ${Math.random() * 4}s;
+          `;
+          
+          // Plusieurs fleurs par cluster
+          const clusterSize = 2 + Math.floor(Math.random() * 4);
+          for (let j = 0; j < clusterSize; j++) {
+            const flower = document.createElement('div');
+            flower.className = 'flower';
+            flower.style.cssText = `
+              left: ${Math.random() * 20 - 10}px;
+              top: ${Math.random() * 20 - 10}px;
+              animation-delay: ${Math.random() * 3}s;
+              transform: scale(${0.6 + Math.random() * 0.6});
+            `;
+            cluster.appendChild(flower);
+          }
+          
+          branch.appendChild(cluster);
+        }
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // CONTRÔLES
+    // ═══════════════════════════════════════════════════════════════
+    document.getElementById('toggleSnow').addEventListener('click', function() {
+      config.snow.enabled = !config.snow.enabled;
+      this.classList.toggle('active', config.snow.enabled);
+      initSnow();
+    });
+
+    document.getElementById('togglePetals').addEventListener('click', function() {
+      config.petals.enabled = !config.petals.enabled;
+      this.classList.toggle('active', config.petals.enabled);
+      initPetals();
+    });
+
+    document.getElementById('moreSnow').addEventListener('click', function() {
+      config.snow.count = Math.min(300, config.snow.count + 30);
+      initSnow();
+    });
+
+    document.getElementById('lessSnow').addEventListener('click', function() {
+      config.snow.count = Math.max(30, config.snow.count - 30);
+      initSnow();
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // INITIALISATION
+    // ═══════════════════════════════════════════════════════════════
+    createFlowers();
+    initSnow();
+    initPetals();
+
+    // Ajouter des flocons périodiquement pour un effet plus naturel
+    setInterval(() => {
+      if (config.snow.enabled && snowflakes.length < config.snow.count + 10) {
+        createSnowflake();
+        snowCountEl.textContent = snowflakes.length;
+      }
+    }, 500);
+  </script>
+</body>
+</html>

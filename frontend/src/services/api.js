@@ -254,6 +254,12 @@ export const ticketGeneratorAPI = {
   publish: (guildId) => api.post(`/bot/guilds/${guildId}/tickets/publish`, {}, { timeout: 60000 }),
 }
 
+export const captchaAPI = {
+  get: (guildId) => api.get(`/bot/guilds/${guildId}/captcha`),
+  save: (guildId, data) => api.put(`/bot/guilds/${guildId}/captcha/config`, data, { timeout: 30000 }),
+  publish: (guildId) => api.post(`/bot/guilds/${guildId}/captcha/publish`, {}, { timeout: 60000 }),
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────────
 export const logsAPI = {
   list:       (guildId, params) => api.get(`/bot/guilds/${guildId}/logs`, { params }),

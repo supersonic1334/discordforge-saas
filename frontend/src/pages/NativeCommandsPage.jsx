@@ -65,10 +65,16 @@ const UI = {
     total: 'Commandes',
     moderationCount: 'Moderation',
     utilityCount: 'Utilitaire',
-    logChannel: 'Salon de logs',
+    logChannel: 'Salon sanctions / logs',
     noLogChannel: 'Aucun salon',
+    globalLogTitle: 'Salon global des sanctions',
+    globalLogText: 'Choisis un salon unique pour envoyer tous les journaux de moderation et applique-le en un clic.',
+    globalLogApply: 'Appliquer partout',
+    globalLogClear: 'Retirer partout',
+    globalLogSaving: 'Application...',
+    globalLogUpdated: 'Salon global mis a jour',
     defaultTargetChannel: 'Salon par defaut',
-    visibilityLabel: 'Confirmation visible par',
+    visibilityLabel: 'Qui voit la confirmation',
     visibilityEphemeral: 'Seulement le staff',
     visibilityPublic: 'Tout le salon',
     dmUser: 'Envoyer un DM au membre',
@@ -120,10 +126,16 @@ const UI = {
     total: 'Commands',
     moderationCount: 'Moderation',
     utilityCount: 'Utility',
-    logChannel: 'Log channel',
+    logChannel: 'Sanctions / log channel',
     noLogChannel: 'No channel',
+    globalLogTitle: 'Global sanctions channel',
+    globalLogText: 'Pick one channel for all moderation logs and apply it in one click.',
+    globalLogApply: 'Apply everywhere',
+    globalLogClear: 'Clear everywhere',
+    globalLogSaving: 'Applying...',
+    globalLogUpdated: 'Global log channel updated',
     defaultTargetChannel: 'Default channel',
-    visibilityLabel: 'Confirmation visible to',
+    visibilityLabel: 'Who sees the confirmation',
     visibilityEphemeral: 'Staff only',
     visibilityPublic: 'Whole channel',
     dmUser: 'Send DM to member',
@@ -175,10 +187,16 @@ const UI = {
     total: 'Comandos',
     moderationCount: 'Moderacion',
     utilityCount: 'Utilidad',
-    logChannel: 'Canal de logs',
+    logChannel: 'Canal de sanciones / logs',
     noLogChannel: 'Sin canal',
+    globalLogTitle: 'Canal global de sanciones',
+    globalLogText: 'Elige un canal unico para todos los logs de moderacion y aplicalo con un clic.',
+    globalLogApply: 'Aplicar en todo',
+    globalLogClear: 'Quitar en todo',
+    globalLogSaving: 'Aplicando...',
+    globalLogUpdated: 'Canal global actualizado',
     defaultTargetChannel: 'Canal por defecto',
-    visibilityLabel: 'Confirmacion visible para',
+    visibilityLabel: 'Quien ve la confirmacion',
     visibilityEphemeral: 'Solo staff',
     visibilityPublic: 'Todo el canal',
     dmUser: 'Enviar DM al miembro',
@@ -757,6 +775,8 @@ export default function NativeCommandsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [activeCategory, setActiveCategory] = useState('all')
   const [loadError, setLoadError] = useState('')
+  const [globalLogChannelId, setGlobalLogChannelId] = useState('')
+  const [applyingGlobalLog, setApplyingGlobalLog] = useState(false)
 
   const textChannels = useMemo(
     () => channels.filter((channel) => isTextLikeChannel(channel)),
@@ -813,11 +833,17 @@ export default function NativeCommandsPage() {
       setChannels([])
       setLoadError('')
       setLoading(false)
+      setGlobalLogChannelId('')
       return
     }
 
     loadAll(false)
   }, [selectedGuildId])
+
+  useEffect(() => {
+    const uniqueLogChannels = [...new Set(commands.map((command) => String(command?.action_config?.log_channel_id || '').trim()).filter(Boolean))]
+    setGlobalLogChannelId(uniqueLogChannels.length === 1 ? uniqueLogChannels[0] : '')
+  }, [commands])
 
   useEffect(() => {
     const handleRealtimeSync = (payload = {}) => {
@@ -866,6 +892,19 @@ export default function NativeCommandsPage() {
     }
     await loadAll(false)
     toast.success(ui.updated)
+  }
+
+  const applyGlobalLogChannel = async () => {
+    setApplyingGlobalLog(true)
+    try {
+      const response = await commandsAPI.setSystemLogChannel(selectedGuildId, globalLogChannelId)
+      applyCommandSnapshot(response?.data?.commands || [])
+      toast.success(ui.globalLogUpdated)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setApplyingGlobalLog(false)
+    }
   }
 
   if (!selectedGuildId) {
@@ -937,6 +976,36 @@ export default function NativeCommandsPage() {
           <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
             <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-amber-200/80">{ui.systemPanelTitle}</p>
             <p className="mt-3 text-sm leading-6 text-white/55">{ui.systemPanelText}</p>
+          </div>
+
+          <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl">
+                <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-cyan-200/80">{ui.globalLogTitle}</p>
+                <p className="mt-3 text-sm leading-6 text-white/55">{ui.globalLogText}</p>
+              </div>
+              <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[minmax(0,1fr),auto]">
+                <select
+                  className="select-field"
+                  value={globalLogChannelId}
+                  onChange={(event) => setGlobalLogChannelId(event.target.value)}
+                >
+                  <option value="">{ui.noLogChannel}</option>
+                  {textChannels.map((channel) => (
+                    <option key={channel.id} value={channel.id}>#{channel.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={applyGlobalLogChannel}
+                  disabled={applyingGlobalLog}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neon-cyan/30 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:opacity-60"
+                >
+                  <Save className={`h-4 w-4 ${applyingGlobalLog ? 'animate-pulse' : ''}`} />
+                  {applyingGlobalLog ? ui.globalLogSaving : (globalLogChannelId ? ui.globalLogApply : ui.globalLogClear)}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </section>

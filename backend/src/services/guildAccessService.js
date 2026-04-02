@@ -10,6 +10,11 @@ const {
   getGuildTicketGenerator,
   saveGuildTicketGenerator,
 } = require('./ticketGeneratorService');
+const {
+  DEFAULT_CAPTCHA_CONFIG,
+  getGuildCaptchaConfig,
+  saveGuildCaptchaConfig,
+} = require('./captchaGeneratorService');
 
 const ACCESS_ROLES = ['admin', 'moderator', 'viewer'];
 
@@ -788,7 +793,7 @@ function removeGuildCollaborator({ guildId, ownerUserId, memberUserId }) {
 
 function buildSnapshotPayload(guildId) {
   return {
-    version: 3,
+    version: 4,
     modules: db.raw('SELECT module_type, enabled, simple_config, advanced_config FROM modules WHERE guild_id = ? ORDER BY module_type ASC', [guildId]),
     custom_commands: db.raw(`
       SELECT trigger, command_type, command_prefix, command_name, description, response, reply_in_dm, response_mode,
@@ -821,6 +826,7 @@ function buildSnapshotPayload(guildId) {
       LIMIT 1
     `, [guildId])[0] || null,
     ticket_generator: getGuildTicketGenerator(guildId),
+    captcha_config: getGuildCaptchaConfig(guildId),
   };
 }
 
@@ -836,12 +842,13 @@ function extractSnapshotPayload(source = {}) {
     : {};
 
   return {
-    version: Number(candidate.version || 3),
+    version: Number(candidate.version || 4),
     modules: Array.isArray(candidate.modules) ? candidate.modules : [],
     custom_commands: Array.isArray(candidate.custom_commands) ? candidate.custom_commands : [],
     guild_log_channel: candidate.guild_log_channel && typeof candidate.guild_log_channel === 'object' ? candidate.guild_log_channel : null,
     guild_dm_settings: candidate.guild_dm_settings && typeof candidate.guild_dm_settings === 'object' ? candidate.guild_dm_settings : null,
     ticket_generator: candidate.ticket_generator && typeof candidate.ticket_generator === 'object' ? candidate.ticket_generator : null,
+    captcha_config: candidate.captcha_config && typeof candidate.captcha_config === 'object' ? candidate.captcha_config : null,
   };
 }
 
@@ -935,6 +942,7 @@ function applySnapshotPayload(guildId, source = {}) {
   });
 
   saveGuildTicketGenerator(guildId, payload.ticket_generator || DEFAULT_TICKET_CONFIG);
+  saveGuildCaptchaConfig(guildId, payload.captcha_config || DEFAULT_CAPTCHA_CONFIG);
   return payload;
 }
 

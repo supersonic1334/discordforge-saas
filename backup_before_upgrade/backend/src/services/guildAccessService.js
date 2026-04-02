@@ -1,0 +1,686 @@
+'use strict';
+
+const { v4: uuidv4 } = require('uuid');
+
+const db = require('../database');
+const { initializeDefaultModules } = require('./guildSyncService');
+
+const ACCESS_ROLES = ['admin', 'moderator', 'viewer'];
+
+function normalizeLookup(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeAccessRole(value) {
+  return ACCESS_ROLES.includes(value) ? value : 'admin';
+}
+
+function parseJson(value, fallback) {
+  try {
+    const parsed = JSON.parse(value || '');
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// ── Audit logging ──────────────────────────────────────────────────────────────
+
+function logCollabAction({ guildId, actorUserId, actorUsername, actionType, target, details }) {
+  db.insert('collaboration_audit_log', {
+    guild_id: guildId,
+    actor_user_id: actorUserId,
+    actor_username: actorUsername || null,
+    action_type: actionType,
+    target: target || null,
+    details: JSON.stringify(details || {}),
+    created_at: new Date().toISOString(),
+  });
+}
+
+function listCollabAuditLog(guildId, { page = 1, limit = 30 } = {}) {
+  const offset = (page - 1) * limit;
+  const total = db.db.prepare('SELECT COUNT(*) AS cnt FROM collaboration_audit_log WHERE guild_id = ?').get(guildId)?.cnt || 0;
+  const rows = db.db.prepare(`
+    SELECT * FROM collaboration_audit_log
+    WHERE guild_id = ?
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(guildId, limit, offset);
+
+  return {
+    items: rows.map((row) => ({
+      ...row,
+      details: parseJson(row.details, {}),
+    })),
+    total,
+    page,
+    limit,
+  };
+}
+
+// ── Expiration check ───────────────────────────────────────────────────────────
+
+function isAccessExpired(member) {
+  if (!member?.expires_at) return false;
+  return new Date(member.expires_at) <= new Date();
+}
+
+function cleanupExpiredAccess(guildId) {
+  const now = new Date().toISOString();
+  const result = db.db.prepare(`
+    DELETE FROM guild_access_members
+    WHERE guild_id = ? AND expires_at IS NOT NULL AND expires_at <= ?
+  `).run(guildId, now);
+  return result.changes || 0;
+}
+
+// ── Core access logic ──────────────────────────────────────────────────────────
+
+function getGuildAccess(userId, guildId) {
+  // Cleanup expired members first
+  cleanupExpiredAccess(guildId);
+
+  const row = db.db.prepare(`
+    SELECT
+      g.*,
+      owner.username AS owner_username,
+      owner.avatar_url AS owner_avatar_url,
+      owner.email AS owner_email,
+      gam.id AS member_id,
+      gam.access_role AS member_access_role,
+      gam.is_suspended AS member_is_suspended,
+      gam.expires_at AS member_expires_at,
+      gam.accepted_at AS member_accepted_at
+    FROM guilds g
+    JOIN users owner ON owner.id = g.user_id
+    LEFT JOIN guild_access_members gam
+      ON gam.guild_id = g.id
+      AND gam.user_id = ?
+    WHERE g.id = ?
+      AND g.is_active = 1
+    LIMIT 1
+  `).get(userId, guildId);
+
+  if (!row) return null;
+
+  const isOwner = row.user_id === userId;
+  if (!isOwner && !row.member_id) return null;
+
+  // Suspended members are denied access
+  if (!isOwner && row.member_is_suspended) return null;
+
+  return {
+    guild: {
+      id: row.id,
+      user_id: row.user_id,
+      guild_id: row.guild_id,
+      name: row.name,
+      icon: row.icon,
+      member_count: row.member_count,
+      owner_id: row.owner_id,
+      features: row.features,
+      is_active: row.is_active,
+      bot_joined_at: row.bot_joined_at,
+      last_synced_at: row.last_synced_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    },
+    owner_user_id: row.user_id,
+    owner_username: row.owner_username,
+    owner_avatar_url: row.owner_avatar_url || null,
+    owner_email: row.owner_email,
+    is_owner: isOwner,
+    access_role: isOwner ? 'owner' : normalizeAccessRole(row.member_access_role),
+    member_id: row.member_id || null,
+    accepted_at: row.member_accepted_at || null,
+  };
+}
+
+function listAccessibleGuilds(userId) {
+  // Cleanup all expired access for this user
+  const now = new Date().toISOString();
+  db.db.prepare(`
+    DELETE FROM guild_access_members
+    WHERE user_id = ? AND expires_at IS NOT NULL AND expires_at <= ?
+  `).run(userId, now);
+
+  return db.db.prepare(`
+    SELECT
+      g.*,
+      owner.username AS owner_username,
+      owner.avatar_url AS owner_avatar_url,
+      CASE WHEN g.user_id = ? THEN 1 ELSE 0 END AS is_owner,
+      CASE
+        WHEN g.user_id = ? THEN 'owner'
+        ELSE COALESCE(gam.access_role, 'viewer')
+      END AS access_role
+    FROM guilds g
+    JOIN users owner ON owner.id = g.user_id
+    LEFT JOIN guild_access_members gam
+      ON gam.guild_id = g.id
+      AND gam.user_id = ?
+    WHERE g.is_active = 1
+      AND (g.user_id = ? OR (gam.user_id IS NOT NULL AND gam.is_suspended = 0))
+    ORDER BY
+      CASE WHEN g.user_id = ? THEN 0 ELSE 1 END,
+      lower(g.name) ASC
+  `).all(userId, userId, userId, userId, userId);
+}
+
+function listGuildCollaborators(guildId) {
+  // Cleanup expired
+  cleanupExpiredAccess(guildId);
+
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild) return [];
+
+  const owner = db.findOne('users', { id: guild.user_id });
+  const members = db.db.prepare(`
+    SELECT
+      gam.*,
+      u.username,
+      u.avatar_url,
+      u.email,
+      u.discord_id
+    FROM guild_access_members gam
+    JOIN users u ON u.id = gam.user_id
+    WHERE gam.guild_id = ?
+    ORDER BY
+      CASE gam.access_role
+        WHEN 'admin' THEN 0
+        WHEN 'moderator' THEN 1
+        ELSE 2
+      END,
+      lower(u.username) ASC
+  `).all(guildId);
+
+  const rows = [];
+
+  if (owner) {
+    rows.push({
+      id: `owner:${owner.id}`,
+      user_id: owner.id,
+      username: owner.username,
+      avatar_url: owner.avatar_url || null,
+      email: owner.email,
+      discord_id: owner.discord_id || null,
+      access_role: 'owner',
+      is_owner: true,
+      is_suspended: false,
+      expires_at: null,
+      accepted_at: guild.created_at,
+      created_at: guild.created_at,
+      updated_at: guild.updated_at,
+    });
+  }
+
+  for (const member of members) {
+    rows.push({
+      id: member.id,
+      user_id: member.user_id,
+      username: member.username,
+      avatar_url: member.avatar_url || null,
+      email: member.email,
+      discord_id: member.discord_id || null,
+      access_role: normalizeAccessRole(member.access_role),
+      is_owner: false,
+      is_suspended: !!member.is_suspended,
+      expires_at: member.expires_at || null,
+      accepted_at: member.accepted_at,
+      created_at: member.created_at,
+      updated_at: member.updated_at,
+    });
+  }
+
+  return rows;
+}
+
+function resolveUserForInvite(target) {
+  const normalized = normalizeLookup(target);
+  if (!normalized) return null;
+
+  return db.db.prepare(`
+    SELECT *
+    FROM users
+    WHERE is_active = 1
+      AND (
+        lower(trim(email)) = ?
+        OR lower(trim(username)) = ?
+        OR id = ?
+        OR discord_id = ?
+      )
+    ORDER BY CASE WHEN lower(trim(email)) = ? THEN 0 ELSE 1 END, created_at ASC
+    LIMIT 1
+  `).get(normalized, normalized, String(target || '').trim(), String(target || '').trim(), normalized) ?? null;
+}
+
+// ── Auto-backup on first invite ────────────────────────────────────────────────
+
+function ensureAutoBackupOnFirstInvite(guildId, ownerUserId) {
+  // Check if this guild already has any collaborators
+  const existingCount = db.db.prepare(`
+    SELECT COUNT(*) AS cnt FROM guild_access_members WHERE guild_id = ?
+  `).get(guildId)?.cnt || 0;
+
+  // First collaborator → auto-create a backup
+  if (existingCount === 0) {
+    const payload = buildSnapshotPayload(guildId);
+    db.insert('guild_config_snapshots', {
+      guild_id: guildId,
+      created_by_user_id: ownerUserId,
+      label: '🔒 Sauvegarde automatique (premier partage)',
+      payload: JSON.stringify(payload),
+      created_at: new Date().toISOString(),
+    });
+  }
+}
+
+function inviteGuildCollaborator({ guildId, ownerUserId, actorUserId, target, accessRole, expiresInHours }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const user = resolveUserForInvite(target);
+  if (!user) {
+    throw Object.assign(new Error('Aucun compte du site ne correspond a cette recherche'), { status: 404 });
+  }
+  if (!user.is_active) {
+    throw Object.assign(new Error('Ce compte est desactive'), { status: 403 });
+  }
+  if (user.id === ownerUserId) {
+    throw Object.assign(new Error('Le proprietaire a deja acces a ce serveur'), { status: 400 });
+  }
+
+  // Auto-backup on first colaborator invite
+  ensureAutoBackupOnFirstInvite(guildId, ownerUserId);
+
+  const now = new Date().toISOString();
+  const expiresAt = (expiresInHours && expiresInHours > 0)
+    ? new Date(Date.now() + expiresInHours * 3600000).toISOString()
+    : null;
+
+  const existing = db.db.prepare(`
+    SELECT id
+    FROM guild_access_members
+    WHERE guild_id = ? AND user_id = ?
+    LIMIT 1
+  `).get(guildId, user.id);
+
+  if (existing) {
+    db.db.prepare(`
+      UPDATE guild_access_members
+      SET access_role = ?, invited_by_user_id = ?, is_suspended = 0, expires_at = ?, accepted_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(normalizeAccessRole(accessRole), actorUserId, expiresAt, now, now, existing.id);
+  } else {
+    db.insert('guild_access_members', {
+      guild_id: guildId,
+      user_id: user.id,
+      access_role: normalizeAccessRole(accessRole),
+      invited_by_user_id: actorUserId,
+      is_suspended: 0,
+      expires_at: expiresAt,
+      accepted_at: now,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
+  // Audit log
+  const actor = db.findOne('users', { id: actorUserId });
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: actor?.username,
+    actionType: 'invite',
+    target: user.username || user.email,
+    details: { role: accessRole, expires_in_hours: expiresInHours || null },
+  });
+
+  return db.findOne('users', { id: user.id });
+}
+
+function updateGuildCollaboratorRole({ guildId, ownerUserId, memberUserId, accessRole }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+  if (memberUserId === ownerUserId) {
+    throw Object.assign(new Error('Le proprietaire principal ne peut pas etre modifie ici'), { status: 400 });
+  }
+
+  const result = db.db.prepare(`
+    UPDATE guild_access_members
+    SET access_role = ?, updated_at = ?
+    WHERE guild_id = ? AND user_id = ?
+  `).run(normalizeAccessRole(accessRole), new Date().toISOString(), guildId, memberUserId);
+
+  if (!result.changes) {
+    throw Object.assign(new Error('Acces introuvable'), { status: 404 });
+  }
+
+  const targetUser = db.findOne('users', { id: memberUserId });
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'role_change',
+    target: targetUser?.username,
+    details: { new_role: accessRole },
+  });
+}
+
+function suspendGuildCollaborator({ guildId, ownerUserId, memberUserId, isSuspended }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+  if (memberUserId === ownerUserId) {
+    throw Object.assign(new Error('Le proprietaire principal ne peut pas etre suspendu'), { status: 400 });
+  }
+
+  const result = db.db.prepare(`
+    UPDATE guild_access_members
+    SET is_suspended = ?, updated_at = ?
+    WHERE guild_id = ? AND user_id = ?
+  `).run(isSuspended ? 1 : 0, new Date().toISOString(), guildId, memberUserId);
+
+  if (!result.changes) {
+    throw Object.assign(new Error('Acces introuvable'), { status: 404 });
+  }
+
+  const targetUser = db.findOne('users', { id: memberUserId });
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: isSuspended ? 'suspend' : 'unsuspend',
+    target: targetUser?.username,
+  });
+}
+
+function removeGuildCollaborator({ guildId, ownerUserId, memberUserId }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+  if (memberUserId === ownerUserId) {
+    throw Object.assign(new Error('Le proprietaire principal ne peut pas etre retire'), { status: 400 });
+  }
+
+  const targetUser = db.findOne('users', { id: memberUserId });
+
+  const result = db.db.prepare(`
+    DELETE FROM guild_access_members
+    WHERE guild_id = ? AND user_id = ?
+  `).run(guildId, memberUserId);
+
+  if (!result.changes) {
+    throw Object.assign(new Error('Acces introuvable'), { status: 404 });
+  }
+
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'revoke',
+    target: targetUser?.username,
+  });
+}
+
+// ── Snapshots ──────────────────────────────────────────────────────────────────
+
+function buildSnapshotPayload(guildId) {
+  return {
+    version: 1,
+    modules: db.raw('SELECT module_type, enabled, simple_config, advanced_config FROM modules WHERE guild_id = ? ORDER BY module_type ASC', [guildId]),
+    custom_commands: db.raw(`
+      SELECT trigger, command_type, command_prefix, command_name, description, response, reply_in_dm, response_mode,
+             delete_trigger, allowed_roles, allowed_channels, aliases, cooldown_ms, delete_response_after_ms,
+             embed_enabled, embed_title, embed_color, mention_user, require_args, usage_hint, use_count, enabled
+      FROM custom_commands
+      WHERE guild_id = ?
+      ORDER BY created_at ASC
+    `, [guildId]),
+    guild_log_channel: db.raw('SELECT channel_id, log_events, enabled FROM guild_log_channels WHERE guild_id = ? LIMIT 1', [guildId])[0] || null,
+    guild_dm_settings: db.raw(`
+      SELECT auto_dm_warn, auto_dm_timeout, auto_dm_kick, auto_dm_ban, auto_dm_blacklist, appeal_server_name, appeal_server_url
+      FROM guild_dm_settings
+      WHERE guild_id = ?
+      LIMIT 1
+    `, [guildId])[0] || null,
+  };
+}
+
+function listGuildSnapshots(guildId) {
+  return db.db.prepare(`
+    SELECT
+      snap.*,
+      users.username AS created_by_username,
+      users.avatar_url AS created_by_avatar_url
+    FROM guild_config_snapshots snap
+    LEFT JOIN users ON users.id = snap.created_by_user_id
+    WHERE snap.guild_id = ?
+    ORDER BY snap.created_at DESC
+  `).all(guildId).map((row) => {
+    const payload = parseJson(row.payload, {});
+    return {
+      id: row.id,
+      label: row.label || '',
+      created_at: row.created_at,
+      created_by_user_id: row.created_by_user_id || null,
+      created_by_username: row.created_by_username || 'Compte inconnu',
+      created_by_avatar_url: row.created_by_avatar_url || null,
+      module_count: Array.isArray(payload.modules) ? payload.modules.length : 0,
+      command_count: Array.isArray(payload.custom_commands) ? payload.custom_commands.length : 0,
+      has_log_channel: Boolean(payload.guild_log_channel),
+      has_dm_settings: Boolean(payload.guild_dm_settings),
+    };
+  });
+}
+
+function createGuildSnapshot({ guildId, ownerUserId, actorUserId, label }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const payload = buildSnapshotPayload(guildId);
+  const row = db.insert('guild_config_snapshots', {
+    guild_id: guildId,
+    created_by_user_id: actorUserId,
+    label: String(label || '').trim() || `Snapshot ${new Date().toLocaleString('fr-FR')}`,
+    payload: JSON.stringify(payload),
+    created_at: new Date().toISOString(),
+  });
+
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: db.findOne('users', { id: actorUserId })?.username,
+    actionType: 'snapshot_create',
+    target: label || 'Sans nom',
+  });
+
+  return db.findOne('guild_config_snapshots', { id: row.id });
+}
+
+function restoreGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const snapshot = db.db.prepare(`
+    SELECT *
+    FROM guild_config_snapshots
+    WHERE id = ? AND guild_id = ?
+    LIMIT 1
+  `).get(snapshotId, guildId);
+
+  if (!snapshot) {
+    throw Object.assign(new Error('Sauvegarde introuvable'), { status: 404 });
+  }
+
+  const payload = parseJson(snapshot.payload, {});
+  const now = new Date().toISOString();
+
+  db.transaction(() => {
+    db.db.prepare('DELETE FROM modules WHERE guild_id = ?').run(guildId);
+    db.db.prepare('DELETE FROM custom_commands WHERE guild_id = ?').run(guildId);
+    db.db.prepare('DELETE FROM guild_log_channels WHERE guild_id = ?').run(guildId);
+    db.db.prepare('DELETE FROM guild_dm_settings WHERE guild_id = ?').run(guildId);
+
+    for (const module of Array.isArray(payload.modules) ? payload.modules : []) {
+      db.insert('modules', {
+        guild_id: guildId,
+        module_type: module.module_type,
+        enabled: module.enabled ? 1 : 0,
+        simple_config: module.simple_config || '{}',
+        advanced_config: module.advanced_config || '{}',
+        created_at: now,
+        updated_at: now,
+      });
+    }
+
+    initializeDefaultModules(guildId);
+
+    for (const command of Array.isArray(payload.custom_commands) ? payload.custom_commands : []) {
+      db.insert('custom_commands', {
+        guild_id: guildId,
+        trigger: command.trigger,
+        command_type: command.command_type || 'prefix',
+        command_prefix: command.command_prefix || '',
+        command_name: command.command_name || '',
+        description: command.description || '',
+        response: command.response || '',
+        reply_in_dm: command.reply_in_dm ? 1 : 0,
+        response_mode: command.response_mode || 'channel',
+        delete_trigger: command.delete_trigger ? 1 : 0,
+        allowed_roles: command.allowed_roles || '[]',
+        allowed_channels: command.allowed_channels || '[]',
+        aliases: command.aliases || '[]',
+        cooldown_ms: Number(command.cooldown_ms || 0),
+        delete_response_after_ms: Number(command.delete_response_after_ms || 0),
+        embed_enabled: command.embed_enabled ? 1 : 0,
+        embed_title: command.embed_title || '',
+        embed_color: command.embed_color || '#22d3ee',
+        mention_user: command.mention_user ? 1 : 0,
+        require_args: command.require_args ? 1 : 0,
+        usage_hint: command.usage_hint || '',
+        use_count: Number(command.use_count || 0),
+        enabled: command.enabled ? 1 : 0,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+
+    if (payload.guild_log_channel?.channel_id) {
+      db.insert('guild_log_channels', {
+        guild_id: guildId,
+        channel_id: payload.guild_log_channel.channel_id,
+        log_events: payload.guild_log_channel.log_events || '[]',
+        enabled: payload.guild_log_channel.enabled ? 1 : 0,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+
+    if (payload.guild_dm_settings) {
+      db.insert('guild_dm_settings', {
+        guild_id: guildId,
+        auto_dm_warn: payload.guild_dm_settings.auto_dm_warn ? 1 : 0,
+        auto_dm_timeout: payload.guild_dm_settings.auto_dm_timeout ? 1 : 0,
+        auto_dm_kick: payload.guild_dm_settings.auto_dm_kick ? 1 : 0,
+        auto_dm_ban: payload.guild_dm_settings.auto_dm_ban ? 1 : 0,
+        auto_dm_blacklist: payload.guild_dm_settings.auto_dm_blacklist ? 1 : 0,
+        appeal_server_name: payload.guild_dm_settings.appeal_server_name || '',
+        appeal_server_url: payload.guild_dm_settings.appeal_server_url || '',
+        created_at: now,
+        updated_at: now,
+      });
+    }
+  });
+
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'snapshot_restore',
+    target: snapshot.label || 'Sans nom',
+  });
+
+  return {
+    snapshot,
+    restored: {
+      module_count: Array.isArray(payload.modules) ? payload.modules.length : 0,
+      command_count: Array.isArray(payload.custom_commands) ? payload.custom_commands.length : 0,
+    },
+  };
+}
+
+function deleteGuildSnapshot({ guildId, ownerUserId, snapshotId }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const snapshot = db.db.prepare('SELECT label FROM guild_config_snapshots WHERE id = ? AND guild_id = ? LIMIT 1').get(snapshotId, guildId);
+
+  const result = db.db.prepare(`
+    DELETE FROM guild_config_snapshots
+    WHERE id = ? AND guild_id = ?
+  `).run(snapshotId, guildId);
+
+  if (!result.changes) {
+    throw Object.assign(new Error('Sauvegarde introuvable'), { status: 404 });
+  }
+
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'snapshot_delete',
+    target: snapshot?.label || 'Sans nom',
+  });
+}
+
+function getSharedGuildCounts(userId) {
+  const row = db.db.prepare(`
+    SELECT
+      COUNT(DISTINCT g.id) AS total_count,
+      COUNT(DISTINCT CASE WHEN g.user_id != ? THEN g.id END) AS shared_count
+    FROM guilds g
+    LEFT JOIN guild_access_members gam
+      ON gam.guild_id = g.id
+      AND gam.user_id = ?
+    WHERE g.is_active = 1
+      AND (g.user_id = ? OR (gam.user_id IS NOT NULL AND gam.is_suspended = 0))
+  `).get(userId, userId, userId);
+
+  return {
+    total: Number(row?.total_count || 0),
+    shared: Number(row?.shared_count || 0),
+  };
+}
+
+module.exports = {
+  ACCESS_ROLES,
+  normalizeAccessRole,
+  getGuildAccess,
+  listAccessibleGuilds,
+  listGuildCollaborators,
+  inviteGuildCollaborator,
+  updateGuildCollaboratorRole,
+  suspendGuildCollaborator,
+  removeGuildCollaborator,
+  logCollabAction,
+  listCollabAuditLog,
+  listGuildSnapshots,
+  createGuildSnapshot,
+  restoreGuildSnapshot,
+  deleteGuildSnapshot,
+  getSharedGuildCounts,
+};
