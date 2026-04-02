@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { motion } from 'framer-motion'
 
 import { useAuthStore, useGuildStore, useBotStore } from './stores'
 import { wsService } from './services/websocket'
+import { authAPI } from './services/api'
 
 import AppErrorBoundary from './components/AppErrorBoundary'
 import Layout from './components/layout/Layout'
@@ -50,14 +51,109 @@ function getAccessFingerprint(snapshot) {
   ].join('|')
 }
 
+function AccessCheckSplash() {
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#05070d',
+        color: '#dbeafe',
+      }}
+    >
+      <div
+        style={{
+          width: 'min(92vw, 420px)',
+          padding: '24px 22px',
+          borderRadius: 24,
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'linear-gradient(180deg, rgba(20,20,31,0.98), rgba(10,10,17,0.98))',
+          boxShadow: '0 24px 72px rgba(0,0,0,0.42)',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            margin: '0 auto 14px',
+            borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.12)',
+            borderTopColor: '#00e5ff',
+            animation: 'spin .9s linear infinite',
+          }}
+        />
+        <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 14, color: 'rgba(255,255,255,0.78)' }}>
+          Verification de l&apos;acces...
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function useBlockedAccessGuard(enabled = true) {
+  const location = useLocation()
+  const [state, setState] = useState({ checking: enabled, blocked: false })
+
+  useEffect(() => {
+    if (!enabled) {
+      setState({ checking: false, blocked: false })
+      return undefined
+    }
+
+    let cancelled = false
+
+    const checkAccess = async () => {
+      try {
+        const response = await authAPI.accessStatus()
+        if (cancelled) return
+
+        const nextBlocked = !!response.data?.blocked
+        setState({ checking: false, blocked: nextBlocked })
+
+        if (nextBlocked && window.location.pathname !== '/auth') {
+          window.location.replace('/auth?blocked=1')
+        }
+      } catch (error) {
+        if (cancelled) return
+
+        const nextBlocked = error?.response?.data?.code === 'ACCESS_BLOCKED'
+        setState({ checking: false, blocked: nextBlocked })
+
+        if (nextBlocked && window.location.pathname !== '/auth') {
+          window.location.replace('/auth?blocked=1')
+        }
+      }
+    }
+
+    checkAccess()
+    const intervalId = window.setInterval(checkAccess, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [enabled, location.pathname])
+
+  return state
+}
+
 function RequireAuth({ children }) {
+  const { checking, blocked } = useBlockedAccessGuard(true)
   const { token } = useAuthStore()
+  if (checking) return <AccessCheckSplash />
+  if (blocked) return <Navigate to="/auth?blocked=1" replace />
   if (!token) return <Navigate to="/auth" replace />
   return children
 }
 
 function RequireToken({ children }) {
+  const { checking, blocked } = useBlockedAccessGuard(true)
   const { token, hasBotToken, user } = useAuthStore()
+  if (checking) return <AccessCheckSplash />
+  if (blocked) return <Navigate to="/auth?blocked=1" replace />
   if (!token) return <Navigate to="/auth" replace />
   if (!hasBotToken && user?.role !== 'api_provider') return <Navigate to="/setup" replace />
   return children

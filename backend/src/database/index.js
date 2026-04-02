@@ -47,6 +47,11 @@ function usersTableSupportsExtendedRoles() {
   return sql.includes("'admin'") && sql.includes("'api_provider'");
 }
 
+function accessBlocksSupportClientSignature() {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'access_blocks'").get();
+  return String(row?.sql || '').includes("'client_signature'");
+}
+
 function ensureUsersRoleConstraint() {
   if (usersTableSupportsExtendedRoles()) return;
 
@@ -125,6 +130,58 @@ function ensureUsersRoleConstraint() {
 
       db.exec('DROP TABLE users');
       db.exec('ALTER TABLE users__next RENAME TO users');
+    });
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+function ensureAccessBlockTypes() {
+  if (accessBlocksSupportClientSignature()) return;
+
+  logger.info('Migrating access_blocks table to support stronger client signatures...');
+  db.exec('PRAGMA foreign_keys = OFF');
+
+  try {
+    transaction(() => {
+      db.exec('DROP TABLE IF EXISTS access_blocks__next');
+      db.exec(`
+        CREATE TABLE access_blocks__next (
+          id              TEXT PRIMARY KEY,
+          user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          block_type      TEXT NOT NULL CHECK(block_type IN ('ip','device','client_signature')),
+          value_hash      TEXT NOT NULL,
+          user_agent      TEXT,
+          is_active       INTEGER NOT NULL DEFAULT 1,
+          created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(user_id, block_type, value_hash)
+        )
+      `);
+
+      db.exec(`
+        INSERT INTO access_blocks__next (
+          id, user_id, block_type, value_hash, user_agent, is_active, created_at, updated_at
+        )
+        SELECT
+          id,
+          user_id,
+          CASE
+            WHEN block_type IN ('ip','device','client_signature') THEN block_type
+            ELSE 'device'
+          END,
+          value_hash,
+          user_agent,
+          COALESCE(is_active, 1),
+          created_at,
+          updated_at
+        FROM access_blocks
+      `);
+
+      db.exec('DROP TABLE access_blocks');
+      db.exec('ALTER TABLE access_blocks__next RENAME TO access_blocks');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_access_blocks_user_id ON access_blocks(user_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_access_blocks_lookup ON access_blocks(block_type, value_hash, is_active)');
     });
   } finally {
     db.exec('PRAGMA foreign_keys = ON');
@@ -223,6 +280,7 @@ function runMigrations() {
   ensureColumn('users', 'analytics_layout', 'TEXT');
   ensureColumn('users', 'last_seen_ip_hash', 'TEXT');
   ensureColumn('users', 'last_seen_device_hash', 'TEXT');
+  ensureColumn('users', 'last_seen_client_signature_hash', 'TEXT');
   ensureColumn('users', 'last_seen_user_agent', 'TEXT');
   ensureColumn('users', 'discord_username', 'TEXT');
   ensureColumn('users', 'discord_global_name', 'TEXT');
@@ -243,6 +301,7 @@ function runMigrations() {
   ensureColumn('guild_dm_settings', 'footer_text', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('guild_ticket_generators', 'panel_thumbnail_url', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('guild_ticket_generators', 'panel_image_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_ticket_generators', 'transcript_channel_id', "TEXT NOT NULL DEFAULT ''");
   db.exec(`
     UPDATE support_tickets
     SET claimed_once_at = claimed_at
@@ -251,6 +310,7 @@ function runMigrations() {
   `);
   ensureColumn('warnings', 'metadata', "TEXT DEFAULT '{}'");
   ensureUsersRoleConstraint();
+  ensureAccessBlockTypes();
   ensureAIConfigProviderConstraint();
   ensureColumn('ai_config', 'user_quota_tokens', 'INTEGER DEFAULT 4000');
   ensureColumn('ai_config', 'site_quota_tokens', 'INTEGER DEFAULT 20000');

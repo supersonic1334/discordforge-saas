@@ -18,7 +18,7 @@ const { ensureFounder } = require('./services/authService');
 const botManager = require('./services/botManager');
 const wsServer = require('./websocket');
 const jobs = require('./jobs');
-const { requireUnblockedClient, errorHandler, notFound } = require('./middleware');
+const { resolveClientBlock, requireUnblockedClient, errorHandler, notFound } = require('./middleware');
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 const authRoutes = require('./routes/auth');
@@ -82,6 +82,84 @@ function setNoStoreHeaders(res) {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
+}
+
+function requestAcceptsHtml(req) {
+  const accept = String(req.headers.accept || '').toLowerCase();
+  return accept.includes('text/html') || accept.includes('application/xhtml+xml');
+}
+
+function isNavigationRequest(req) {
+  if (!['GET', 'HEAD'].includes(req.method)) return false;
+  const ext = path.extname(req.path || '');
+  return !ext || requestAcceptsHtml(req);
+}
+
+function renderBlockedDocument() {
+  return `<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DiscordForger bloque</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top, rgba(0,229,255,0.12), transparent 38%),
+          radial-gradient(circle at bottom, rgba(124,58,237,0.16), transparent 34%),
+          #05070d;
+        color: #f8fafc;
+        font-family: Inter, system-ui, sans-serif;
+      }
+      .card {
+        width: min(100%, 520px);
+        padding: 32px 28px;
+        border-radius: 28px;
+        border: 1px solid rgba(248,113,113,0.22);
+        background: linear-gradient(180deg, rgba(20,16,27,0.96), rgba(10,10,16,0.96));
+        box-shadow: 0 30px 90px rgba(0,0,0,0.46);
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(248,113,113,0.28);
+        background: rgba(248,113,113,0.1);
+        color: #fca5a5;
+        font: 700 11px/1 "Share Tech Mono", ui-monospace, monospace;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 20px 0 10px;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.05;
+      }
+      p {
+        margin: 0;
+        color: rgba(248,250,252,0.72);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="badge">Acces bloque</div>
+      <h1>Cette machine n'a plus acces au site.</h1>
+      <p>La protection est appliquee avant le chargement du site. Tant que le blocage n'est pas retire, aucune page ni ressource privee n'est accessible.</p>
+    </main>
+  </body>
+</html>`;
 }
 
 // ── Security headers ──────────────────────────────────────────────────────────
@@ -326,6 +404,29 @@ app.use(`${prefix}/support`, supportRoutes);
 app.use(`${prefix}/reviews`, reviewsRoutes);
 app.use(`${prefix}/osint`, osintRoutes);
 app.use(`${prefix}/guilds/:guildId/playbooks`, playbooksRoutes);
+
+app.use((req, res, next) => {
+  if (req.path === '/health' || req.path === '/ws' || req.path.startsWith(prefix)) {
+    return next();
+  }
+
+  const matchedBlock = resolveClientBlock(req, res);
+  if (!matchedBlock) return next();
+
+  logger.warn(`Blocked frontend access attempt`, {
+    blockType: matchedBlock.block_type,
+    ip: req.ip,
+    path: req.path,
+  });
+
+  setNoStoreHeaders(res);
+
+  if (isNavigationRequest(req)) {
+    return res.status(403).type('html').send(renderBlockedDocument());
+  }
+
+  return res.status(403).type('text/plain').send('Access blocked');
+});
 
 if (fs.existsSync(frontendDistDir)) {
   app.use(express.static(frontendDistDir, {

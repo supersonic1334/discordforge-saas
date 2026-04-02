@@ -24,20 +24,26 @@ function getFounderByToken(req) {
   return null;
 }
 
-function requireUnblockedClient(req, res, next) {
+function resolveClientBlock(req, res, options = {}) {
+  const { allowAccessStatus = false } = options;
+
   syncDeviceCookie(req, res);
 
-  if (req.path === '/auth/access-status') {
-    return next();
+  if (allowAccessStatus && req.path === '/auth/access-status') {
+    return null;
   }
 
   const founder = getFounderByToken(req);
   if (founder) {
     req.blockBypassUser = founder;
-    return next();
+    return null;
   }
 
-  const matchedBlock = findMatchingBlock(req);
+  return findMatchingBlock(req);
+}
+
+function requireUnblockedClient(req, res, next) {
+  const matchedBlock = resolveClientBlock(req, res, { allowAccessStatus: true });
   if (!matchedBlock) return next();
 
   logger.warn(`Blocked client access attempt`, {
@@ -217,6 +223,7 @@ function notFound(req, res) {
 }
 
 module.exports = {
+  resolveClientBlock,
   requireUnblockedClient,
   requireAuth,
   requireFounder,

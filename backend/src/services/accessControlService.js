@@ -4,7 +4,7 @@ const db = require('../database');
 const { hash } = require('./encryptionService');
 
 const DEVICE_COOKIE_NAME = 'discordforge_device';
-const BLOCK_TYPES = ['ip', 'device'];
+const BLOCK_TYPES = ['ip', 'device', 'client_signature'];
 
 function normalizeIp(ip) {
   if (!ip) return null;
@@ -80,11 +80,24 @@ function getRequestAccessMetadata(req) {
   const ip = getClientIp(req);
   const deviceId = getDeviceId(req);
   const userAgent = String(req.get('user-agent') || '').slice(0, 500);
+  const acceptLanguage = String(req.get('accept-language') || '').slice(0, 200);
+  const clientHintsUa = String(req.get('sec-ch-ua') || '').slice(0, 200);
+  const clientHintsPlatform = String(req.get('sec-ch-ua-platform') || '').slice(0, 120);
+  const clientHintsMobile = String(req.get('sec-ch-ua-mobile') || '').slice(0, 40);
+  const clientSignatureSource = [
+    userAgent.trim().toLowerCase(),
+    acceptLanguage.trim().toLowerCase(),
+    clientHintsUa.trim().toLowerCase(),
+    clientHintsPlatform.trim().toLowerCase(),
+    clientHintsMobile.trim().toLowerCase(),
+  ].filter(Boolean).join('|');
+  const clientSignatureHash = clientSignatureSource ? hash(`client_signature:${clientSignatureSource}`) : null;
 
   return {
     ip,
     deviceId,
     userAgent,
+    clientSignatureHash,
     ipHash: ip ? hash(`ip:${ip}`) : null,
     deviceHash: deviceId ? hash(`device:${deviceId}`) : null,
   };
@@ -99,6 +112,7 @@ function recordUserAccess(userId, req) {
   db.update('users', {
     last_seen_ip_hash: metadata.ipHash,
     last_seen_device_hash: metadata.deviceHash,
+    last_seen_client_signature_hash: metadata.clientSignatureHash,
     last_seen_user_agent: metadata.userAgent || null,
     last_seen_at: now,
   }, { id: userId });
@@ -117,6 +131,11 @@ function findMatchingBlock(req) {
   if (metadata.deviceHash) {
     conditions.push("(block_type = 'device' AND value_hash = ?)");
     params.push(metadata.deviceHash);
+  }
+
+  if (metadata.clientSignatureHash) {
+    conditions.push("(block_type = 'client_signature' AND value_hash = ?)");
+    params.push(metadata.clientSignatureHash);
   }
 
   if (!conditions.length) return null;
@@ -176,6 +195,7 @@ function applyAdvancedBlocksForUser(userId, actorUserId, req) {
   const candidates = [
     { blockType: 'ip', valueHash: user.last_seen_ip_hash, actorValueHash: actorMetadata?.ipHash ?? null },
     { blockType: 'device', valueHash: user.last_seen_device_hash, actorValueHash: actorMetadata?.deviceHash ?? null },
+    { blockType: 'client_signature', valueHash: user.last_seen_client_signature_hash, actorValueHash: actorMetadata?.clientSignatureHash ?? null },
   ];
 
   let created = 0;
