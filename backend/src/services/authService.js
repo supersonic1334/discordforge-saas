@@ -258,7 +258,7 @@ function safeUser(user) {
 // ── Register ──────────────────────────────────────────────────────────────────
 async function register({ email, username, password, req }) {
   const normalizedEmail = normalizeEmail(email);
-  const emailVerificationEnabled = config.AUTH_REQUIRE_EMAIL_VERIFICATION && mailService.isMailConfigured();
+  const emailVerificationRequired = !!config.AUTH_REQUIRE_EMAIL_VERIFICATION;
   await emailPolicyService.assertAllowedRegistrationEmail(normalizedEmail, {
     allowKnownBypass: isPrimaryFounderEmail(normalizedEmail),
   });
@@ -268,7 +268,14 @@ async function register({ email, username, password, req }) {
   const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const requestInsight = await buildRequestInsight(req);
 
-  if (!emailVerificationEnabled) {
+  if (emailVerificationRequired && !mailService.isMailConfigured()) {
+    throw Object.assign(
+      new Error('Verification e-mail indisponible: le serveur e-mail n est pas configure'),
+      { status: 503 }
+    );
+  }
+
+  if (!emailVerificationRequired) {
     const id = uuidv4();
 
     db.insert('users', {
@@ -333,13 +340,11 @@ async function login({ email, password, req }) {
 
   const requestInsight = await buildRequestInsight(req);
 
-  if (!user.email_verified && mailService.isMailConfigured()) {
-    await sendExistingAccountVerificationEmail(user, requestInsight);
-    return {
-      requires_verification: true,
-      email_masked: maskEmail(user.email),
-      message: 'Validation e-mail requise',
-    };
+  if (!user.email_verified) {
+    throw Object.assign(
+      new Error('Valide ton adresse e-mail depuis le lien recu lors de l inscription'),
+      { status: 403 }
+    );
   }
 
   if (loginApprovalEnabled && !authChallengeService.isTrustedDevice(user.id, requestInsight)) {

@@ -56,7 +56,7 @@ const envSchema = z.object({
   SMTP_FROM_NAME: z.string().default('DiscordForger Security'),
 
   AUTH_REQUIRE_EMAIL_VERIFICATION: booleanish(true),
-  AUTH_REQUIRE_LOGIN_APPROVAL_NEW_DEVICE: booleanish(true),
+  AUTH_REQUIRE_LOGIN_APPROVAL_NEW_DEVICE: booleanish(false),
   AUTH_REQUIRE_ALLOWED_EMAIL_DOMAIN: booleanish(true),
   AUTH_LOOKUP_LOGIN_LOCATION: booleanish(true),
   AUTH_VERIFICATION_TTL_MINUTES: z.coerce.number().min(5).max(1440).default(30),
