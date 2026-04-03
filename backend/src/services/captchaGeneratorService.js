@@ -7,7 +7,8 @@ const db = require('../database');
 
 const DEFAULT_COLOR = '#06b6d4';
 const DEFAULT_PANEL_TITLE = 'Verification du serveur';
-const DEFAULT_PANEL_DESCRIPTION = 'Clique sur le bouton ci-dessous pour verifier ton acces et recuperer ton role automatiquement.';
+const DEFAULT_PANEL_DESCRIPTION = 'Clique sur ce bouton ci-dessous pour vérifier ton accès au serveur.';
+const LEGACY_PANEL_DESCRIPTION = 'Clique sur le bouton ci-dessous pour verifier ton acces et recuperer ton role automatiquement.';
 const DEFAULT_CHANNEL_NAME = 'verification';
 const DEFAULT_SUCCESS_MESSAGE = 'Verification reussie. Acces debloque.';
 const DEFAULT_FAILURE_MESSAGE = 'Verification invalide. Reessaie une nouvelle fois.';
@@ -98,6 +99,11 @@ function normalizeText(value, maxLength, fallback = '') {
   return String(value ?? fallback ?? '').trim().slice(0, maxLength);
 }
 
+function normalizePanelDescription(value) {
+  const normalized = normalizeText(value, 2000, DEFAULT_PANEL_DESCRIPTION);
+  return normalized === LEGACY_PANEL_DESCRIPTION ? DEFAULT_PANEL_DESCRIPTION : normalized;
+}
+
 function normalizeColor(value, fallback = DEFAULT_COLOR) {
   const raw = String(value || fallback || '').trim();
   const next = raw.startsWith('#') ? raw : `#${raw}`;
@@ -169,7 +175,7 @@ function mapCaptchaConfigRow(row) {
     panel_channel_name: normalizeText(source.panel_channel_name, 90, DEFAULT_CHANNEL_NAME) || DEFAULT_CHANNEL_NAME,
     panel_message_id: normalizeSnowflake(source.panel_message_id),
     panel_title: normalizeText(source.panel_title, 120, DEFAULT_PANEL_TITLE) || DEFAULT_PANEL_TITLE,
-    panel_description: normalizeText(source.panel_description, 2000, DEFAULT_PANEL_DESCRIPTION),
+    panel_description: normalizePanelDescription(source.panel_description),
     panel_color: normalizeColor(source.panel_color, DEFAULT_COLOR),
     panel_thumbnail_url: normalizeAssetUrl(source.panel_thumbnail_url),
     panel_image_url: normalizeAssetUrl(source.panel_image_url),
@@ -382,6 +388,27 @@ function getActiveCaptchaChallengeById(challengeId) {
   return challenge;
 }
 
+function getActiveCaptchaChallengeForUser(guildId, discordUserId, discordChannelId = '') {
+  const row = db.db.prepare(`
+    SELECT *
+    FROM guild_captcha_challenges
+    WHERE guild_id = ?
+      AND discord_user_id = ?
+      AND status = 'pending'
+      AND (? = '' OR discord_channel_id = ?)
+    ORDER BY datetime(created_at) DESC
+    LIMIT 1
+  `).get(
+    guildId,
+    String(discordUserId || '').trim(),
+    normalizeSnowflake(discordChannelId),
+    normalizeSnowflake(discordChannelId)
+  );
+
+  if (!row) return null;
+  return getActiveCaptchaChallengeById(row.id);
+}
+
 function validateCaptchaChallenge(challengeId, submittedAnswer) {
   const challenge = getActiveCaptchaChallengeById(challengeId);
   if (!challenge) {
@@ -451,6 +478,7 @@ module.exports = {
   createCaptchaChallenge,
   getCaptchaChallengeById,
   getActiveCaptchaChallengeById,
+  getActiveCaptchaChallengeForUser,
   validateCaptchaChallenge,
   normalizeAnswer,
 };

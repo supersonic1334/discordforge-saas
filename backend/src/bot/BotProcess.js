@@ -62,7 +62,9 @@ const {
   recordPublishedCaptchaPanel,
   createCaptchaChallenge,
   getActiveCaptchaChallengeById,
+  getActiveCaptchaChallengeForUser,
   validateCaptchaChallenge,
+  normalizeAnswer: normalizeCaptchaAnswer,
 } = require('../services/captchaGeneratorService');
 const { buildCaptchaPngAttachment } = require('../services/captchaImageService');
 const config = require('../config');
@@ -2317,37 +2319,11 @@ class BotProcess extends EventEmitter {
 
   _buildCaptchaPanelPayload(configRow) {
     const assets = this._buildCaptchaPanelAssets(configRow);
-    const selectedType = this._getCaptchaChallengeDefinition(configRow);
-    const roleMentions = (configRow?.verified_role_ids || []).map((roleId) => `<@&${roleId}>`).join(', ');
 
     const embed = {
       color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
       title: String(configRow.panel_title || 'Vérification du serveur'),
-      description: [
-        String(configRow.panel_description || '').trim(),
-        '',
-        'Appuie sur le bouton ci-dessous pour lancer la vérification configurée depuis le site.',
-      ].filter(Boolean).join('\n'),
-      fields: [
-        {
-          name: 'Mode actif',
-          value: `**${selectedType.label}**\n${selectedType.description}`,
-          inline: true,
-        },
-        {
-          name: 'Rôles débloqués',
-          value: roleMentions || 'Configure au moins un rôle vérifié.',
-          inline: true,
-        },
-        {
-          name: 'Sécurité',
-          value: '3 erreurs consécutives entraînent une expulsion automatique du serveur.',
-          inline: false,
-        },
-      ],
-      footer: {
-        text: 'Un seul mode est publié à la fois depuis le site.',
-      },
+      description: String(configRow.panel_description || '').trim() || 'Clique sur ce bouton ci-dessous pour vérifier ton accès au serveur.',
     };
 
     if (assets.thumbnailUrl) {
@@ -2607,10 +2583,11 @@ class BotProcess extends EventEmitter {
       embeds: [{
         color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
         title: 'Vérification CAPTCHA validée',
-        description: `${member} a terminé la vérification.`,
+        description: `${member} a validé son accès au serveur.`,
+        thumbnail: member?.user?.displayAvatarURL ? { url: member.user.displayAvatarURL({ size: 256 }) } : undefined,
         fields: [
           {
-            name: 'Mode',
+            name: 'Méthode',
             value: this._getCaptchaChallengeDefinition(configRow, challengeType).label,
             inline: true,
           },
@@ -2621,8 +2598,40 @@ class BotProcess extends EventEmitter {
           },
         ],
         timestamp: new Date().toISOString(),
+        footer: {
+          text: guild?.name || 'CAPTCHA',
+        },
       }],
     }).catch(() => {});
+  }
+
+  _buildCaptchaFeedbackEmbed(configRow, {
+    title,
+    description,
+    tone = 'info',
+    imageUrl = '',
+    footer = '',
+  } = {}) {
+    const colorByTone = {
+      success: 0x22c55e,
+      error: 0xef4444,
+      warning: 0xf59e0b,
+      info: Number.parseInt(String(configRow?.panel_color || '#06b6d4').replace('#', ''), 16),
+    };
+
+    const embed = {
+      color: colorByTone[tone] || colorByTone.info,
+      title: String(title || 'CAPTCHA').slice(0, 256),
+      description: String(description || '').trim().slice(0, 4000),
+    };
+
+    if (imageUrl) {
+      embed.image = { url: imageUrl };
+    }
+    if (footer) {
+      embed.footer = { text: String(footer).slice(0, 2048) };
+    }
+    return embed;
   }
 
   async _resolveCaptchaMember(interaction) {
@@ -2645,6 +2654,31 @@ class BotProcess extends EventEmitter {
       content,
       ephemeral: true,
       components: [],
+    }).catch(() => {});
+
+    return true;
+  }
+
+  async _handleCaptchaMaxAttemptsMessage(message) {
+    const member = await message.guild.members.fetch(message.author.id).catch(() => null);
+    let kicked = false;
+
+    if (member?.kickable) {
+      kicked = await member.kick('Échec CAPTCHA après 3 tentatives').then(() => true).catch(() => false);
+    }
+
+    await message.channel.send({
+      content: `<@${message.author.id}>`,
+      embeds: [
+        this._buildCaptchaFeedbackEmbed(null, {
+          title: 'Vérification refusée',
+          description: kicked
+            ? 'Trop de codes incorrects. Tu as été expulsé du serveur.'
+            : 'Trop de codes incorrects. Le bot n’a pas pu t’expulser automatiquement.',
+          tone: 'error',
+        }),
+      ],
+      allowedMentions: { users: [message.author.id] },
     }).catch(() => {});
 
     return true;
@@ -2720,6 +2754,109 @@ class BotProcess extends EventEmitter {
     return true;
   }
 
+  async _handleCaptchaMessageAnswer(message, activeChallenge, internalGuildId) {
+    if (!activeChallenge || activeChallenge.guild_id !== internalGuildId || activeChallenge.challenge_type !== 'image_code') {
+      return false;
+    }
+
+    if (String(activeChallenge.discord_user_id) !== String(message.author.id)) {
+      return false;
+    }
+
+    const configRow = getGuildCaptchaConfigById(activeChallenge.config_id);
+    if (!configRow?.id || configRow.guild_id !== internalGuildId) {
+      await message.channel.send({
+        content: `<@${message.author.id}>`,
+        embeds: [
+          this._buildCaptchaFeedbackEmbed(null, {
+            title: 'CAPTCHA indisponible',
+            description: 'La configuration CAPTCHA est introuvable.',
+            tone: 'error',
+          }),
+        ],
+        allowedMentions: { users: [message.author.id] },
+      }).catch(() => {});
+      return true;
+    }
+
+    const result = validateCaptchaChallenge(activeChallenge.id, message.content);
+    await message.delete().catch(() => {});
+
+    if (!result.ok) {
+      if (result.reason === 'max_attempts') {
+        return this._handleCaptchaMaxAttemptsMessage(message);
+      }
+
+      const description = result.reason === 'expired'
+        ? 'Le CAPTCHA a expiré. Clique de nouveau sur le bouton de vérification.'
+        : result.reason === 'empty'
+          ? 'Envoie uniquement le code affiché dans le salon.'
+          : String(configRow.failure_message || 'Code invalide. Réessaie.');
+
+      await message.channel.send({
+        content: `<@${message.author.id}>`,
+        embeds: [
+          this._buildCaptchaFeedbackEmbed(configRow, {
+            title: 'Code invalide',
+            description,
+            tone: 'warning',
+          }),
+        ],
+        allowedMentions: { users: [message.author.id] },
+      }).catch(() => {});
+      return true;
+    }
+
+    const member = await message.guild.members.fetch(message.author.id).catch(() => null);
+    if (!member) {
+      await message.channel.send({
+        content: `<@${message.author.id}>`,
+        embeds: [
+          this._buildCaptchaFeedbackEmbed(configRow, {
+            title: 'Membre introuvable',
+            description: 'Impossible de finaliser la vérification pour ce membre.',
+            tone: 'error',
+          }),
+        ],
+        allowedMentions: { users: [message.author.id] },
+      }).catch(() => {});
+      return true;
+    }
+
+    const rolesToGrant = (configRow.verified_role_ids || [])
+      .map((roleId) => message.guild.roles.cache.get(roleId))
+      .filter((role) => role && role.editable)
+      .map((role) => role.id);
+
+    if (rolesToGrant.length) {
+      await member.roles.add(rolesToGrant, 'CAPTCHA reussi').catch((error) => {
+        throw new Error(`Impossible d attribuer les roles CAPTCHA: ${error.message}`);
+      });
+    }
+
+    await this._sendCaptchaLog({
+      guild: message.guild,
+      configRow,
+      member,
+      challengeType: activeChallenge.challenge_type,
+      grantedRoleIds: rolesToGrant,
+    });
+
+    await message.channel.send({
+      content: `<@${message.author.id}>`,
+      embeds: [
+        this._buildCaptchaFeedbackEmbed(configRow, {
+          title: 'Vérification validée',
+          description: String(configRow.success_message || 'Vérification réussie. Accès débloqué.'),
+          tone: 'success',
+        }),
+      ],
+      allowedMentions: { users: [message.author.id] },
+    }).catch(() => {});
+
+    return true;
+  }
+
   async _handleCaptchaStart(interaction, configId, internalGuildId) {
     const configRow = getGuildCaptchaConfigById(configId);
     if (!configRow?.id || configRow.guild_id !== internalGuildId || !configRow.enabled) {
@@ -2770,14 +2907,7 @@ class BotProcess extends EventEmitter {
         embeds: [{
           color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
           title: prompt.title,
-          description: `${prompt.description}\n\n**Défi :** ${prompt.promptText}`,
-          fields: [
-            {
-              name: 'Sécurité',
-              value: '3 erreurs consécutives = expulsion automatique.',
-              inline: false,
-            },
-          ],
+          description: `${prompt.description}\n\n${prompt.promptText}`,
         }],
         components: this._buildCaptchaChoiceComponents(challenge.id, prompt.choices),
       }).catch(() => {});
@@ -2787,31 +2917,15 @@ class BotProcess extends EventEmitter {
     const attachment = buildCaptchaPngAttachment(prompt.visualCode, challenge.id, configRow.panel_color);
     await interaction.reply({
       ephemeral: true,
-      embeds: [{
-        color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
-        title: 'Code image',
-        description: 'Observe le code affiché puis ouvre le formulaire pour le recopier exactement.',
-        image: { url: `attachment://${attachment.name}` },
-        fields: [
-          {
-            name: 'Sécurité',
-            value: '3 erreurs consécutives = expulsion automatique.',
-            inline: false,
-          },
-        ],
-        footer: {
-          text: 'Recopie les 6 chiffres affichés.',
-        },
-      }],
-      files: [attachment],
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(this._buildCaptchaCustomId('answer', challenge.id))
-            .setLabel('Entrer le code')
-            .setStyle(ButtonStyle.Primary)
-        ),
+      embeds: [
+        this._buildCaptchaFeedbackEmbed(configRow, {
+          title: 'CAPTCHA',
+          description: 'Recopie le code affiché, puis envoie-le directement dans ce salon.',
+          imageUrl: `attachment://${attachment.name}`,
+          footer: 'Après 3 erreurs consécutives, le membre est expulsé automatiquement.',
+        }),
       ],
+      files: [attachment],
     }).catch(() => {});
     return true;
   }
@@ -3698,6 +3812,26 @@ class BotProcess extends EventEmitter {
     const guildId = message.guild.id;
     const configs = await this._getEnabledModules(guildId);
     const internalGuildId = this._resolveInternalGuildId(guildId);
+
+    if (!message.author?.bot) {
+      const pendingCaptcha = internalGuildId
+        ? getActiveCaptchaChallengeForUser(internalGuildId, message.author?.id, message.channelId)
+        : null;
+      const normalizedCaptchaAnswer = normalizeCaptchaAnswer(message.content);
+      if (
+        pendingCaptcha
+        && pendingCaptcha.challenge_type === 'image_code'
+        && normalizedCaptchaAnswer
+        && normalizedCaptchaAnswer.length >= 4
+        && normalizedCaptchaAnswer.length <= 8
+      ) {
+        const handled = await this._handleCaptchaMessageAnswer(message, pendingCaptcha, internalGuildId).catch((error) => {
+          logger.error(`Captcha message error: ${error.message}`);
+          return false;
+        });
+        if (handled) return;
+      }
+    }
 
     // Security modules — process message content
     const promises = [];

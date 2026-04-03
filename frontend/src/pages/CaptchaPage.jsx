@@ -43,7 +43,7 @@ const DEFAULT_CHALLENGE_TYPES = [
 const CHALLENGE_META = {
   image_code: {
     badge: 'Image générée',
-    helper: 'Image brouillée envoyée par le bot, puis saisie du code en privé.',
+    helper: 'Image brouillée envoyée par le bot, puis saisie du code directement dans le salon.',
   },
   quick_math: {
     badge: 'Calcul modal',
@@ -66,7 +66,7 @@ const DEFAULT_CONFIG = {
   panel_channel_name: 'verification',
   panel_message_id: '',
   panel_title: 'Vérification CAPTCHA',
-  panel_description: 'Clique sur le bouton pour vérifier ton accès et récupérer automatiquement ton rôle.',
+  panel_description: 'Clique sur ce bouton ci-dessous pour vérifier ton accès au serveur.',
   panel_color: '#06b6d4',
   panel_thumbnail_url: '',
   panel_image_url: '',
@@ -76,6 +76,8 @@ const DEFAULT_CONFIG = {
   failure_message: 'Vérification invalide. Réessaie une nouvelle fois.',
   challenge_types: DEFAULT_CHALLENGE_TYPES,
 }
+
+const LEGACY_PANEL_DESCRIPTION = 'Clique sur le bouton ci-dessous pour vérifier ton accès et récupérer automatiquement ton rôle.'
 
 function getErrorMessage(error) {
   const responseData = error?.response?.data
@@ -159,10 +161,12 @@ function mergeChallengeTypes(challengeTypes = []) {
 }
 
 function normalizeConfig(value = {}) {
+  const normalizedDescription = String(value?.panel_description || '').trim()
   return {
     ...DEFAULT_CONFIG,
     ...(value || {}),
     panel_channel_name: String(value?.panel_channel_name || DEFAULT_CONFIG.panel_channel_name).trim() || DEFAULT_CONFIG.panel_channel_name,
+    panel_description: normalizedDescription === LEGACY_PANEL_DESCRIPTION ? DEFAULT_CONFIG.panel_description : (normalizedDescription || DEFAULT_CONFIG.panel_description),
     verified_role_ids: [...new Set((Array.isArray(value?.verified_role_ids) ? value.verified_role_ids : []).map((roleId) => String(roleId || '').trim()).filter(Boolean))],
     challenge_types: mergeChallengeTypes(value?.challenge_types),
   }
@@ -423,7 +427,6 @@ export default function CaptchaPage() {
   const draftDirty = configFingerprint !== draftFingerprint
   const enabledChallenges = (normalizedDraft?.challenge_types || []).filter((item) => item.enabled)
   const selectedChallenge = enabledChallenges[0] || normalizedDraft?.challenge_types?.[0] || DEFAULT_CHALLENGE_TYPES[0]
-  const selectedChallengeMeta = CHALLENGE_META[selectedChallenge?.key] || CHALLENGE_META.image_code
   const selectedRoles = useMemo(() => new Set(normalizedDraft?.verified_role_ids || []), [normalizedDraft])
 
   const applyOverview = (payload = {}, preserveDraft = false) => {
@@ -821,35 +824,6 @@ export default function CaptchaPage() {
                         <div className="min-w-0 flex-1">
                           <div className="font-display text-lg font-700 text-white">{normalizedDraft.panel_title || DEFAULT_CONFIG.panel_title}</div>
                           <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">{normalizedDraft.panel_description || DEFAULT_CONFIG.panel_description}</div>
-                          <div className="mt-4 space-y-2">
-                            <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.08] px-3 py-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="font-display text-sm font-700 text-white">{selectedChallenge?.label || 'Mode CAPTCHA'}</div>
-                                <div className="rounded-full border border-cyan-400/20 bg-cyan-500/12 px-2.5 py-1 text-[11px] font-mono text-cyan-200">
-                                  {selectedChallengeMeta.badge}
-                                </div>
-                              </div>
-                              <div className="mt-2 text-xs leading-5 text-white/60">{selectedChallenge?.description || DEFAULT_CHALLENGE_TYPES[0].description}</div>
-                              <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/55">
-                                {selectedChallengeMeta.helper}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {(normalizedDraft.verified_role_ids || []).slice(0, 4).map((roleId) => {
-                              const role = visibleRoles.find((item) => item.id === roleId)
-                              return (
-                                <div key={roleId} className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-[11px] font-mono text-cyan-200">
-                                  @{role?.name || roleId}
-                                </div>
-                              )
-                            })}
-                            {(normalizedDraft.verified_role_ids || []).length === 0 && (
-                              <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/45">
-                                Aucun rôle vérifié
-                              </div>
-                            )}
-                          </div>
                         </div>
                       </div>
                     </div>
