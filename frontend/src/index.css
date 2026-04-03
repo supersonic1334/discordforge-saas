@@ -445,17 +445,25 @@
   .auth-page-shell[data-scrollable="true"] {
     overflow-y: auto !important;
     align-items: flex-start;
+    overscroll-behavior-y: contain;
   }
   .auth-page-shell[data-scrollable="true"] .auth-page-frame {
     height: auto;
     min-height: 100%;
+    max-height: none;
+    overflow: visible;
     justify-content: flex-start;
     padding-top: clamp(0.35rem, 1vh, 0.9rem);
     padding-bottom: clamp(0.6rem, 1.6vh, 1rem);
   }
   .auth-page-shell[data-scrollable="true"] .auth-mobile-panel {
+    max-height: none;
+    min-height: max-content;
     padding-top: 0.25rem !important;
     padding-bottom: 0.5rem !important;
+  }
+  .auth-page-shell[data-scrollable="true"] .auth-mobile-card {
+    overflow: visible;
   }
   .auth-page-shell::-webkit-scrollbar {
     display: none;
@@ -615,7 +623,7 @@
   .sidebar-email-fast::after {
     content: '';
     position: absolute;
-    inset: 1px;
+    inset: -20% 0 -32% 0;
     border-radius: 9px;
     background-image:
       radial-gradient(circle at 12% 10%, rgba(255,255,255,0.86) 0 1px, transparent 1.5px),
@@ -627,10 +635,11 @@
       radial-gradient(circle at 38% 44%, rgba(255,255,255,0.66) 0 1px, transparent 1.55px),
       radial-gradient(circle at 74% 32%, rgba(228,237,245,0.62) 0 0.95px, transparent 1.45px);
     background-repeat: repeat;
-    background-size: 140px 110px;
-    animation: email-fast-snowfall 7.8s linear infinite;
+    background-size: 128px 152px;
+    animation: email-fast-snowfall 5.8s linear infinite;
     pointer-events: none;
-    opacity: 0.68;
+    opacity: 0.8;
+    will-change: transform, background-position;
   }
   .sidebar-email-fast:hover {
     opacity: 0.98;
@@ -693,26 +702,28 @@
   }
   @keyframes email-fast-snowfall {
     0% {
+      transform: translate3d(0, -8%, 0);
       background-position:
-        0 -42px,
-        0 -18px,
-        0 -56px,
-        0 -22px,
-        0 -64px,
-        0 -16px,
-        0 -36px,
-        0 -72px;
+        0 -86px,
+        0 -48px,
+        0 -118px,
+        0 -52px,
+        0 -134px,
+        0 -44px,
+        0 -76px,
+        0 -142px;
     }
     100% {
+      transform: translate3d(0, 8%, 0);
       background-position:
-        -14px 78px,
-        10px 92px,
-        -18px 88px,
-        12px 84px,
-        -10px 98px,
-        16px 82px,
-        -8px 90px,
-        13px 104px;
+        -18px 138px,
+        14px 168px,
+        -22px 194px,
+        16px 176px,
+        -14px 210px,
+        18px 164px,
+        -12px 182px,
+        15px 224px;
     }
   }
   .sidebar-resize-rail {
