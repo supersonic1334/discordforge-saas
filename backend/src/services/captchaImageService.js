@@ -289,6 +289,18 @@ function buildCaptchaPngAttachment(code, challengeId, color = '#06b6d4') {
   return new AttachmentBuilder(buffer, { name: fileName });
 }
 
+function buildCaptchaPngBuffer(code, color = '#06b6d4') {
+  const image = buildImageBuffer(code, color);
+  return toPngBuffer(image);
+}
+
+function buildCaptchaPngDataUrl(code, challengeId, color = '#06b6d4') {
+  const buffer = buildCaptchaPngBuffer(code, color);
+  return `data:image/png;base64,${buffer.toString('base64')}`;
+}
+
 module.exports = {
   buildCaptchaPngAttachment,
+  buildCaptchaPngBuffer,
+  buildCaptchaPngDataUrl,
 };

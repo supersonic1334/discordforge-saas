@@ -232,9 +232,11 @@ export default function AuthPage() {
   const [mode, setMode] = useState('login')
   const [showPass, setShowPass] = useState(false)
   const [activeFeature, setActiveFeature] = useState('secure')
-  const [form, setForm] = useState({ email: '', username: '', password: '' })
+  const [form, setForm] = useState({ email: '', username: '', password: '', captchaAnswer: '' })
   const [error, setError] = useState('')
   const [pendingNotice, setPendingNotice] = useState('')
+  const [registerCaptcha, setRegisterCaptcha] = useState(null)
+  const [captchaLoading, setCaptchaLoading] = useState(false)
   const [accessChecked, setAccessChecked] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const [oauthProviders, setOauthProviders] = useState({ discord: false, google: false })
@@ -245,6 +247,7 @@ export default function AuthPage() {
   const formRef = useRef(null)
   const pointerX = useMotionValue(50)
   const pointerY = useMotionValue(24)
+  const registerCaptchaReady = mode !== 'register' || (!!registerCaptcha?.token && !captchaLoading)
 
   const featureCards = [
     {
@@ -352,6 +355,27 @@ export default function AuthPage() {
     setPendingNotice('')
   }
 
+  const loadRegisterCaptcha = async (options = {}) => {
+    if (mode !== 'register' && !options.force) return
+    setCaptchaLoading(true)
+    try {
+      const res = await authAPI.registerChallenge()
+      setRegisterCaptcha(res.data || null)
+      setForm((previous) => ({ ...previous, captchaAnswer: '' }))
+    } catch {
+      setRegisterCaptcha(null)
+      setError('CAPTCHA indisponible. Recharge la page et reessaie.')
+    } finally {
+      setCaptchaLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (mode === 'register' && !registerCaptcha && !captchaLoading) {
+      loadRegisterCaptcha({ force: true })
+    }
+  }, [mode, registerCaptcha, captchaLoading])
+
   const submit = async (event) => {
     event.preventDefault()
     setError('')
@@ -359,7 +383,13 @@ export default function AuthPage() {
     const normalizedEmail = form.email.trim().toLowerCase()
     const data = mode === 'login'
       ? { email: normalizedEmail, password: form.password }
-      : { email: normalizedEmail, username: form.username.trim(), password: form.password }
+      : {
+          email: normalizedEmail,
+          username: form.username.trim(),
+          password: form.password,
+          captcha_token: registerCaptcha?.token || '',
+          captcha_answer: form.captchaAnswer,
+        }
     const fn = mode === 'login' ? login : register
     const response = await fn(data)
 
@@ -387,6 +417,9 @@ export default function AuthPage() {
       navigate('/dashboard')
     } else {
       setError(response.error || t('auth.unexpectedError'))
+      if (mode === 'register') {
+        loadRegisterCaptcha({ force: true })
+      }
     }
   }
 
@@ -614,6 +647,62 @@ export default function AuthPage() {
                   </div>
                 </motion.div>
 
+                {mode === 'register' && (
+                  <motion.div layout className="space-y-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 sm:p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-mono uppercase tracking-[0.22em] text-white/35">Anti-bot</div>
+                        <div className="text-sm text-white/70">
+                          {registerCaptcha?.prompt || 'Recopie le code affiche pour continuer'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => loadRegisterCaptcha({ force: true })}
+                        disabled={captchaLoading}
+                        className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/60 transition hover:border-neon-cyan/30 hover:text-neon-cyan disabled:opacity-50"
+                      >
+                        {captchaLoading ? 'Chargement...' : 'Recharger'}
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => loadRegisterCaptcha({ force: true })}
+                      disabled={captchaLoading}
+                      className="block w-full overflow-hidden rounded-2xl border border-neon-cyan/20 bg-[#08131f] p-2 transition hover:border-neon-cyan/40 disabled:opacity-70"
+                    >
+                      {registerCaptcha?.image_data_url ? (
+                        <img
+                          src={registerCaptcha.image_data_url}
+                          alt="CAPTCHA"
+                          className="h-28 w-full rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-white/[0.08] text-sm text-white/35">
+                          {captchaLoading ? 'Generation du CAPTCHA...' : 'CAPTCHA indisponible'}
+                        </div>
+                      )}
+                    </button>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-mono uppercase tracking-wider text-white/40">
+                        Code anti-bot
+                      </label>
+                      <input
+                        className="input-field"
+                        placeholder="Recopie le code affiche"
+                        value={form.captchaAnswer}
+                        onChange={(event) => set('captchaAnswer', event.target.value)}
+                        required={mode === 'register'}
+                        autoComplete="one-time-code"
+                        inputMode="numeric"
+                        maxLength={8}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
                 <AnimatePresence>
                   {error && (
                     <motion.div
@@ -643,7 +732,7 @@ export default function AuthPage() {
 
                 <motion.button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !registerCaptchaReady}
                   whileTap={{ scale: 0.97 }}
                   className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 hover:shadow-[0_0_28px_rgba(0,229,255,0.3),0_0_56px_rgba(0,229,255,0.1)]"
                 >
@@ -652,6 +741,8 @@ export default function AuthPage() {
                       <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
                       {mode === 'login' ? t('auth.loginLoading') : t('auth.registerLoading')}
                     </span>
+                  ) : !registerCaptchaReady ? (
+                    'Chargement du captcha...'
                   ) : mode === 'login' ? t('auth.loginSubmit') : t('auth.registerSubmit')}
                 </motion.button>
 

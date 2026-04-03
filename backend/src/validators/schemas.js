@@ -16,6 +16,8 @@ const registerSchema = z.object({
     .max(128)
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
+  captcha_token: z.string().trim().min(20, 'Captcha token missing'),
+  captcha_answer: z.string().trim().min(4, 'Captcha answer missing').max(16),
 });
 
 const loginSchema = z.object({

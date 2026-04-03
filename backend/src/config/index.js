@@ -55,13 +55,15 @@ const envSchema = z.object({
   SMTP_FROM_EMAIL: z.string().email().optional(),
   SMTP_FROM_NAME: z.string().default('DiscordForger Security'),
 
-  AUTH_REQUIRE_EMAIL_VERIFICATION: booleanish(true),
+  AUTH_REQUIRE_EMAIL_VERIFICATION: booleanish(false),
   AUTH_REQUIRE_LOGIN_APPROVAL_NEW_DEVICE: booleanish(false),
   AUTH_REQUIRE_ALLOWED_EMAIL_DOMAIN: booleanish(true),
   AUTH_LOOKUP_LOGIN_LOCATION: booleanish(true),
   AUTH_VERIFICATION_TTL_MINUTES: z.coerce.number().min(5).max(1440).default(30),
   AUTH_LOGIN_APPROVAL_TTL_MINUTES: z.coerce.number().min(5).max(1440).default(20),
-  AUTH_ALLOWED_EMAIL_DOMAINS: z.string().default('gmail.com,googlemail.com,outlook.com,hotmail.com,live.com,msn.com,yahoo.com,yahoo.fr,icloud.com,me.com,mac.com,orange.fr,orange.com,wanadoo.fr,free.fr,laposte.net,sfr.fr,bbox.fr,bouyguestelecom.fr,proton.me,protonmail.com'),
+  AUTH_SIGNUP_CAPTCHA_TTL_MINUTES: z.coerce.number().min(2).max(30).default(10),
+  AUTH_SIGNUP_CAPTCHA_LENGTH: z.coerce.number().min(4).max(8).default(6),
+  AUTH_ALLOWED_EMAIL_DOMAINS: z.string().default('gmail.com,googlemail.com,outlook.com,outlook.fr,hotmail.com,hotmail.fr,live.com,live.fr,msn.com,yahoo.com,yahoo.fr,icloud.com,me.com,mac.com,orange.fr,orange.com,wanadoo.fr,free.fr,laposte.net,sfr.fr,bbox.fr,bouyguestelecom.fr,proton.me,protonmail.com,aol.com,gmx.com,gmx.fr'),
   AUTH_BLOCKED_EMAIL_DOMAINS: z.string().default('mailinator.com,maildrop.cc,maildrop.cf,guerrillamail.com,guerrillamailblock.com,10minutemail.com,10minutemail.net,temp-mail.org,temp-mail.io,tempmail.plus,dispostable.com,yopmail.com,trashmail.com,mail.tm,moakt.com,fakemail.net,getnada.com,sharklasers.com'),
   AUTH_GEOLOOKUP_ENDPOINT: z.string().default('https://ipwho.is/{ip}'),
 

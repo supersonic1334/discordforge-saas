@@ -11,6 +11,7 @@ const authService = require('../services/authService');
 const { recordUserAccess, findMatchingBlock, syncDeviceCookie } = require('../services/accessControlService');
 const discordService = require('../services/discordService');
 const botManager = require('../services/botManager');
+const registerCaptchaService = require('../services/registerCaptchaService');
 const { encrypt, decrypt, hash } = require('../services/encryptionService');
 const wsServer = require('../websocket');
 const { requireAuth, validate } = require('../middleware');
@@ -268,6 +269,12 @@ router.get('/providers', (req, res) => {
     discord: discordOauthEnabled,
     google: googleOauthEnabled,
   });
+});
+
+router.get('/register-captcha', (req, res) => {
+  syncDeviceCookie(req, res);
+  const challenge = registerCaptchaService.createRegisterCaptcha(req);
+  res.json(challenge);
 });
 
 router.post('/discord/link', requireAuth, validate(discordLinkSchema), (req, res) => {

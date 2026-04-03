@@ -129,6 +129,7 @@ function getNoBody(url, config = {}) {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
+  registerChallenge: () => api.get('/auth/register-captcha'),
   register:       (data)     => api.post('/auth/register', data),
   login:          (data)     => api.post('/auth/login', data),
   providers:      ()         => api.get('/auth/providers'),

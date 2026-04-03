@@ -13,6 +13,7 @@ const authChallengeService = require('./authChallengeService');
 const { buildRequestInsight } = require('./requestInsightService');
 const discordService = require('./discordService');
 const { decrypt, encrypt } = require('./encryptionService');
+const registerCaptchaService = require('./registerCaptchaService');
 
 const BCRYPT_ROUNDS = 12;
 const FULLY_HIDDEN_EMAIL = '********@********.***';
@@ -401,9 +402,9 @@ function safeUser(user) {
 }
 
 // ── Register ──────────────────────────────────────────────────────────────────
-async function register({ email, username, password, req }) {
+async function register({ email, username, password, captcha_token, captcha_answer, req }) {
   const normalizedEmail = normalizeEmail(email);
-  const emailVerificationRequired = !!config.AUTH_REQUIRE_EMAIL_VERIFICATION;
+  registerCaptchaService.verifyRegisterCaptcha(req, captcha_token, captcha_answer);
   await emailPolicyService.assertAllowedRegistrationEmail(normalizedEmail, {
     allowKnownBypass: isPrimaryFounderEmail(normalizedEmail),
   });
@@ -412,51 +413,27 @@ async function register({ email, username, password, req }) {
 
   const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const requestInsight = await buildRequestInsight(req);
+  const id = uuidv4();
 
-  if (emailVerificationRequired && !mailService.isMailConfigured()) {
-    throw Object.assign(
-      new Error('Verification e-mail indisponible: le serveur e-mail n est pas configure'),
-      { status: 503 }
-    );
-  }
-
-  if (!emailVerificationRequired) {
-    const id = uuidv4();
-
-    db.insert('users', {
-      id,
-      email: normalizedEmail,
-      username,
-      password_hash,
-      role: 'member',
-      email_verified: 1,
-      email_verified_at: new Date().toISOString(),
-      is_active: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-
-    authChallengeService.trustDevice(id, requestInsight, 'Appareil d inscription');
-
-    const user = db.findOne('users', { id });
-    const token = signToken(id, 'member');
-    logger.info(`New user registered: ${normalizedEmail}`);
-    return { token, user: safeUser(user) };
-  }
-
-  await sendRegistrationVerificationEmail({
+  db.insert('users', {
+    id,
     email: normalizedEmail,
     username,
-    passwordHash: password_hash,
-    requestInsight,
+    password_hash,
+    role: 'member',
+    email_verified: 1,
+    email_verified_at: new Date().toISOString(),
+    is_active: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   });
 
-  logger.info(`Registration pending email verification: ${normalizedEmail}`);
-  return {
-    requires_verification: true,
-    email_masked: maskEmail(normalizedEmail),
-    message: 'Verification e-mail requise',
-  };
+  authChallengeService.trustDevice(id, requestInsight, 'Appareil d inscription');
+
+  const user = db.findOne('users', { id });
+  const token = signToken(id, 'member');
+  logger.info(`New user registered: ${normalizedEmail}`);
+  return { token, user: safeUser(user) };
 }
 
 // ── Login ─────────────────────────────────────────────────────────────────────
@@ -485,11 +462,19 @@ async function login({ email, password, req }) {
 
   const requestInsight = await buildRequestInsight(req);
 
-  if (!user.email_verified) {
+  if (!user.email_verified && config.AUTH_REQUIRE_EMAIL_VERIFICATION) {
     throw Object.assign(
       new Error('Valide ton adresse e-mail depuis le lien recu lors de l inscription'),
       { status: 403 }
     );
+  }
+
+  if (!user.email_verified && !config.AUTH_REQUIRE_EMAIL_VERIFICATION) {
+    db.update('users', {
+      email_verified: 1,
+      email_verified_at: user.email_verified_at || new Date().toISOString(),
+    }, { id: user.id });
+    user.email_verified = 1;
   }
 
   if (loginApprovalEnabled && !authChallengeService.isTrustedDevice(user.id, requestInsight)) {
