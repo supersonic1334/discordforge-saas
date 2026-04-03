@@ -42,6 +42,33 @@ function buildSnowLayer(count, options) {
   }))
 }
 
+function parseCaptchaLock(payload = {}) {
+  const blockedUntilMs = payload?.blocked_until ? Date.parse(payload.blocked_until) : NaN
+  return {
+    permanent: !!payload?.permanent,
+    blockedUntilMs: Number.isFinite(blockedUntilMs) ? blockedUntilMs : null,
+    lockLevel: Number(payload?.lock_level || 0),
+    failureCount: Number(payload?.failure_count || 0),
+    retryAfterSeconds: Number(payload?.retry_after_seconds || 0),
+    error: String(payload?.error || '').trim(),
+  }
+}
+
+function formatCaptchaCountdown(ms) {
+  const safeMs = Math.max(0, Number(ms) || 0)
+  const totalSeconds = Math.ceil(safeMs / 1000)
+
+  if (totalSeconds < 60) return `${totalSeconds}s`
+
+  const totalMinutes = Math.ceil(totalSeconds / 60)
+  if (totalMinutes < 60) return `${totalMinutes} min`
+
+  const totalHours = Math.ceil(totalMinutes / 60)
+  if (totalHours < 24) return `${totalHours} h`
+
+  return `${Math.ceil(totalHours / 24)} j`
+}
+
 function AuthSnowBackdrop({ pointerX, pointerY }) {
   const layerDriftX = useSpring(useTransform(pointerX, [0, 100], [-24, 24]), { stiffness: 120, damping: 18, mass: 0.7 })
   const layerDriftY = useSpring(useTransform(pointerY, [0, 100], [-14, 14]), { stiffness: 120, damping: 18, mass: 0.72 })
@@ -237,6 +264,8 @@ export default function AuthPage() {
   const [pendingNotice, setPendingNotice] = useState('')
   const [registerCaptcha, setRegisterCaptcha] = useState(null)
   const [captchaLoading, setCaptchaLoading] = useState(false)
+  const [captchaLock, setCaptchaLock] = useState(null)
+  const [captchaClock, setCaptchaClock] = useState(Date.now())
   const [accessChecked, setAccessChecked] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const [oauthProviders, setOauthProviders] = useState({ discord: false, google: false })
@@ -247,7 +276,12 @@ export default function AuthPage() {
   const formRef = useRef(null)
   const pointerX = useMotionValue(50)
   const pointerY = useMotionValue(24)
-  const registerCaptchaReady = mode !== 'register' || (!!registerCaptcha?.token && !captchaLoading)
+  const captchaRemainingMs = useMemo(() => {
+    if (!captchaLock || captchaLock.permanent || !captchaLock.blockedUntilMs) return 0
+    return Math.max(0, captchaLock.blockedUntilMs - captchaClock)
+  }, [captchaClock, captchaLock])
+  const captchaBlocked = !!captchaLock && (captchaLock.permanent || captchaRemainingMs > 0)
+  const registerCaptchaReady = mode !== 'register' || (!!registerCaptcha?.token && !captchaLoading && !captchaBlocked)
 
   const featureCards = [
     {
@@ -356,30 +390,67 @@ export default function AuthPage() {
   }
 
   const loadRegisterCaptcha = async (options = {}) => {
-    if (mode !== 'register' && !options.force) return
+    if ((mode !== 'register' && !options.force) || captchaBlocked) return
     setCaptchaLoading(true)
     try {
       const res = await authAPI.registerChallenge()
+      setCaptchaLock(null)
+      setCaptchaClock(Date.now())
       setRegisterCaptcha(res.data || null)
       setForm((previous) => ({ ...previous, captchaAnswer: '' }))
-    } catch {
+    } catch (err) {
       setRegisterCaptcha(null)
-      setError('CAPTCHA indisponible. Recharge la page et reessaie.')
+      const lockPayload = err?.response?.status === 429 ? parseCaptchaLock(err?.response?.data) : null
+
+      if (lockPayload && (lockPayload.permanent || lockPayload.blockedUntilMs)) {
+        setCaptchaLock(lockPayload)
+        setCaptchaClock(Date.now())
+        setError(lockPayload.error || 'Acces inscription temporairement bloque.')
+      } else {
+        setError('CAPTCHA indisponible. Recharge la page et reessaie.')
+      }
     } finally {
       setCaptchaLoading(false)
     }
   }
 
   useEffect(() => {
-    if (mode === 'register' && !registerCaptcha && !captchaLoading) {
+    if (mode === 'register' && !registerCaptcha && !captchaLoading && !captchaBlocked) {
       loadRegisterCaptcha({ force: true })
     }
-  }, [mode, registerCaptcha, captchaLoading])
+  }, [mode, registerCaptcha, captchaLoading, captchaBlocked])
+
+  useEffect(() => {
+    if (!captchaBlocked || captchaLock?.permanent) return undefined
+
+    const intervalId = window.setInterval(() => {
+      setCaptchaClock(Date.now())
+    }, 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [captchaBlocked, captchaLock?.permanent])
+
+  useEffect(() => {
+    if (!captchaLock || captchaLock.permanent || captchaRemainingMs > 0 || mode !== 'register' || captchaLoading || registerCaptcha) return
+
+    setCaptchaLock(null)
+    setError('')
+    loadRegisterCaptcha({ force: true })
+  }, [captchaLock, captchaRemainingMs, mode, captchaLoading, registerCaptcha])
 
   const submit = async (event) => {
     event.preventDefault()
     setError('')
     setPendingNotice('')
+
+    if (mode === 'register' && captchaBlocked) {
+      const retryLabel = captchaLock?.permanent
+        ? 'Acces inscription bloque.'
+        : `Reessaie dans ${formatCaptchaCountdown(captchaRemainingMs)}.`
+      setError(captchaLock?.error || retryLabel)
+      return
+    }
+
     const normalizedEmail = form.email.trim().toLowerCase()
     const data = mode === 'login'
       ? { email: normalizedEmail, password: form.password }
@@ -648,57 +719,118 @@ export default function AuthPage() {
                 </motion.div>
 
                 {mode === 'register' && (
-                  <motion.div layout className="space-y-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 sm:p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-xs font-mono uppercase tracking-[0.22em] text-white/35">Anti-bot</div>
-                        <div className="text-sm text-white/70">
-                          {registerCaptcha?.prompt || 'Recopie le code affiche pour continuer'}
+                  <motion.div
+                    layout
+                    className="relative overflow-hidden rounded-[26px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.025))] p-3 sm:p-4"
+                  >
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,229,255,0.12),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.14),transparent_44%)]" />
+                    <div className="relative space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-2">
+                          <div className="inline-flex items-center gap-2 rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.22em] text-neon-cyan">
+                            Anti-bot renforce
+                          </div>
+                          <div className="text-sm leading-6 text-white/72">
+                            {captchaBlocked
+                              ? (captchaLock?.permanent
+                                ? 'Inscription verrouillee apres trop d echecs. Le challenge reste coupe.'
+                                : `Inscription temporairement bloquee. Nouveau challenge dans ${formatCaptchaCountdown(captchaRemainingMs)}.`)
+                              : (registerCaptcha?.prompt || 'Recopie le code affiche pour continuer')}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => loadRegisterCaptcha({ force: true })}
+                          disabled={captchaLoading || captchaBlocked}
+                          className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/60 transition hover:border-neon-cyan/30 hover:text-neon-cyan disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {captchaBlocked ? 'Bloque' : (captchaLoading ? 'Chargement...' : 'Nouveau')}
+                        </button>
+                      </div>
+
+                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_280px]">
+                        <button
+                          type="button"
+                          onClick={() => loadRegisterCaptcha({ force: true })}
+                          disabled={captchaLoading || captchaBlocked}
+                          className="group relative block w-full overflow-hidden rounded-[22px] border border-neon-cyan/18 bg-[#08111d] p-2 text-left transition hover:border-neon-cyan/38 disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,229,255,0.16),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.16),transparent_44%)] opacity-90" />
+                          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+                          {!captchaBlocked && registerCaptcha?.image_data_url && (
+                            <motion.div
+                              aria-hidden="true"
+                              className="absolute inset-y-4 left-[-18%] z-10 w-24 bg-gradient-to-r from-transparent via-white/16 to-transparent blur-sm"
+                              animate={{ x: ['0%', '460%'] }}
+                              transition={{ duration: 2.6, repeat: Infinity, ease: 'linear' }}
+                            />
+                          )}
+                          {registerCaptcha?.image_data_url && !captchaBlocked ? (
+                            <img
+                              src={registerCaptcha.image_data_url}
+                              alt="CAPTCHA"
+                              className="relative z-20 h-36 w-full rounded-[18px] object-cover shadow-[0_18px_36px_rgba(0,0,0,0.34)]"
+                            />
+                          ) : (
+                            <div className="relative z-20 flex h-36 items-center justify-center rounded-[18px] border border-dashed border-white/[0.08] bg-black/20 px-5 text-center text-sm leading-6 text-white/42">
+                              {captchaBlocked
+                                ? (captchaLock?.permanent
+                                  ? 'Acces inscription verrouille.'
+                                  : `Retour automatique dans ${formatCaptchaCountdown(captchaRemainingMs)}.`)
+                                : (captchaLoading ? 'Generation du CAPTCHA...' : 'CAPTCHA indisponible')}
+                            </div>
+                          )}
+                        </button>
+
+                        <div className="space-y-3">
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5">
+                              <div className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/35">Challenge</div>
+                              <div className="mt-1 text-sm text-white/74">
+                                {registerCaptcha?.code_length || 6} caracteres dynamiques
+                              </div>
+                            </div>
+                            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5">
+                              <div className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/35">Niveau</div>
+                              <div className="mt-1 text-sm text-white/74">
+                                {captchaLock?.lockLevel ? `Verrou ${captchaLock.lockLevel}` : 'Protection active'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className={`rounded-2xl border px-3 py-3 ${captchaBlocked ? 'border-red-500/22 bg-red-500/10' : 'border-neon-violet/18 bg-neon-violet/10'}`}>
+                            <div className={`text-[10px] font-mono uppercase tracking-[0.24em] ${captchaBlocked ? 'text-red-300/70' : 'text-neon-violet/70'}`}>
+                              {captchaBlocked ? 'Blocage progressif' : 'Lecture securisee'}
+                            </div>
+                            <div className={`mt-1 text-sm leading-6 ${captchaBlocked ? 'text-red-200/88' : 'text-white/72'}`}>
+                              {captchaBlocked
+                                ? (captchaLock?.permanent
+                                  ? 'Trop de codes incorrects ont ete envoyes depuis cet environnement.'
+                                  : `Blocage temporaire actif. Fin estimee dans ${formatCaptchaCountdown(captchaRemainingMs)}.`)
+                                : 'Caracteres melanges, tailles variables et bruit visuel pour freiner les bots.'}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-xs font-mono uppercase tracking-wider text-white/40">
+                              Code anti-bot
+                            </label>
+                            <input
+                              className="input-field text-center font-mono uppercase tracking-[0.42em]"
+                              placeholder={captchaBlocked ? 'Challenge bloque' : 'Recopie le code'}
+                              value={form.captchaAnswer}
+                              onChange={(event) => set('captchaAnswer', event.target.value.toUpperCase().replace(/\s+/g, ''))}
+                              required={mode === 'register'}
+                              autoComplete="one-time-code"
+                              autoCapitalize="characters"
+                              spellCheck={false}
+                              inputMode="text"
+                              maxLength={registerCaptcha?.code_length || 8}
+                              disabled={captchaBlocked || captchaLoading}
+                            />
+                          </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => loadRegisterCaptcha({ force: true })}
-                        disabled={captchaLoading}
-                        className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/60 transition hover:border-neon-cyan/30 hover:text-neon-cyan disabled:opacity-50"
-                      >
-                        {captchaLoading ? 'Chargement...' : 'Recharger'}
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => loadRegisterCaptcha({ force: true })}
-                      disabled={captchaLoading}
-                      className="block w-full overflow-hidden rounded-2xl border border-neon-cyan/20 bg-[#08131f] p-2 transition hover:border-neon-cyan/40 disabled:opacity-70"
-                    >
-                      {registerCaptcha?.image_data_url ? (
-                        <img
-                          src={registerCaptcha.image_data_url}
-                          alt="CAPTCHA"
-                          className="h-28 w-full rounded-xl object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-white/[0.08] text-sm text-white/35">
-                          {captchaLoading ? 'Generation du CAPTCHA...' : 'CAPTCHA indisponible'}
-                        </div>
-                      )}
-                    </button>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-mono uppercase tracking-wider text-white/40">
-                        Code anti-bot
-                      </label>
-                      <input
-                        className="input-field"
-                        placeholder="Recopie le code affiche"
-                        value={form.captchaAnswer}
-                        onChange={(event) => set('captchaAnswer', event.target.value)}
-                        required={mode === 'register'}
-                        autoComplete="one-time-code"
-                        inputMode="numeric"
-                        maxLength={8}
-                      />
                     </div>
                   </motion.div>
                 )}

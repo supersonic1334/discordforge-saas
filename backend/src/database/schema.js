@@ -90,6 +90,31 @@ const SCHEMA = [
     updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  `CREATE TABLE IF NOT EXISTS register_captcha_guards (
+    id                TEXT PRIMARY KEY,
+    fingerprint_key   TEXT NOT NULL UNIQUE,
+    ip_hash           TEXT,
+    device_hash       TEXT,
+    client_signature_hash TEXT,
+    failure_count     INTEGER NOT NULL DEFAULT 0,
+    lock_level        INTEGER NOT NULL DEFAULT 0,
+    locked_until      TEXT,
+    permanently_locked INTEGER NOT NULL DEFAULT 0,
+    last_failure_at   TEXT,
+    last_success_at   TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_register_captcha_guards_ip_hash
+    ON register_captcha_guards(ip_hash)`,
+
+  `CREATE INDEX IF NOT EXISTS idx_register_captcha_guards_device_hash
+    ON register_captcha_guards(device_hash)`,
+
+  `CREATE INDEX IF NOT EXISTS idx_register_captcha_guards_client_signature_hash
+    ON register_captcha_guards(client_signature_hash)`,
+
   // ────────────────────────────────────────────────────────────────────────────
   // BOT TOKENS (one active token per user)
   // ────────────────────────────────────────────────────────────────────────────

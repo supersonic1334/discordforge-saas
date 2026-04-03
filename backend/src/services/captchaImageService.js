@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const zlib = require('zlib');
 const { AttachmentBuilder } = require('discord.js');
 
@@ -299,8 +300,139 @@ function buildCaptchaPngDataUrl(code, challengeId, color = '#06b6d4') {
   return `data:image/png;base64,${buffer.toString('base64')}`;
 }
 
+function escapeXml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function createSeededRandom(seed) {
+  let state = crypto
+    .createHash('sha256')
+    .update(String(seed || 'captcha-seed'))
+    .digest()
+    .readUInt32BE(0);
+
+  if (!state) state = 0x6d2b79f5;
+
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function formatSvgColor(color, alpha = 1) {
+  const safeAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
+  return `rgba(${clampChannel(color.r)}, ${clampChannel(color.g)}, ${clampChannel(color.b)}, ${safeAlpha.toFixed(3)})`;
+}
+
+function buildCaptchaSvgDataUrl(code, challengeId, color = '#06b6d4') {
+  const width = 860;
+  const height = 300;
+  const safeCode = String(code || '').trim().toUpperCase() || '000000';
+  const accent = hexToRgb(color);
+  const secondary = { r: 168, g: 85, b: 247 };
+  const panel = mixColor(accent, { r: 255, g: 255, b: 255 }, 0.52);
+  const rand = createSeededRandom(`${challengeId}:${safeCode}:${color}`);
+
+  const noiseDots = Array.from({ length: 72 }, (_, index) => {
+    const radius = 1.2 + (rand() * 5.8);
+    return `<circle cx="${(28 + (rand() * (width - 56))).toFixed(2)}" cy="${(22 + (rand() * (height - 44))).toFixed(2)}" r="${radius.toFixed(2)}" fill="${formatSvgColor(index % 2 === 0 ? accent : secondary, 0.06 + (rand() * 0.14))}" />`;
+  }).join('');
+
+  const waveLines = Array.from({ length: 8 }, (_, index) => {
+    const y1 = 30 + (rand() * (height - 60));
+    const y2 = 24 + (rand() * (height - 48));
+    const bend = 90 + (rand() * 180);
+    const colorToken = index % 2 === 0 ? accent : secondary;
+    return `<path d="M 0 ${y1.toFixed(2)} C ${(width * 0.18).toFixed(2)} ${(y2 + bend).toFixed(2)}, ${(width * 0.72).toFixed(2)} ${(y1 - bend).toFixed(2)}, ${width} ${y2.toFixed(2)}" stroke="${formatSvgColor(colorToken, 0.16 + (rand() * 0.12))}" stroke-width="${(2 + (rand() * 4)).toFixed(2)}" stroke-linecap="round" fill="none" />`;
+  }).join('');
+
+  const slashLines = Array.from({ length: 11 }, (_, index) => {
+    const x = 40 + (rand() * (width - 80));
+    const lineHeight = 96 + (rand() * 130);
+    const top = 26 + (rand() * (height - lineHeight - 52));
+    const strokeColor = index % 2 === 0 ? accent : panel;
+    return `<line x1="${x.toFixed(2)}" y1="${top.toFixed(2)}" x2="${(x + 36 + (rand() * 54)).toFixed(2)}" y2="${(top + lineHeight).toFixed(2)}" stroke="${formatSvgColor(strokeColor, 0.16 + (rand() * 0.15))}" stroke-width="${(1.4 + (rand() * 3.2)).toFixed(2)}" stroke-linecap="round" />`;
+  }).join('');
+
+  const characters = safeCode.split('');
+  const startX = 110;
+  const endX = width - 110;
+  const step = characters.length > 1 ? (endX - startX) / (characters.length - 1) : 0;
+
+  const glyphs = characters.map((character, index) => {
+    const fontSize = 96 + (rand() * 32);
+    const y = 172 + (rand() * 44) - 22;
+    const x = startX + (step * index) + ((rand() * 18) - 9);
+    const rotate = -24 + (rand() * 48);
+    const skew = -14 + (rand() * 28);
+    const stretch = 0.88 + (rand() * 0.34);
+    const fillColor = index % 2 === 0
+      ? mixColor(accent, { r: 255, g: 255, b: 255 }, 0.22 + (rand() * 0.2))
+      : mixColor(secondary, { r: 255, g: 255, b: 255 }, 0.1 + (rand() * 0.2));
+    const shadowX = x - 2 - (rand() * 6);
+    const shadowY = y + 6 + (rand() * 7);
+    const ghostX = x + 6 + (rand() * 4);
+    const ghostY = y - 8 - (rand() * 4);
+    const text = escapeXml(character);
+    const transform = `translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${rotate.toFixed(2)}) skewX(${skew.toFixed(2)}) scale(${stretch.toFixed(3)} 1)`;
+    const shadowTransform = `translate(${shadowX.toFixed(2)} ${shadowY.toFixed(2)}) rotate(${(rotate - 3).toFixed(2)}) skewX(${(skew * 0.72).toFixed(2)}) scale(${(stretch * 1.04).toFixed(3)} 1)`;
+    const ghostTransform = `translate(${ghostX.toFixed(2)} ${ghostY.toFixed(2)}) rotate(${(rotate * -0.3).toFixed(2)}) skewX(${(skew * -0.4).toFixed(2)})`;
+
+    return [
+      `<text x="0" y="0" text-anchor="middle" dominant-baseline="middle" transform="${shadowTransform}" fill="${formatSvgColor(accent, 0.16)}" font-family="'Trebuchet MS','Arial Black',sans-serif" font-size="${(fontSize * 1.04).toFixed(2)}" font-weight="900" letter-spacing="${(1 + (rand() * 3)).toFixed(2)}">${text}</text>`,
+      `<text x="0" y="0" text-anchor="middle" dominant-baseline="middle" transform="${ghostTransform}" fill="${formatSvgColor(panel, 0.12)}" font-family="'Verdana','Trebuchet MS',sans-serif" font-size="${(fontSize * 0.92).toFixed(2)}" font-weight="700">${text}</text>`,
+      `<text x="0" y="0" text-anchor="middle" dominant-baseline="middle" transform="${transform}" fill="${formatSvgColor(fillColor, 0.98)}" stroke="${formatSvgColor(panel, 0.32)}" stroke-width="1.4" paint-order="stroke fill" font-family="'Trebuchet MS','Arial Black',sans-serif" font-size="${fontSize.toFixed(2)}" font-weight="900" letter-spacing="${(1.5 + (rand() * 2.6)).toFixed(2)}">${text}</text>`,
+    ].join('');
+  }).join('');
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="CAPTCHA">
+  <defs>
+    <linearGradient id="bg-a" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${formatSvgColor({ r: 6, g: 14, b: 24 }, 1)}" />
+      <stop offset="55%" stop-color="${formatSvgColor({ r: 10, g: 20, b: 36 }, 1)}" />
+      <stop offset="100%" stop-color="${formatSvgColor({ r: 19, g: 12, b: 34 }, 1)}" />
+    </linearGradient>
+    <radialGradient id="halo-a" cx="18%" cy="22%" r="72%">
+      <stop offset="0%" stop-color="${formatSvgColor(accent, 0.26)}" />
+      <stop offset="100%" stop-color="${formatSvgColor(accent, 0)}" />
+    </radialGradient>
+    <radialGradient id="halo-b" cx="82%" cy="76%" r="68%">
+      <stop offset="0%" stop-color="${formatSvgColor(secondary, 0.24)}" />
+      <stop offset="100%" stop-color="${formatSvgColor(secondary, 0)}" />
+    </radialGradient>
+    <filter id="soft-noise" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="${Math.floor(rand() * 5000) + 20}" />
+      <feColorMatrix type="saturate" values="0" />
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.14" />
+      </feComponentTransfer>
+    </filter>
+  </defs>
+
+  <rect width="${width}" height="${height}" rx="34" fill="url(#bg-a)" />
+  <rect x="18" y="18" width="${width - 36}" height="${height - 36}" rx="28" fill="${formatSvgColor({ r: 8, g: 13, b: 24 }, 0.52)}" stroke="${formatSvgColor(panel, 0.28)}" stroke-width="2" />
+  <rect width="${width}" height="${height}" fill="url(#halo-a)" />
+  <rect width="${width}" height="${height}" fill="url(#halo-b)" />
+  <rect x="0" y="0" width="${width}" height="${height}" filter="url(#soft-noise)" opacity="0.46" />
+  ${noiseDots}
+  ${waveLines}
+  ${slashLines}
+  <g>${glyphs}</g>
+  <rect x="28" y="26" width="${width - 56}" height="${height - 52}" rx="24" fill="none" stroke="${formatSvgColor(accent, 0.15)}" stroke-width="1.6" />
+</svg>`;
+
+  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+}
+
 module.exports = {
   buildCaptchaPngAttachment,
   buildCaptchaPngBuffer,
   buildCaptchaPngDataUrl,
+  buildCaptchaSvgDataUrl,
 };

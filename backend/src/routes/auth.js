@@ -271,10 +271,27 @@ router.get('/providers', (req, res) => {
   });
 });
 
-router.get('/register-captcha', (req, res) => {
+router.get('/register-captcha', (req, res, next) => {
   syncDeviceCookie(req, res);
-  const challenge = registerCaptchaService.createRegisterCaptcha(req);
-  res.json(challenge);
+
+  try {
+    const challenge = registerCaptchaService.createRegisterCaptcha(req);
+    return res.json(challenge);
+  } catch (error) {
+    if (error?.status === 429) {
+      return res.status(429).json({
+        error: error.message,
+        code: error.code || 'REGISTER_CAPTCHA_LOCKED',
+        blocked_until: error.blocked_until || null,
+        retry_after_seconds: Number(error.retry_after_seconds || 0),
+        permanent: !!error.permanent,
+        lock_level: Number(error.lock_level || 0),
+        failure_count: Number(error.failure_count || 0),
+      });
+    }
+
+    return next(error);
+  }
 });
 
 router.post('/discord/link', requireAuth, validate(discordLinkSchema), (req, res) => {
@@ -303,6 +320,17 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
 
     return res.status(202).json(result);
   } catch (err) {
+    if (err?.status === 429 && err?.code === 'REGISTER_CAPTCHA_LOCKED') {
+      return res.status(429).json({
+        error: err.message,
+        code: err.code,
+        blocked_until: err.blocked_until || null,
+        retry_after_seconds: Number(err.retry_after_seconds || 0),
+        permanent: !!err.permanent,
+        lock_level: Number(err.lock_level || 0),
+        failure_count: Number(err.failure_count || 0),
+      });
+    }
     next(err);
   }
 });
