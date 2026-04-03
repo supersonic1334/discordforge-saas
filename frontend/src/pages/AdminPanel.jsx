@@ -305,6 +305,7 @@ export default function AdminPanel() {
     { value: 'member', label: t('admin.roles.member') },
     { value: 'admin', label: t('admin.roles.admin') },
     { value: 'founder', label: t('admin.roles.founder') },
+    { value: 'osint', label: t('admin.roles.osint', 'OSINT') },
     { value: 'api_provider', label: t('admin.roles.api_provider', 'fournisseur API') },
   ]), [t])
   const tabs = useMemo(() => {

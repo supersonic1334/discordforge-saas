@@ -14,7 +14,7 @@ const SCHEMA = [
     username        TEXT NOT NULL,
     password_hash   TEXT,                   -- null for OAuth-only accounts
     avatar_url      TEXT,
-    role            TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin','founder','api_provider')),
+    role            TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin','founder','api_provider','osint')),
     email_verified  INTEGER NOT NULL DEFAULT 0,
     email_verified_at TEXT,
     site_language   TEXT NOT NULL DEFAULT 'auto',

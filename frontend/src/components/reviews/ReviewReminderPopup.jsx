@@ -1,20 +1,31 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { MessageSquareText, Star, X } from 'lucide-react'
 import { reviewsAPI } from '../../services/api'
 import { useAuthStore } from '../../stores'
 
+const INITIAL_DELAY_MS = 15 * 60 * 1000
 const REMINDER_INTERVAL_MS = 18 * 60 * 1000
-const DISMISS_KEY_PREFIX = 'discordforge.review.prompt.dismissed.'
 const COMPLETED_KEY_PREFIX = 'discordforge.review.prompt.completed.'
-
-function getDismissKey(userId) {
-  return `${DISMISS_KEY_PREFIX}${userId}`
-}
+const ELAPSED_KEY_PREFIX = 'discordforge.review.prompt.elapsed.'
+const NEXT_PROMPT_KEY_PREFIX = 'discordforge.review.prompt.next.'
 
 function getCompletedKey(userId) {
   return `${COMPLETED_KEY_PREFIX}${userId}`
+}
+
+function getElapsedKey(userId) {
+  return `${ELAPSED_KEY_PREFIX}${userId}`
+}
+
+function getNextPromptKey(userId) {
+  return `${NEXT_PROMPT_KEY_PREFIX}${userId}`
+}
+
+function readUsageNumber(key, fallback = 0) {
+  const parsed = Number(window.localStorage.getItem(key) || fallback)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
 }
 
 export default function ReviewReminderPopup() {
@@ -23,106 +34,172 @@ export default function ReviewReminderPopup() {
   const location = useLocation()
   const [visible, setVisible] = useState(false)
   const [completed, setCompleted] = useState(false)
-  const timerRef = useRef(null)
   const requestRef = useRef(0)
+  const elapsedUsageRef = useRef(0)
+  const nextPromptElapsedRef = useRef(INITIAL_DELAY_MS)
+  const lastTickRef = useRef(0)
+  const completedRef = useRef(false)
+  const visibleRef = useRef(false)
   const userId = user?.id || ''
   const onReviewsPage = location.pathname.startsWith('/dashboard/reviews')
-  const onAuthShell = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/email-fast')
-  const dismissKey = useMemo(() => userId ? getDismissKey(userId) : '', [userId])
-  const completedKey = useMemo(() => userId ? getCompletedKey(userId) : '', [userId])
-
-  const clearReminderTimer = () => {
-    if (timerRef.current) {
-      window.clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-  }
-
-  const scheduleReminder = (delayMs = REMINDER_INTERVAL_MS) => {
-    clearReminderTimer()
-    if (!userId || completed || onReviewsPage || !onAuthShell) return
-    timerRef.current = window.setTimeout(() => {
-      setVisible(true)
-    }, Math.max(0, Number(delayMs) || 0))
-  }
+  const onEligibleShell = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/email-fast')
+  const completedKey = userId ? getCompletedKey(userId) : ''
+  const elapsedKey = userId ? getElapsedKey(userId) : ''
+  const nextPromptKey = userId ? getNextPromptKey(userId) : ''
 
   useEffect(() => {
-    if (!userId || !onAuthShell) {
-      clearReminderTimer()
-      setVisible(false)
+    visibleRef.current = visible
+  }, [visible])
+
+  useEffect(() => {
+    completedRef.current = completed
+  }, [completed])
+
+  useEffect(() => {
+    if (!userId) {
+      elapsedUsageRef.current = 0
+      nextPromptElapsedRef.current = INITIAL_DELAY_MS
+      lastTickRef.current = 0
+      completedRef.current = false
+      visibleRef.current = false
       setCompleted(false)
+      setVisible(false)
       return undefined
     }
 
-    const completedAlready = window.localStorage.getItem(completedKey) === '1'
-    if (completedAlready) {
-      clearReminderTimer()
-      setVisible(false)
-      setCompleted(true)
+    const storedCompleted = window.localStorage.getItem(completedKey) === '1'
+    const storedElapsed = readUsageNumber(elapsedKey, 0)
+    const storedNextPrompt = readUsageNumber(nextPromptKey, INITIAL_DELAY_MS)
+
+    elapsedUsageRef.current = storedElapsed
+    nextPromptElapsedRef.current = Math.max(INITIAL_DELAY_MS, storedNextPrompt || INITIAL_DELAY_MS)
+    lastTickRef.current = Date.now()
+    completedRef.current = storedCompleted
+    visibleRef.current = false
+    setCompleted(storedCompleted)
+    setVisible(Boolean(
+      !storedCompleted
+      && onEligibleShell
+      && !onReviewsPage
+      && storedElapsed >= nextPromptElapsedRef.current
+    ))
+
+    if (storedCompleted) {
       return undefined
     }
 
     let cancelled = false
-    const loadReviewState = async () => {
-      const requestId = requestRef.current + 1
-      requestRef.current = requestId
+    const requestId = requestRef.current + 1
+    requestRef.current = requestId
 
+    const loadReviewState = async () => {
       try {
         const response = await reviewsAPI.overview()
         if (cancelled || requestRef.current !== requestId) return
 
-        const hasReview = !!response.data?.my_review
-        if (hasReview) {
+        if (response.data?.my_review) {
           window.localStorage.setItem(completedKey, '1')
-          window.localStorage.removeItem(dismissKey)
-          clearReminderTimer()
+          completedRef.current = true
+          visibleRef.current = false
           setCompleted(true)
           setVisible(false)
-          return
         }
-
-        setCompleted(false)
-        setVisible(false)
-        const dismissedAt = Number(window.localStorage.getItem(dismissKey) || 0)
-        const remainingDelay = dismissedAt
-          ? REMINDER_INTERVAL_MS - (Date.now() - dismissedAt)
-          : 0
-
-        scheduleReminder(Math.max(0, remainingDelay))
       } catch {
-        setCompleted(false)
-        setVisible(false)
-        scheduleReminder(90 * 1000)
+        // Keep local usage timer active even if the review endpoint is briefly unavailable.
       }
+    }
+
+    loadReviewState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [completedKey, elapsedKey, nextPromptKey, onEligibleShell, onReviewsPage, userId])
+
+  useEffect(() => {
+    if (!userId || !onEligibleShell || completed) {
+      lastTickRef.current = 0
+      setVisible(false)
+      return undefined
     }
 
     const handleReviewSubmitted = (event) => {
       const nextUserId = String(event?.detail?.userId || '')
       if (nextUserId && nextUserId !== String(userId)) return
+
       window.localStorage.setItem(completedKey, '1')
-      window.localStorage.removeItem(dismissKey)
-      clearReminderTimer()
+      window.localStorage.removeItem(nextPromptKey)
+      completedRef.current = true
+      visibleRef.current = false
       setCompleted(true)
       setVisible(false)
     }
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        loadReviewState()
+      lastTickRef.current = Date.now()
+
+      if (window.localStorage.getItem(completedKey) === '1') {
+        completedRef.current = true
+        visibleRef.current = false
+        setCompleted(true)
+        setVisible(false)
+        return
+      }
+
+      if (
+        document.visibilityState === 'visible'
+        && !completedRef.current
+        && !visibleRef.current
+        && !onReviewsPage
+        && elapsedUsageRef.current >= nextPromptElapsedRef.current
+      ) {
+        setVisible(true)
       }
     }
 
-    loadReviewState()
+    const handleStorage = (event) => {
+      if (event.key !== completedKey) return
+      if (event.newValue !== '1') return
+
+      completedRef.current = true
+      visibleRef.current = false
+      setCompleted(true)
+      setVisible(false)
+    }
+
+    const tickUsage = () => {
+      const now = Date.now()
+      const previousTick = lastTickRef.current || now
+      lastTickRef.current = now
+
+      if (document.visibilityState !== 'visible') return
+      if (completedRef.current) return
+      if (onReviewsPage) return
+
+      const delta = Math.max(0, now - previousTick)
+      if (delta < 250) return
+
+      elapsedUsageRef.current += delta
+      window.localStorage.setItem(elapsedKey, String(Math.round(elapsedUsageRef.current)))
+
+      if (!visibleRef.current && elapsedUsageRef.current >= nextPromptElapsedRef.current) {
+        setVisible(true)
+      }
+    }
+
+    lastTickRef.current = Date.now()
+    const intervalId = window.setInterval(tickUsage, 1000)
     window.addEventListener('review:submitted', handleReviewSubmitted)
+    window.addEventListener('storage', handleStorage)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
-      cancelled = true
-      clearReminderTimer()
+      window.clearInterval(intervalId)
       window.removeEventListener('review:submitted', handleReviewSubmitted)
+      window.removeEventListener('storage', handleStorage)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [completedKey, dismissKey, onAuthShell, userId, onReviewsPage])
+  }, [completed, completedKey, elapsedKey, nextPromptKey, onEligibleShell, onReviewsPage, userId])
 
   useEffect(() => {
     if (onReviewsPage) {
@@ -130,22 +207,26 @@ export default function ReviewReminderPopup() {
     }
   }, [onReviewsPage])
 
-  const dismissReminder = () => {
+  const deferNextReminder = () => {
     if (!userId) return
-    window.localStorage.setItem(dismissKey, String(Date.now()))
+
+    nextPromptElapsedRef.current = elapsedUsageRef.current + REMINDER_INTERVAL_MS
+    window.localStorage.setItem(elapsedKey, String(Math.round(elapsedUsageRef.current)))
+    window.localStorage.setItem(nextPromptKey, String(Math.round(nextPromptElapsedRef.current)))
+    visibleRef.current = false
     setVisible(false)
-    scheduleReminder(REMINDER_INTERVAL_MS)
+  }
+
+  const dismissReminder = () => {
+    deferNextReminder()
   }
 
   const openReviews = () => {
-    if (!userId) return
-    window.localStorage.setItem(dismissKey, String(Date.now()))
-    setVisible(false)
+    deferNextReminder()
     navigate('/dashboard/reviews')
-    scheduleReminder(REMINDER_INTERVAL_MS)
   }
 
-  if (!userId || completed || onReviewsPage || !onAuthShell) return null
+  if (!userId || completed || onReviewsPage || !onEligibleShell) return null
 
   return (
     <AnimatePresence>

@@ -347,7 +347,7 @@ const userStatusSchema = z.object({
 const adminRoleSchema = z.object({
   role: z.preprocess(
     (value) => typeof value === 'string' ? value.trim().toLowerCase() : value,
-    z.enum(['member', 'admin', 'founder', 'api_provider'])
+    z.enum(['member', 'admin', 'founder', 'api_provider', 'osint'])
   ),
 });
 

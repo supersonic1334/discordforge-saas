@@ -5,14 +5,14 @@ const { z } = require('zod');
 
 const router = express.Router({ mergeParams: true });
 
-const { requireAuth, requireBotToken, requireGuildOwner, validateQuery } = require('../middleware');
+const { requireAuth, requireOsintAccess, requireBotToken, requireGuildOwner, validateQuery } = require('../middleware');
 const { decrypt } = require('../services/encryptionService');
 const discordService = require('../services/discordService');
 const authService = require('../services/authService');
 const { MODULE_DEFINITIONS } = require('../bot/modules/definitions');
 const db = require('../database');
 
-router.use(requireAuth, requireBotToken, requireGuildOwner);
+router.use(requireAuth, requireOsintAccess, requireBotToken, requireGuildOwner);
 
 const DISCORD_PERMISSIONS = {
   KICK_MEMBERS: 1n << 1n,

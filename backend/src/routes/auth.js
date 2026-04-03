@@ -14,7 +14,7 @@ const botManager = require('../services/botManager');
 const registerCaptchaService = require('../services/registerCaptchaService');
 const { encrypt, decrypt, hash } = require('../services/encryptionService');
 const wsServer = require('../websocket');
-const { requireAuth, validate } = require('../middleware');
+const { requireAuth, requireOsintAccess, validate } = require('../middleware');
 const {
   registerSchema,
   loginSchema,
@@ -630,7 +630,7 @@ router.patch('/me/preferences', requireAuth, validate(preferencesSchema), (req, 
   }
 });
 
-router.get('/me/email-fast-vault/meta', requireAuth, (req, res, next) => {
+router.get('/me/email-fast-vault/meta', requireAuth, requireOsintAccess, (req, res, next) => {
   try {
     const user = db.findOne('users', { id: req.user.id });
     if (!user) {
@@ -661,7 +661,7 @@ router.get('/me/email-fast-vault/meta', requireAuth, (req, res, next) => {
   }
 });
 
-router.put('/me/email-fast-vault', requireAuth, validate(emailFastVaultSchema), (req, res, next) => {
+router.put('/me/email-fast-vault', requireAuth, requireOsintAccess, validate(emailFastVaultSchema), (req, res, next) => {
   try {
     const payload = req.body?.payload && typeof req.body.payload === 'object'
       ? req.body.payload
@@ -695,7 +695,7 @@ router.put('/me/email-fast-vault', requireAuth, validate(emailFastVaultSchema), 
   }
 });
 
-router.post('/me/email-fast-vault/unlock', requireAuth, validate(emailFastVaultUnlockSchema), async (req, res, next) => {
+router.post('/me/email-fast-vault/unlock', requireAuth, requireOsintAccess, validate(emailFastVaultUnlockSchema), async (req, res, next) => {
   try {
     const user = db.findOne('users', { id: req.user.id });
     if (!user) {
@@ -739,7 +739,7 @@ router.post('/me/email-fast-vault/unlock', requireAuth, validate(emailFastVaultU
   }
 });
 
-router.delete('/me/email-fast-vault', requireAuth, (req, res, next) => {
+router.delete('/me/email-fast-vault', requireAuth, requireOsintAccess, (req, res, next) => {
   try {
     const now = new Date().toISOString();
     db.update('users', {

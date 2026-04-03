@@ -122,6 +122,18 @@ function requireApiProvider(req, res, next) {
   next();
 }
 
+function requireOsintAccess(req, res, next) {
+  if (!['founder', 'osint'].includes(req.user?.role)) {
+    logger.warn(`Access violation: unauthorized OSINT tool access`, {
+      userId: req.user?.id,
+      role: req.user?.role,
+      path: req.path,
+    });
+    return res.status(403).json({ error: 'OSINT access required' });
+  }
+  next();
+}
+
 function requireGuildOwner(req, res, next) {
   const { guildId } = req.params;
   if (!guildId) return res.status(400).json({ error: 'Missing guildId param' });
@@ -229,6 +241,7 @@ module.exports = {
   requireFounder,
   requireAdminPanelAccess,
   requireApiProvider,
+  requireOsintAccess,
   requireGuildOwner,
   requireGuildPrimaryOwner,
   validate,

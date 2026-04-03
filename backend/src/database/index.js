@@ -44,7 +44,7 @@ function ensureColumn(table, column, definition) {
 function usersTableSupportsExtendedRoles() {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
   const sql = String(row?.sql || '');
-  return sql.includes("'admin'") && sql.includes("'api_provider'");
+  return sql.includes("'admin'") && sql.includes("'api_provider'") && sql.includes("'osint'");
 }
 
 function accessBlocksSupportClientSignature() {
@@ -68,7 +68,7 @@ function ensureUsersRoleConstraint() {
           username          TEXT NOT NULL,
           password_hash     TEXT,
           avatar_url        TEXT,
-          role              TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin','founder','api_provider')),
+          role              TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin','founder','api_provider','osint')),
           email_verified    INTEGER NOT NULL DEFAULT 1,
           email_verified_at TEXT,
           site_language     TEXT NOT NULL DEFAULT 'auto',
@@ -94,6 +94,8 @@ function ensureUsersRoleConstraint() {
           last_seen_user_agent TEXT,
           last_seen_at      TEXT,
           last_login_at     TEXT,
+          email_fast_vault  TEXT,
+          email_fast_vault_updated_at TEXT,
           created_at        TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
         )
@@ -105,7 +107,7 @@ function ensureUsersRoleConstraint() {
           email_verified, email_verified_at,
           site_language, ai_language, analytics_layout, discord_id, discord_username, discord_global_name, discord_avatar_hash, discord_avatar_url, discord_banner_hash, discord_banner_url, discord_banner_color, discord_avatar_animated, discord_banner_animated, discord_profile_synced_at, google_id, discord_token,
           is_active, last_seen_ip_hash, last_seen_device_hash, last_seen_client_signature_hash, last_seen_user_agent,
-          last_seen_at, last_login_at, created_at, updated_at
+          last_seen_at, last_login_at, email_fast_vault, email_fast_vault_updated_at, created_at, updated_at
         )
         SELECT
           id,
@@ -117,6 +119,7 @@ function ensureUsersRoleConstraint() {
             WHEN role = 'founder' THEN 'founder'
             WHEN role = 'admin' THEN 'admin'
             WHEN role = 'api_provider' THEN 'api_provider'
+            WHEN role = 'osint' THEN 'osint'
             ELSE 'member'
           END,
           COALESCE(email_verified, 1),
@@ -144,6 +147,8 @@ function ensureUsersRoleConstraint() {
           last_seen_user_agent,
           last_seen_at,
           last_login_at,
+          email_fast_vault,
+          email_fast_vault_updated_at,
           created_at,
           updated_at
         FROM users

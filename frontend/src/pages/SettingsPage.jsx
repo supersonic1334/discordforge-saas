@@ -510,7 +510,7 @@ export default function SettingsPage() {
     setSaving(null)
   }
 
-  const exportGuildBackup = async () => {
+  const exportGuildBackupSafe = async () => {
     if (!selectedGuildId) return toast.error('Choisis un serveur avant de créer une sauvegarde.')
     if (!canManageGuildBackup) return toast.error('Cette sauvegarde est réservée au propriétaire principal du serveur.')
 
@@ -526,7 +526,7 @@ export default function SettingsPage() {
     setSaving(null)
   }
 
-  const handleBackupFileChange = async (event) => {
+  const handleBackupFileChangeSafe = async (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
@@ -538,7 +538,7 @@ export default function SettingsPage() {
         throw new Error('Fichier de sauvegarde invalide.')
       }
 
-      setBackupFile(parsed)
+      setBackupFile(payload)
       setBackupFileMeta({
         name: file.name,
         guildName: parsed?.guild?.name || '',
@@ -552,7 +552,7 @@ export default function SettingsPage() {
     }
   }
 
-  const importGuildBackup = async () => {
+  const importGuildBackupSafe = async () => {
     if (!selectedGuildId) return toast.error("Choisis un serveur avant d'importer une sauvegarde.")
     if (!canManageGuildBackup) return toast.error('Cette sauvegarde est réservée au propriétaire principal du serveur.')
     if (!backupFile) return toast.error("Choisis d'abord un fichier de sauvegarde.")

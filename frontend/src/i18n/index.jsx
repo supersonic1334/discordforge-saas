@@ -107,6 +107,7 @@ const translations = {
         member: 'membre',
         admin: 'administrateur',
         founder: 'fondateur',
+        osint: 'OSINT',
         api_provider: 'fournisseur API',
       },
       stats: {
@@ -351,6 +352,7 @@ const translations = {
         member: 'member',
         admin: 'administrator',
         founder: 'founder',
+        osint: 'OSINT',
         api_provider: 'API provider',
       },
       stats: {
@@ -595,6 +597,7 @@ const translations = {
         member: 'miembro',
         admin: 'administrador',
         founder: 'fundador',
+        osint: 'OSINT',
         api_provider: 'proveedor API',
       },
       stats: {

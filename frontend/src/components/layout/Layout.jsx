@@ -80,6 +80,7 @@ const SidebarContent = memo(function SidebarContent({
   const status = useBotStore((state) => state.status)
   const ping = useBotStore((state) => state.ping)
   const bot = useBotStore((state) => state.bot)
+  const canAccessOsintTools = ['founder', 'osint'].includes(user?.role)
   const brandAvatarSrc = bot?.avatarUrl || '/discordforger-icon.png'
   const brandAvatarAlt = bot?.username || 'DiscordForger'
 
@@ -258,21 +259,23 @@ const SidebarContent = memo(function SidebarContent({
 
         <div className="sidebar-special-separator" />
 
-        <Link
-          to="/email-fast"
-          onClick={() => setMobileOpen(false)}
-          className={`sidebar-email-fast ${isActive('/email-fast') ? 'sidebar-email-fast-active' : ''} ${collapsed ? 'sidebar-email-fast-collapsed' : ''}`}
-          title="Email Fast"
-          aria-label="Email Fast"
-        >
-          <span className="sidebar-email-fast-icon" aria-hidden="true">✉️</span>
-          {!collapsed && (
-            <>
-              <span className="sidebar-email-fast-label">Email Fast</span>
-              <span className="sidebar-email-fast-badge">NEW</span>
-            </>
-          )}
-        </Link>
+        {canAccessOsintTools && (
+          <Link
+            to="/email-fast"
+            onClick={() => setMobileOpen(false)}
+            className={`sidebar-email-fast ${isActive('/email-fast') ? 'sidebar-email-fast-active' : ''} ${collapsed ? 'sidebar-email-fast-collapsed' : ''}`}
+            title="Email Fast"
+            aria-label="Email Fast"
+          >
+            <span className="sidebar-email-fast-icon" aria-hidden="true">✉️</span>
+            {!collapsed && (
+              <>
+                <span className="sidebar-email-fast-label">Email Fast</span>
+                <span className="sidebar-email-fast-badge">NEW</span>
+              </>
+            )}
+          </Link>
+        )}
 
         <div className={`flex items-center gap-3 px-3 py-2 mt-1 ${collapsed ? 'justify-center' : ''}`}>
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-cyan to-neon-violet flex items-center justify-center text-xs font-display font-700 shrink-0">
@@ -342,6 +345,7 @@ export default function Layout() {
   const sidebarStorageKey = getSidebarStorageKey(user?.id)
   const canAccessAdminPanel = ['founder', 'admin'].includes(user?.role)
   const canAccessProviderPanel = user?.role === 'api_provider'
+  const canAccessOsintTools = ['founder', 'osint'].includes(user?.role)
   const hasSelectedGuild = !!selectedGuildId
   const isEmailFastRoute = location.pathname === '/email-fast'
   const isOsintRoute = location.pathname === '/dashboard/osint'
@@ -364,7 +368,7 @@ export default function Layout() {
     { icon: Shield, label: t('layout.nav.protection', 'Protection'), path: '/dashboard/protection', needsGuild: true },
     { icon: UserPlus, label: t('layout.nav.onboarding', 'Accueil & rôles'), path: '/dashboard/onboarding', needsGuild: true },
     { icon: Search, label: t('layout.nav.search', 'Search'), path: '/dashboard/search', needsGuild: true },
-    { icon: Fingerprint, label: t('layout.nav.scan', 'Scan'), path: '/dashboard/scan', needsGuild: true },
+    ...(canAccessOsintTools ? [{ icon: Fingerprint, label: t('layout.nav.scan', 'Scan'), path: '/dashboard/scan', needsGuild: true }] : []),
     { icon: Compass, label: t('layout.nav.osint', 'OSINT'), path: '/dashboard/osint' },
     { icon: ScrollText, label: t('layout.nav.logs', 'Logs'), path: '/dashboard/logs', needsGuild: true },
     { icon: ShieldAlert, label: t('layout.nav.incidents', 'Incidents'), path: '/dashboard/incidents', needsGuild: true },

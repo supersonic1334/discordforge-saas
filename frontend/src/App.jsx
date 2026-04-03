@@ -173,6 +173,13 @@ function RequireProviderPanelAccess({ children }) {
   return children
 }
 
+function RequireOsintAccess({ children }) {
+  const { token, user } = useAuthStore()
+  if (token && !user) return <AccessCheckSplash />
+  if (!['founder', 'osint'].includes(user?.role)) return <Navigate to="/dashboard" replace />
+  return children
+}
+
 function PageTransition({ children }) {
   const location = useLocation()
   return (
@@ -644,7 +651,7 @@ function AppRoot() {
         } />
 
         <Route path="/email-fast" element={
-          <RequireToken><Layout /></RequireToken>
+          <RequireToken><RequireOsintAccess><Layout /></RequireOsintAccess></RequireToken>
         }>
           <Route index element={<PageTransition><EmailFastPage /></PageTransition>} />
         </Route>
@@ -659,7 +666,7 @@ function AppRoot() {
           <Route path="playbooks" element={<PageTransition><PlaybooksPage /></PageTransition>} />
           <Route path="onboarding" element={<PageTransition><RolesOnboardingPage /></PageTransition>} />
           <Route path="search" element={<PageTransition><SearchPage /></PageTransition>} />
-          <Route path="scan" element={<PageTransition><ScanPage /></PageTransition>} />
+          <Route path="scan" element={<RequireOsintAccess><PageTransition><ScanPage /></PageTransition></RequireOsintAccess>} />
           <Route path="rassican" element={<Navigate to="/dashboard/scan" replace />} />
           <Route path="logs" element={<PageTransition><LogsPage /></PageTransition>} />
           <Route path="incidents" element={<PageTransition><IncidentsPage /></PageTransition>} />
