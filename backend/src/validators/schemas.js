@@ -468,7 +468,7 @@ const ticketGeneratorConfigSchema = z.object({
 });
 
 const captchaChallengeTypeSchema = z.object({
-  key: z.enum(['image_code', 'quick_math']),
+  key: z.enum(['image_code', 'quick_math', 'emoji_gate', 'word_gate']),
   label: z.string().trim().min(1).max(40),
   description: z.string().trim().max(140).optional().default(''),
   enabled: z.boolean().optional().default(true),
@@ -490,6 +490,18 @@ const captchaConfigSchema = z.object({
   success_message: z.string().trim().min(1).max(240),
   failure_message: z.string().trim().min(1).max(240),
   challenge_types: z.array(captchaChallengeTypeSchema).min(1).max(4),
+}).superRefine((value, ctx) => {
+  const enabledCount = (Array.isArray(value.challenge_types) ? value.challenge_types : [])
+    .filter((item) => item?.enabled)
+    .length;
+
+  if (enabledCount !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['challenge_types'],
+      message: 'Choisis exactement un mode CAPTCHA',
+    });
+  }
 });
 
 // ── Site reviews ─────────────────────────────────────────────────────────────

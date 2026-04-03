@@ -57,6 +57,7 @@ const {
   buildNumericCaptchaCode,
   getGuildCaptchaConfig,
   getGuildCaptchaConfigById,
+  getSelectedCaptchaChallenge,
   saveGuildCaptchaConfig,
   recordPublishedCaptchaPanel,
   createCaptchaChallenge,
@@ -84,6 +85,30 @@ const MAX_TICKET_TRANSCRIPT_BYTES = 7_500_000;
 const MAX_TICKET_TRANSCRIPT_MESSAGES = 5000;
 const CAPTCHA_GENERATOR_PREFIX = 'captcha';
 const CAPTCHA_ANSWER_INPUT_ID = 'captcha_answer';
+const CAPTCHA_EMOJI_CHOICES = Object.freeze([
+  { value: 'shield', emoji: '🛡️', label: 'Bouclier' },
+  { value: 'spark', emoji: '✨', label: 'Étincelle' },
+  { value: 'rocket', emoji: '🚀', label: 'Fusée' },
+  { value: 'gem', emoji: '💎', label: 'Gemme' },
+  { value: 'lock', emoji: '🔒', label: 'Verrou' },
+  { value: 'bolt', emoji: '⚡', label: 'Éclair' },
+  { value: 'planet', emoji: '🪐', label: 'Planète' },
+  { value: 'fire', emoji: '🔥', label: 'Flamme' },
+]);
+const CAPTCHA_WORD_CHOICES = Object.freeze([
+  'AURORA',
+  'NEXUS',
+  'COMET',
+  'VECTOR',
+  'ORBIT',
+  'PHOTON',
+  'SHADOW',
+  'CRYSTAL',
+  'NOVA',
+  'RIFT',
+  'PULSE',
+  'EMBER',
+]);
 
 function parseJsonArray(rawValue) {
   try {
@@ -185,6 +210,15 @@ function normalizeVisibility(value, fallbackValue = 'ephemeral') {
 
 function normalizeBooleanFlag(value, fallbackValue = false) {
   return (value ?? fallbackValue) ? 1 : 0;
+}
+
+function shuffleArray(items = []) {
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
 }
 
 const DEFAULT_ACTION_CONFIG_BY_TYPE = new Map(
@@ -2229,15 +2263,53 @@ class BotProcess extends EventEmitter {
     };
   }
 
+  _getCaptchaChallengeDefinition(configRow, challengeType = null) {
+    const selected = challengeType
+      ? (configRow?.challenge_types || []).find((item) => item?.key === challengeType)
+      : getSelectedCaptchaChallenge(configRow);
+
+    const key = selected?.key || challengeType || 'image_code';
+    const fallbackByKey = {
+      image_code: {
+        key: 'image_code',
+        label: 'Code image',
+        description: 'Le membre recopie un code brouillé affiché dans une image.',
+      },
+      quick_math: {
+        key: 'quick_math',
+        label: 'Calcul express',
+        description: 'Le membre résout une opération courte pour valider son accès.',
+      },
+      emoji_gate: {
+        key: 'emoji_gate',
+        label: 'Sélection visuelle',
+        description: 'Le membre clique sur le bon pictogramme parmi plusieurs choix.',
+      },
+      word_gate: {
+        key: 'word_gate',
+        label: 'Mot cible',
+        description: 'Le membre choisit le bon mot parmi plusieurs propositions.',
+      },
+    };
+
+    const fallback = fallbackByKey[key] || fallbackByKey.image_code;
+    return {
+      key: fallback.key,
+      label: String(selected?.label || fallback.label).trim(),
+      description: String(selected?.description || fallback.description).trim(),
+    };
+  }
+
   _buildCaptchaPanelComponents(configRow) {
-    const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled).slice(0, 5);
-    if (!enabledTypes.length) return [];
+    const selectedType = this._getCaptchaChallengeDefinition(configRow);
+    if (!selectedType?.key) return [];
 
     return [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(this._buildCaptchaCustomId('start', configRow.id))
-          .setLabel('Lancer la verification')
+          .setLabel('Vérifier l’accès')
+          .setEmoji('🛡️')
           .setStyle(ButtonStyle.Primary)
       ),
     ];
@@ -2245,34 +2317,36 @@ class BotProcess extends EventEmitter {
 
   _buildCaptchaPanelPayload(configRow) {
     const assets = this._buildCaptchaPanelAssets(configRow);
-    const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled);
+    const selectedType = this._getCaptchaChallengeDefinition(configRow);
     const roleMentions = (configRow?.verified_role_ids || []).map((roleId) => `<@&${roleId}>`).join(', ');
-    const methodList = enabledTypes.length
-      ? enabledTypes.map((item) => `• ${String(item.label || 'Verification').trim()}`).join('\n')
-      : 'Aucune verification active.';
 
     const embed = {
       color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
-      title: String(configRow.panel_title || 'Verification CAPTCHA'),
+      title: String(configRow.panel_title || 'Vérification du serveur'),
       description: [
         String(configRow.panel_description || '').trim(),
         '',
-        'Clique sur le bouton ci-dessous pour lancer automatiquement une verification.',
+        'Appuie sur le bouton ci-dessous pour lancer la vérification configurée depuis le site.',
       ].filter(Boolean).join('\n'),
       fields: [
         {
-          name: 'Methodes actives',
-          value: methodList,
+          name: 'Mode actif',
+          value: `**${selectedType.label}**\n${selectedType.description}`,
           inline: true,
         },
         {
-          name: 'Roles debloques',
-          value: roleMentions || 'Configure au moins un role valide.',
+          name: 'Rôles débloqués',
+          value: roleMentions || 'Configure au moins un rôle vérifié.',
           inline: true,
+        },
+        {
+          name: 'Sécurité',
+          value: '3 erreurs consécutives entraînent une expulsion automatique du serveur.',
+          inline: false,
         },
       ],
       footer: {
-        text: 'Le type de verification est pilote depuis le site.',
+        text: 'Un seul mode est publié à la fois depuis le site.',
       },
     };
 
@@ -2291,18 +2365,53 @@ class BotProcess extends EventEmitter {
   }
 
   _pickCaptchaChallengeType(configRow) {
-    const enabledTypes = (configRow?.challenge_types || []).filter((item) => item.enabled);
-    if (!enabledTypes.length) return null;
-    if (enabledTypes.length === 1) return enabledTypes[0].key;
-    const index = Math.floor(Math.random() * enabledTypes.length);
-    return enabledTypes[index]?.key || enabledTypes[0].key;
+    return this._getCaptchaChallengeDefinition(configRow)?.key || null;
+  }
+
+  _buildCaptchaChoiceComponents(challengeId, choices = []) {
+    const safeChoices = Array.isArray(choices) ? choices.slice(0, 4) : [];
+    if (!safeChoices.length) return [];
+
+    return [
+      new ActionRowBuilder().addComponents(
+        ...safeChoices.map((choice) => {
+          const button = new ButtonBuilder()
+            .setCustomId(this._buildCaptchaCustomId('choice', challengeId, choice.value))
+            .setLabel(String(choice.label || choice.value || 'Choix').slice(0, 80))
+            .setStyle(ButtonStyle.Secondary);
+
+          if (choice.emoji) {
+            button.setEmoji(choice.emoji);
+          }
+
+          return button;
+        })
+      ),
+    ];
+  }
+
+  _buildCaptchaRetryComponents(challenge) {
+    if (!challenge) return [];
+
+    if (['emoji_gate', 'word_gate'].includes(challenge.challenge_type)) {
+      return this._buildCaptchaChoiceComponents(challenge.id, challenge.metadata?.choices || []);
+    }
+
+    return [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(this._buildCaptchaCustomId('answer', challenge.id))
+          .setLabel(challenge.challenge_type === 'quick_math' ? 'Reprendre le calcul' : 'Reessayer')
+          .setStyle(ButtonStyle.Secondary)
+      ),
+    ];
   }
 
   _buildCaptchaChallengePrompt(challengeType) {
     if (challengeType === 'quick_math') {
-      const left = 4 + Math.floor(Math.random() * 6);
-      const right = 1 + Math.floor(Math.random() * 5);
-      const useSubtraction = Math.random() > 0.5;
+      const left = 4 + Math.floor(Math.random() * 7);
+      const right = 2 + Math.floor(Math.random() * 6);
+      const useSubtraction = Math.random() > 0.45;
       const larger = Math.max(left, right);
       const smaller = Math.min(left, right);
       const promptText = useSubtraction
@@ -2313,6 +2422,41 @@ class BotProcess extends EventEmitter {
         challengeType,
         promptText,
         expectedAnswer,
+        responseMode: 'modal',
+        title: 'Calcul express',
+        description: 'Résous ce calcul pour récupérer ton accès.',
+      };
+    }
+
+    if (challengeType === 'emoji_gate') {
+      const choices = shuffleArray(CAPTCHA_EMOJI_CHOICES).slice(0, 4);
+      const correct = choices[Math.floor(Math.random() * choices.length)] || choices[0];
+      return {
+        challengeType,
+        promptText: `Clique sur ${correct.label}.`,
+        expectedAnswer: correct.value,
+        responseMode: 'choices',
+        title: 'Sélection visuelle',
+        description: 'Choisis le bon pictogramme parmi les boutons ci-dessous.',
+        choices,
+      };
+    }
+
+    if (challengeType === 'word_gate') {
+      const words = shuffleArray(CAPTCHA_WORD_CHOICES).slice(0, 4);
+      const correct = words[Math.floor(Math.random() * words.length)] || words[0];
+      const choices = shuffleArray(words.map((word) => ({
+        value: word,
+        label: word,
+      })));
+      return {
+        challengeType,
+        promptText: `Choisis le mot ${correct}.`,
+        expectedAnswer: correct,
+        responseMode: 'choices',
+        title: 'Mot cible',
+        description: 'Repère le bon mot et clique sur le bon bouton.',
+        choices,
       };
     }
 
@@ -2321,6 +2465,9 @@ class BotProcess extends EventEmitter {
       challengeType: 'image_code',
       promptText: 'Recopie le code visible sur l image.',
       expectedAnswer,
+      responseMode: 'image',
+      title: 'Code image',
+      description: 'Observe le code brouillé puis saisis-le exactement.',
       visualCode: expectedAnswer,
     };
   }
@@ -2436,15 +2583,15 @@ class BotProcess extends EventEmitter {
   async _showCaptchaAnswerModal(interaction, challenge) {
     const modal = new ModalBuilder()
       .setCustomId(this._buildCaptchaCustomId('submit', challenge.id))
-      .setTitle('Verification CAPTCHA');
+      .setTitle(challenge?.challenge_type === 'quick_math' ? 'Calcul express' : 'Code image');
 
     const input = new TextInputBuilder()
       .setCustomId(CAPTCHA_ANSWER_INPUT_ID)
-      .setLabel(String(challenge?.prompt_text || 'Saisis la reponse').slice(0, 45))
+      .setLabel(String(challenge?.prompt_text || 'Saisis la réponse').slice(0, 45))
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
       .setMaxLength(24)
-      .setPlaceholder(challenge?.challenge_type === 'quick_math' ? 'Entre le resultat' : 'Recopie le code visible');
+      .setPlaceholder(challenge?.challenge_type === 'quick_math' ? 'Entre le résultat' : 'Recopie le code exact');
 
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     await interaction.showModal(modal);
@@ -2459,17 +2606,17 @@ class BotProcess extends EventEmitter {
     await channel.send({
       embeds: [{
         color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
-        title: 'Verification CAPTCHA validee',
-        description: `${member} a termine la verification.`,
+        title: 'Vérification CAPTCHA validée',
+        description: `${member} a terminé la vérification.`,
         fields: [
           {
-            name: 'Methode',
-            value: challengeType === 'quick_math' ? 'Calcul rapide' : 'Image aleatoire',
+            name: 'Mode',
+            value: this._getCaptchaChallengeDefinition(configRow, challengeType).label,
             inline: true,
           },
           {
-            name: 'Roles ajoutes',
-            value: grantedRoleIds.length ? grantedRoleIds.map((roleId) => `<@&${roleId}>`).join(', ') : 'Aucun role ajoute',
+            name: 'Rôles ajoutés',
+            value: grantedRoleIds.length ? grantedRoleIds.map((roleId) => `<@&${roleId}>`).join(', ') : 'Aucun rôle ajouté',
             inline: false,
           },
         ],
@@ -2478,102 +2625,38 @@ class BotProcess extends EventEmitter {
     }).catch(() => {});
   }
 
-  async _handleCaptchaStart(interaction, configId, internalGuildId) {
-    const configRow = getGuildCaptchaConfigById(configId);
-    if (!configRow?.id || configRow.guild_id !== internalGuildId || !configRow.enabled) {
-      await interaction.reply({ content: 'Ce CAPTCHA est indisponible.', ephemeral: true }).catch(() => {});
-      return true;
+  async _resolveCaptchaMember(interaction) {
+    return interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  }
+
+  async _handleCaptchaMaxAttempts(interaction, challenge) {
+    const member = await this._resolveCaptchaMember(interaction);
+    let kicked = false;
+
+    if (member?.kickable) {
+      kicked = await member.kick('Échec CAPTCHA après 3 tentatives').then(() => true).catch(() => false);
     }
 
-    const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-    if (!member) {
-      await interaction.reply({ content: 'Membre introuvable pour cette verification.', ephemeral: true }).catch(() => {});
-      return true;
-    }
+    const content = kicked
+      ? 'Trop d’erreurs CAPTCHA. Accès refusé, tu as été expulsé du serveur.'
+      : 'Trop d’erreurs CAPTCHA. Le bot n’a pas pu t’expulser automatiquement, contacte un administrateur.';
 
-    if (this._memberHasCaptchaAccess(member, configRow)) {
-      await interaction.reply({ content: 'Tu as deja valide ton acces.', ephemeral: true }).catch(() => {});
-      return true;
-    }
-
-    const selectedType = this._pickCaptchaChallengeType(configRow);
-    if (!selectedType) {
-      await interaction.reply({ content: 'Active au moins une methode CAPTCHA sur le site avant de publier.', ephemeral: true }).catch(() => {});
-      return true;
-    }
-
-    const prompt = this._buildCaptchaChallengePrompt(selectedType);
-    const challenge = createCaptchaChallenge({
-      guildId: internalGuildId,
-      configId: configRow.id,
-      discordUserId: interaction.user.id,
-      discordChannelId: interaction.channelId || '',
-      challengeType: prompt.challengeType,
-      promptText: prompt.promptText,
-      expectedAnswer: prompt.expectedAnswer,
-      metadata: prompt.visualCode ? { visualCode: prompt.visualCode } : {},
-    });
-
-    if (prompt.challengeType === 'quick_math') {
-      await this._showCaptchaAnswerModal(interaction, challenge);
-      return true;
-    }
-
-    const attachment = buildCaptchaPngAttachment(prompt.visualCode, challenge.id, configRow.panel_color);
     await interaction.reply({
+      content,
       ephemeral: true,
-      embeds: [{
-        color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
-        title: 'Verification image',
-        description: 'Observe le code affiche, puis ouvre le formulaire pour le recopier exactement.',
-        image: { url: `attachment://${attachment.name}` },
-        fields: [
-          {
-            name: 'Conseil',
-            value: 'Le code est unique et expire rapidement.',
-            inline: false,
-          },
-        ],
-        footer: {
-          text: 'Recopie les 6 chiffres affiches.',
-        },
-      }],
-      files: [attachment],
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(this._buildCaptchaCustomId('answer', challenge.id))
-            .setLabel('Entrer le code')
-            .setStyle(ButtonStyle.Primary)
-        ),
-      ],
+      components: [],
     }).catch(() => {});
+
     return true;
   }
 
-  async _handleCaptchaAnswerButton(interaction, challengeId, internalGuildId) {
-    const challenge = getActiveCaptchaChallengeById(challengeId);
-    if (!challenge || challenge.guild_id !== internalGuildId) {
-      await interaction.reply({ content: 'Ce CAPTCHA a expire. Relance une verification.', ephemeral: true }).catch(() => {});
-      return true;
-    }
-    if (String(challenge.discord_user_id) !== String(interaction.user.id)) {
-      await interaction.reply({ content: 'Cette verification ne t appartient pas.', ephemeral: true }).catch(() => {});
-      return true;
-    }
-
-    await this._showCaptchaAnswerModal(interaction, challenge);
-    return true;
-  }
-
-  async _handleCaptchaSubmit(interaction, challengeId, internalGuildId) {
-    const activeChallenge = getActiveCaptchaChallengeById(challengeId);
+  async _finalizeCaptchaChallenge(interaction, activeChallenge, internalGuildId, answer) {
     if (!activeChallenge || activeChallenge.guild_id !== internalGuildId) {
-      await interaction.reply({ content: 'Ce CAPTCHA a expire. Relance une verification.', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: 'Ce CAPTCHA a expiré. Relance une vérification.', ephemeral: true }).catch(() => {});
       return true;
     }
     if (String(activeChallenge.discord_user_id) !== String(interaction.user.id)) {
-      await interaction.reply({ content: 'Cette verification ne t appartient pas.', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: 'Cette vérification ne t’appartient pas.', ephemeral: true }).catch(() => {});
       return true;
     }
 
@@ -2583,35 +2666,30 @@ class BotProcess extends EventEmitter {
       return true;
     }
 
-    const answer = interaction.fields.getTextInputValue(CAPTCHA_ANSWER_INPUT_ID);
-    const result = validateCaptchaChallenge(challengeId, answer);
-
+    const result = validateCaptchaChallenge(activeChallenge.id, answer);
     if (!result.ok) {
+      if (result.reason === 'max_attempts') {
+        return this._handleCaptchaMaxAttempts(interaction, result.challenge || activeChallenge);
+      }
+
       const canRetry = ['invalid', 'empty'].includes(result.reason);
-      const content = result.reason === 'max_attempts'
-        ? 'Trop d erreurs. Lance une nouvelle verification depuis le panel.'
-        : result.reason === 'expired'
-          ? 'Ce CAPTCHA a expire. Lance une nouvelle verification.'
+      const content = result.reason === 'expired'
+        ? 'Ce CAPTCHA a expiré. Relance une vérification.'
+        : result.reason === 'empty'
+          ? 'Réponse vide. Réessaie une nouvelle fois.'
           : configRow.failure_message;
 
       await interaction.reply({
         content,
         ephemeral: true,
-        components: canRetry ? [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId(this._buildCaptchaCustomId('answer', challengeId))
-              .setLabel('Reessayer')
-              .setStyle(ButtonStyle.Secondary)
-          ),
-        ] : [],
+        components: canRetry ? this._buildCaptchaRetryComponents(result.challenge || activeChallenge) : [],
       }).catch(() => {});
       return true;
     }
 
-    const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+    const member = await this._resolveCaptchaMember(interaction);
     if (!member) {
-      await interaction.reply({ content: 'Membre introuvable pour finaliser la verification.', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: 'Membre introuvable pour finaliser la vérification.', ephemeral: true }).catch(() => {});
       return true;
     }
 
@@ -2642,6 +2720,128 @@ class BotProcess extends EventEmitter {
     return true;
   }
 
+  async _handleCaptchaStart(interaction, configId, internalGuildId) {
+    const configRow = getGuildCaptchaConfigById(configId);
+    if (!configRow?.id || configRow.guild_id !== internalGuildId || !configRow.enabled) {
+      await interaction.reply({ content: 'Ce CAPTCHA est indisponible.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const member = await this._resolveCaptchaMember(interaction);
+    if (!member) {
+      await interaction.reply({ content: 'Membre introuvable pour cette vérification.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    if (this._memberHasCaptchaAccess(member, configRow)) {
+      await interaction.reply({ content: 'Tu as déjà validé ton accès.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const selectedType = this._pickCaptchaChallengeType(configRow);
+    if (!selectedType) {
+      await interaction.reply({ content: 'Choisis un mode CAPTCHA sur le site avant de publier.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const prompt = this._buildCaptchaChallengePrompt(selectedType);
+    const challenge = createCaptchaChallenge({
+      guildId: internalGuildId,
+      configId: configRow.id,
+      discordUserId: interaction.user.id,
+      discordChannelId: interaction.channelId || '',
+      challengeType: prompt.challengeType,
+      promptText: prompt.promptText,
+      expectedAnswer: prompt.expectedAnswer,
+      metadata: {
+        ...(prompt.visualCode ? { visualCode: prompt.visualCode } : {}),
+        ...(prompt.choices ? { choices: prompt.choices } : {}),
+      },
+    });
+
+    if (prompt.responseMode === 'modal') {
+      await this._showCaptchaAnswerModal(interaction, challenge);
+      return true;
+    }
+
+    if (prompt.responseMode === 'choices') {
+      await interaction.reply({
+        ephemeral: true,
+        embeds: [{
+          color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
+          title: prompt.title,
+          description: `${prompt.description}\n\n**Défi :** ${prompt.promptText}`,
+          fields: [
+            {
+              name: 'Sécurité',
+              value: '3 erreurs consécutives = expulsion automatique.',
+              inline: false,
+            },
+          ],
+        }],
+        components: this._buildCaptchaChoiceComponents(challenge.id, prompt.choices),
+      }).catch(() => {});
+      return true;
+    }
+
+    const attachment = buildCaptchaPngAttachment(prompt.visualCode, challenge.id, configRow.panel_color);
+    await interaction.reply({
+      ephemeral: true,
+      embeds: [{
+        color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
+        title: 'Code image',
+        description: 'Observe le code affiché puis ouvre le formulaire pour le recopier exactement.',
+        image: { url: `attachment://${attachment.name}` },
+        fields: [
+          {
+            name: 'Sécurité',
+            value: '3 erreurs consécutives = expulsion automatique.',
+            inline: false,
+          },
+        ],
+        footer: {
+          text: 'Recopie les 6 chiffres affichés.',
+        },
+      }],
+      files: [attachment],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(this._buildCaptchaCustomId('answer', challenge.id))
+            .setLabel('Entrer le code')
+            .setStyle(ButtonStyle.Primary)
+        ),
+      ],
+    }).catch(() => {});
+    return true;
+  }
+
+  async _handleCaptchaAnswerButton(interaction, challengeId, internalGuildId) {
+    const challenge = getActiveCaptchaChallengeById(challengeId);
+    if (!challenge || challenge.guild_id !== internalGuildId) {
+      await interaction.reply({ content: 'Ce CAPTCHA a expiré. Relance une vérification.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    if (String(challenge.discord_user_id) !== String(interaction.user.id)) {
+      await interaction.reply({ content: 'Cette vérification ne t’appartient pas.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    await this._showCaptchaAnswerModal(interaction, challenge);
+    return true;
+  }
+
+  async _handleCaptchaChoice(interaction, challengeId, selectedValue, internalGuildId) {
+    const activeChallenge = getActiveCaptchaChallengeById(challengeId);
+    return this._finalizeCaptchaChallenge(interaction, activeChallenge, internalGuildId, selectedValue);
+  }
+
+  async _handleCaptchaSubmit(interaction, challengeId, internalGuildId) {
+    const activeChallenge = getActiveCaptchaChallengeById(challengeId);
+    const answer = interaction.fields.getTextInputValue(CAPTCHA_ANSWER_INPUT_ID);
+    return this._finalizeCaptchaChallenge(interaction, activeChallenge, internalGuildId, answer);
+  }
+
   async _handleCaptchaInteraction(interaction) {
     const parsed = this._parseCaptchaCustomId(interaction?.customId);
     if (!parsed || !interaction?.guild) return false;
@@ -2661,6 +2861,10 @@ class BotProcess extends EventEmitter {
 
       if (interaction.isButton() && parsed.type === 'answer') {
         return this._handleCaptchaAnswerButton(interaction, parsed.args[0], internalGuildId);
+      }
+
+      if (interaction.isButton() && parsed.type === 'choice') {
+        return this._handleCaptchaChoice(interaction, parsed.args[0], parsed.args[1], internalGuildId);
       }
 
       if (interaction.isModalSubmit() && parsed.type === 'submit') {

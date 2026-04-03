@@ -6,26 +6,38 @@ const { randomBytes, createHash } = require('crypto');
 const db = require('../database');
 
 const DEFAULT_COLOR = '#06b6d4';
-const DEFAULT_PANEL_TITLE = 'Verification CAPTCHA';
-const DEFAULT_PANEL_DESCRIPTION = 'Clique sur le bouton de verification pour debloquer ton acces au serveur.';
+const DEFAULT_PANEL_TITLE = 'Verification du serveur';
+const DEFAULT_PANEL_DESCRIPTION = 'Clique sur le bouton ci-dessous pour verifier ton acces et recuperer ton role automatiquement.';
 const DEFAULT_CHANNEL_NAME = 'verification';
 const DEFAULT_SUCCESS_MESSAGE = 'Verification reussie. Acces debloque.';
-const DEFAULT_FAILURE_MESSAGE = 'Code invalide. Reessaie avec une nouvelle verification.';
+const DEFAULT_FAILURE_MESSAGE = 'Verification invalide. Reessaie une nouvelle fois.';
 const CHALLENGE_TTL_MINUTES = 10;
 const MAX_CHALLENGE_ATTEMPTS = 3;
 
 const DEFAULT_CHALLENGE_TYPES = Object.freeze([
   {
     key: 'image_code',
-    label: 'Image securisee',
-    description: 'Recopier le code genere dans une image unique.',
+    label: 'Code image',
+    description: 'Le membre recopie le code brouille affiche dans une image.',
     enabled: true,
   },
   {
     key: 'quick_math',
     label: 'Calcul express',
-    description: 'Resoudre un calcul court pour valider ton acces.',
-    enabled: true,
+    description: 'Le membre resout une operation courte avant validation.',
+    enabled: false,
+  },
+  {
+    key: 'emoji_gate',
+    label: 'Selection visuelle',
+    description: 'Le membre clique sur le bon pictogramme parmi plusieurs choix.',
+    enabled: false,
+  },
+  {
+    key: 'word_gate',
+    label: 'Mot cible',
+    description: 'Le membre choisit le bon mot parmi plusieurs propositions.',
+    enabled: false,
   },
 ]);
 
@@ -112,7 +124,7 @@ function normalizeChannelMode(value, fallback = 'existing') {
 }
 
 function normalizeChallengeKey(value, fallback = 'image_code') {
-  return ['image_code', 'quick_math'].includes(String(value || '').trim()) ? String(value).trim() : fallback;
+  return ['image_code', 'quick_math', 'emoji_gate', 'word_gate'].includes(String(value || '').trim()) ? String(value).trim() : fallback;
 }
 
 function mergeChallengeTypes(rawTypes = []) {
@@ -120,15 +132,30 @@ function mergeChallengeTypes(rawTypes = []) {
     .map((item) => [normalizeChallengeKey(item?.key, ''), item])
     .filter(([key]) => !!key));
 
+  const preferredKey = DEFAULT_CHALLENGE_TYPES.find((preset) => {
+    const current = map.get(preset.key);
+    if (typeof current?.enabled === 'boolean') return current.enabled;
+    return preset.enabled;
+  })?.key || DEFAULT_CHALLENGE_TYPES[0].key;
+
   return DEFAULT_CHALLENGE_TYPES.map((preset) => {
     const current = map.get(preset.key) || {};
     return {
       key: preset.key,
       label: normalizeText(current.label, 40, preset.label) || preset.label,
       description: normalizeText(current.description, 140, preset.description),
-      enabled: normalizeBoolean(current.enabled, preset.enabled),
+      enabled: preset.key === preferredKey,
     };
   });
+}
+
+function getSelectedCaptchaChallenge(configOrTypes) {
+  const challengeTypes = Array.isArray(configOrTypes)
+    ? configOrTypes
+    : configOrTypes?.challenge_types;
+
+  const merged = mergeChallengeTypes(challengeTypes);
+  return merged.find((item) => item.enabled) || merged[0] || null;
 }
 
 function mapCaptchaConfigRow(row) {
@@ -413,10 +440,12 @@ module.exports = {
   DEFAULT_SUCCESS_MESSAGE,
   DEFAULT_FAILURE_MESSAGE,
   CHALLENGE_TTL_MINUTES,
+  MAX_CHALLENGE_ATTEMPTS,
   buildCaptchaCode,
   buildNumericCaptchaCode,
   getGuildCaptchaConfig,
   getGuildCaptchaConfigById,
+  getSelectedCaptchaChallenge,
   saveGuildCaptchaConfig,
   recordPublishedCaptchaPanel,
   createCaptchaChallenge,

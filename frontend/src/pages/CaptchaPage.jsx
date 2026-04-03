@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { ArrowRight, ChevronDown, Fingerprint, ImagePlus, RefreshCw, Save, Send, Shield, Upload, UserPlus, X } from 'lucide-react'
+import { ArrowRight, ChevronDown, Fingerprint, ImagePlus, RefreshCw, Save, Send, Shield, ShieldCheck, Upload, X } from 'lucide-react'
 import { botAPI, captchaAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
@@ -16,17 +16,48 @@ const MAX_CAPTCHA_REQUEST_LENGTH = 650000
 const DEFAULT_CHALLENGE_TYPES = [
   {
     key: 'image_code',
-    label: 'Image sécurisée',
-    description: 'Le membre recopie un code généré dans une image unique.',
+    label: 'Code image',
+    description: 'Le membre recopie le code brouillé affiché dans l’image.',
     enabled: true,
   },
   {
     key: 'quick_math',
     label: 'Calcul express',
-    description: 'Le membre résout un calcul court pour valider son accès.',
-    enabled: true,
+    description: 'Le membre résout une opération courte avant validation.',
+    enabled: false,
+  },
+  {
+    key: 'emoji_gate',
+    label: 'Sélection visuelle',
+    description: 'Le membre clique sur le bon pictogramme parmi plusieurs choix.',
+    enabled: false,
+  },
+  {
+    key: 'word_gate',
+    label: 'Mot cible',
+    description: 'Le membre choisit le bon mot parmi plusieurs propositions.',
+    enabled: false,
   },
 ]
+
+const CHALLENGE_META = {
+  image_code: {
+    badge: 'Image générée',
+    helper: 'Image brouillée envoyée par le bot, puis saisie du code en privé.',
+  },
+  quick_math: {
+    badge: 'Calcul modal',
+    helper: 'Le bot ouvre un formulaire et valide le résultat immédiatement.',
+  },
+  emoji_gate: {
+    badge: 'Choix visuel',
+    helper: 'Le membre clique sur le bon pictogramme directement dans Discord.',
+  },
+  word_gate: {
+    badge: 'Boutons rapides',
+    helper: 'Le membre choisit le bon mot parmi plusieurs propositions.',
+  },
+}
 
 const DEFAULT_CONFIG = {
   enabled: true,
@@ -35,14 +66,14 @@ const DEFAULT_CONFIG = {
   panel_channel_name: 'verification',
   panel_message_id: '',
   panel_title: 'Vérification CAPTCHA',
-  panel_description: 'Clique sur le bouton de vérification pour débloquer ton accès au serveur.',
+  panel_description: 'Clique sur le bouton pour vérifier ton accès et récupérer automatiquement ton rôle.',
   panel_color: '#06b6d4',
   panel_thumbnail_url: '',
   panel_image_url: '',
   verified_role_ids: [],
   log_channel_id: '',
   success_message: 'Vérification réussie. Accès débloqué.',
-  failure_message: 'Code invalide. Réessaie avec une nouvelle vérification.',
+  failure_message: 'Vérification invalide. Réessaie une nouvelle fois.',
   challenge_types: DEFAULT_CHALLENGE_TYPES,
 }
 
@@ -110,13 +141,19 @@ function mergeChallengeTypes(challengeTypes = []) {
       .filter(([key]) => key)
   )
 
+  const selectedKey = DEFAULT_CHALLENGE_TYPES.find((preset) => {
+    const current = map.get(preset.key)
+    if (typeof current?.enabled === 'boolean') return current.enabled
+    return preset.enabled
+  })?.key || DEFAULT_CHALLENGE_TYPES[0].key
+
   return DEFAULT_CHALLENGE_TYPES.map((preset) => {
     const current = map.get(preset.key) || {}
     return {
       key: preset.key,
       label: String(current.label || preset.label),
       description: String(current.description || preset.description),
-      enabled: typeof current.enabled === 'boolean' ? current.enabled : preset.enabled,
+      enabled: preset.key === selectedKey,
     }
   })
 }
@@ -385,6 +422,8 @@ export default function CaptchaPage() {
   const draftFingerprint = useMemo(() => normalizedDraft ? JSON.stringify(buildCaptchaSavePayload(normalizedDraft)) : '', [normalizedDraft])
   const draftDirty = configFingerprint !== draftFingerprint
   const enabledChallenges = (normalizedDraft?.challenge_types || []).filter((item) => item.enabled)
+  const selectedChallenge = enabledChallenges[0] || normalizedDraft?.challenge_types?.[0] || DEFAULT_CHALLENGE_TYPES[0]
+  const selectedChallengeMeta = CHALLENGE_META[selectedChallenge?.key] || CHALLENGE_META.image_code
   const selectedRoles = useMemo(() => new Set(normalizedDraft?.verified_role_ids || []), [normalizedDraft])
 
   const applyOverview = (payload = {}, preserveDraft = false) => {
@@ -487,7 +526,7 @@ export default function CaptchaPage() {
     setDraft((current) => normalizeConfig({ ...(current || {}), ...patch }))
   }
 
-  const toggleChallengeType = (key) => {
+  const selectChallengeType = (key) => {
     hasUserEditedRef.current = true
     autosaveBlockedFingerprintRef.current = ''
     setLoadError('')
@@ -495,7 +534,7 @@ export default function CaptchaPage() {
       const source = normalizeConfig(current || {})
       return {
         ...source,
-        challenge_types: source.challenge_types.map((item) => item.key === key ? { ...item, enabled: !item.enabled } : item),
+        challenge_types: source.challenge_types.map((item) => ({ ...item, enabled: item.key === key })),
       }
     })
   }
@@ -597,7 +636,7 @@ export default function CaptchaPage() {
                 Captcha
               </div>
               <h1 className="font-display text-3xl font-700 text-white sm:text-[2.5rem]">CAPTCHA</h1>
-              <p className="max-w-3xl text-sm text-white/55 sm:text-base">Choisis le salon, active les méthodes utiles, définis les rôles validés et publie un vrai panel Discord.</p>
+              <p className="max-w-3xl text-sm text-white/55 sm:text-base">Choisis un seul mode, publie le panel dans le bon salon et laisse le bot vérifier automatiquement les membres sur Discord.</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <button type="button" onClick={() => { setRefreshing(true); void loadAll(true) }} disabled={loading || refreshing} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/70 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-60">
@@ -620,13 +659,16 @@ export default function CaptchaPage() {
               {normalizedDraft?.enabled ? 'Module actif' : 'Module désactivé'}
             </div>
             <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/60">
-              {enabledChallenges.length} méthode{enabledChallenges.length > 1 ? 's' : ''} active{enabledChallenges.length > 1 ? 's' : ''}
+              Mode choisi : {selectedChallenge?.label || 'Aucun'}
             </div>
             <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-mono text-white/60">
               {selectedRoles.size} rôle{selectedRoles.size > 1 ? 's' : ''} vérifié{selectedRoles.size > 1 ? 's' : ''}
             </div>
             <div className={`rounded-full border px-3 py-1.5 text-xs font-mono ${stats?.published ? 'border-cyan-400/20 bg-cyan-500/12 text-cyan-200' : 'border-white/10 bg-white/[0.04] text-white/55'}`}>
               {stats?.published ? 'Panel publié' : 'Panel non publié'}
+            </div>
+            <div className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1.5 text-xs font-mono text-amber-200">
+              3 erreurs = expulsion
             </div>
           </div>
         </div>
@@ -684,22 +726,30 @@ export default function CaptchaPage() {
 
             <div className="glass-card border border-white/[0.08] p-5">
               <div className="mb-5">
-                <h2 className="font-display text-2xl font-700 text-white">Méthodes CAPTCHA</h2>
-                <p className="mt-1 text-sm text-white/45">Coche les méthodes autorisées. Discord lancera automatiquement l'une d'elles avec un seul bouton.</p>
+                <h2 className="font-display text-2xl font-700 text-white">Mode CAPTCHA</h2>
+                <p className="mt-1 text-sm text-white/45">Tu choisis un seul mode ici. C’est ce mode précis qui sera envoyé sur Discord, sans sélection supplémentaire côté serveur.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {normalizedDraft.challenge_types.map((item) => {
                   const active = Boolean(item.enabled)
+                  const meta = CHALLENGE_META[item.key] || CHALLENGE_META.image_code
                   return (
-                    <button key={item.key} type="button" onClick={() => toggleChallengeType(item.key)} className={`rounded-[24px] border p-4 text-left transition-all ${active ? 'border-cyan-400/25 bg-cyan-500/[0.08]' : 'border-white/10 bg-black/20 hover:bg-white/[0.04]'}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="font-display text-lg font-700 text-white">{item.label}</div>
-                          <div className="mt-1 text-sm text-white/50">{item.description}</div>
+                    <button key={item.key} type="button" onClick={() => selectChallengeType(item.key)} className={`rounded-[24px] border p-4 text-left transition-all ${active ? 'border-cyan-400/30 bg-cyan-500/[0.08] shadow-[0_0_32px_rgba(34,211,238,0.12)]' : 'border-white/10 bg-black/20 hover:bg-white/[0.04]'}`}>
+                      <div className="flex h-full flex-col gap-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-display text-lg font-700 text-white">{item.label}</div>
+                            <div className="mt-1 text-sm text-white/50">{item.description}</div>
+                          </div>
+                          <div className={`mt-1 rounded-full border px-2.5 py-1 text-[11px] font-mono ${active ? 'border-emerald-400/20 bg-emerald-500/12 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-white/45'}`}>
+                            {active ? 'Actif' : 'Choisir'}
+                          </div>
                         </div>
-                        <div className={`mt-1 rounded-full border px-2.5 py-1 text-[11px] font-mono ${active ? 'border-emerald-400/20 bg-emerald-500/12 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-white/45'}`}>
-                          {active ? 'Actif' : 'Off'}
+                        <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                          <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/40">{meta.badge}</span>
+                          <span className="text-xs text-white/55">1 mode publié</span>
                         </div>
+                        <div className="text-sm leading-6 text-white/60">{meta.helper}</div>
                       </div>
                     </button>
                   )
@@ -765,23 +815,25 @@ export default function CaptchaPage() {
                           <img src={normalizedDraft.panel_thumbnail_url} alt="" className="h-14 w-14 rounded-2xl border border-white/10 object-cover" />
                         ) : (
                           <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-white/40">
-                            <UserPlus className="h-5 w-5" />
+                            <ShieldCheck className="h-5 w-5" />
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="font-display text-lg font-700 text-white">{normalizedDraft.panel_title || DEFAULT_CONFIG.panel_title}</div>
                           <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">{normalizedDraft.panel_description || DEFAULT_CONFIG.panel_description}</div>
                           <div className="mt-4 space-y-2">
-                            {enabledChallenges.length > 0 ? enabledChallenges.map((item) => (
-                              <div key={item.key} className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2.5">
-                                <div className="font-display text-sm font-700 text-white">{item.label}</div>
-                                <div className="mt-1 text-xs text-white/55">{item.description}</div>
+                            <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.08] px-3 py-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="font-display text-sm font-700 text-white">{selectedChallenge?.label || 'Mode CAPTCHA'}</div>
+                                <div className="rounded-full border border-cyan-400/20 bg-cyan-500/12 px-2.5 py-1 text-[11px] font-mono text-cyan-200">
+                                  {selectedChallengeMeta.badge}
+                                </div>
                               </div>
-                            )) : (
-                              <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white/45">
-                                Active au moins une méthode pour publier le panel.
+                              <div className="mt-2 text-xs leading-5 text-white/60">{selectedChallenge?.description || DEFAULT_CHALLENGE_TYPES[0].description}</div>
+                              <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/55">
+                                {selectedChallengeMeta.helper}
                               </div>
-                            )}
+                            </div>
                           </div>
                           <div className="mt-4 flex flex-wrap gap-2">
                             {(normalizedDraft.verified_role_ids || []).slice(0, 4).map((roleId) => {
@@ -804,7 +856,7 @@ export default function CaptchaPage() {
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/14 px-4 py-3 text-center text-sm font-medium text-cyan-100">
-                    Lancer la vérification
+                    Vérifier l’accès
                   </div>
                 </div>
               </div>
@@ -827,9 +879,12 @@ export default function CaptchaPage() {
                     : 'Aucun rôle n’est encore sélectionné.'}
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/70">
-                  {enabledChallenges.length > 0
-                    ? `${enabledChallenges.length} méthode${enabledChallenges.length > 1 ? 's' : ''} CAPTCHA sera${enabledChallenges.length > 1 ? 'ont' : ''} pilotée${enabledChallenges.length > 1 ? 's' : ''} automatiquement depuis le site.`
-                    : 'Active au moins une méthode CAPTCHA avant de publier.'}
+                  {selectedChallenge
+                    ? `Discord utilisera uniquement le mode « ${selectedChallenge.label} » tant que tu ne le changes pas sur le site.`
+                    : 'Choisis un mode CAPTCHA avant de publier.'}
+                </div>
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                  Après 3 erreurs consécutives, le membre est automatiquement expulsé du serveur.
                 </div>
               </div>
             </div>

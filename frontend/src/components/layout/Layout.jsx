@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket, ShieldCheck
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
@@ -379,7 +379,7 @@ export default function Layout() {
     { icon: Terminal, label: t('layout.nav.commands'), path: '/dashboard/commands', needsGuild: true },
     { icon: Sparkles, label: t('layout.nav.commandsAi', 'Commandes IA'), path: '/dashboard/commands-ai', needsGuild: true },
     { icon: Ticket, label: t('layout.nav.tickets', 'Tickets'), path: '/dashboard/tickets', needsGuild: true },
-    { icon: UserPlus, label: t('layout.nav.captcha', 'CAPTCHA'), path: '/dashboard/captcha', needsGuild: true },
+    { icon: ShieldCheck, label: t('layout.nav.captcha', 'CAPTCHA'), path: '/dashboard/captcha', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]
