@@ -573,11 +573,16 @@
     font-size: 0.92rem;
     font-weight: 700;
     line-height: 1;
-    border: 1px solid rgba(255,255,255,0.14);
-    background: linear-gradient(135deg, #00d4aa, #a855f7);
+    border: 1px solid rgba(77, 123, 170, 0.28);
+    background:
+      radial-gradient(circle at 14% 20%, rgba(0, 229, 255, 0.12), transparent 34%),
+      radial-gradient(circle at 86% 82%, rgba(124, 58, 237, 0.12), transparent 36%),
+      linear-gradient(135deg, rgba(9, 17, 28, 0.98), rgba(13, 22, 36, 0.98) 56%, rgba(16, 18, 35, 0.98));
     box-shadow:
-      0 0 16px rgba(0,212,170,0.25),
-      0 12px 26px rgba(25, 10, 45, 0.26);
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 0 0 1px rgba(13, 31, 51, 0.4),
+      0 12px 26px rgba(3, 8, 16, 0.34),
+      0 0 20px rgba(0, 229, 255, 0.08);
     overflow: hidden;
     transition:
       opacity 180ms ease,
@@ -590,30 +595,46 @@
     position: absolute;
     inset: 1px;
     border-radius: 9px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04) 44%, rgba(255,255,255,0));
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02) 42%, rgba(255,255,255,0)),
+      linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 18%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0) 82%, rgba(255,255,255,0.02));
     pointer-events: none;
-    opacity: 0.9;
+    opacity: 0.95;
+  }
+  .sidebar-email-fast::after {
+    content: '';
+    position: absolute;
+    inset: auto -18% -36% auto;
+    width: 72%;
+    height: 140%;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.16), transparent 62%);
+    transform: rotate(-12deg);
+    pointer-events: none;
+    opacity: 0.7;
   }
   .sidebar-email-fast:hover {
-    opacity: 0.94;
+    opacity: 0.98;
     transform: translateY(-1px);
     box-shadow:
-      0 0 20px rgba(0,212,170,0.32),
-      0 16px 34px rgba(25, 10, 45, 0.32);
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 0 0 1px rgba(80, 133, 189, 0.44),
+      0 16px 34px rgba(3, 8, 16, 0.42),
+      0 0 24px rgba(0, 229, 255, 0.12);
   }
   .sidebar-email-fast:focus-visible {
     outline: none;
     box-shadow:
       0 0 0 2px rgba(255,255,255,0.18),
-      0 0 0 5px rgba(0,212,170,0.22),
-      0 14px 30px rgba(25, 10, 45, 0.28);
+      0 0 0 5px rgba(0,229,255,0.12),
+      0 14px 30px rgba(3, 8, 16, 0.34);
   }
   .sidebar-email-fast-active {
-    filter: saturate(1.06);
+    filter: saturate(1.02);
     box-shadow:
-      0 0 0 1px rgba(255,255,255,0.18),
-      0 0 22px rgba(0,212,170,0.34),
-      0 18px 36px rgba(25, 10, 45, 0.36);
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 0 0 1px rgba(114, 177, 227, 0.34),
+      0 0 22px rgba(0,229,255,0.1),
+      0 18px 36px rgba(3, 8, 16, 0.38);
   }
   .sidebar-email-fast-collapsed {
     justify-content: center;
@@ -643,9 +664,9 @@
     justify-content: center;
     padding: 0.2rem 0.42rem;
     border-radius: 999px;
-    background: rgba(255,255,255,0.2);
-    border: 1px solid rgba(255,255,255,0.24);
-    color: #ffffff;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(129, 171, 210, 0.18);
+    color: rgba(235, 245, 255, 0.92);
     font-size: 0.56rem;
     font-weight: 800;
     letter-spacing: 0.12em;
