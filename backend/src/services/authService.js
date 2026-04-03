@@ -404,6 +404,12 @@ function safeUser(user) {
 // ── Register ──────────────────────────────────────────────────────────────────
 async function register({ email, username, password, captcha_token, captcha_answer, req }) {
   const normalizedEmail = normalizeEmail(email);
+  if (!String(captcha_token || '').trim() || !String(captcha_answer || '').trim()) {
+    throw Object.assign(
+      new Error('Formulaire d inscription obsolete. Recharge la page pour afficher le CAPTCHA anti-bot.'),
+      { status: 409 }
+    );
+  }
   registerCaptchaService.verifyRegisterCaptcha(req, captcha_token, captcha_answer);
   await emailPolicyService.assertAllowedRegistrationEmail(normalizedEmail, {
     allowKnownBypass: isPrimaryFounderEmail(normalizedEmail),
