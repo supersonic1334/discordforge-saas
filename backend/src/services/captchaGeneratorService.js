@@ -321,6 +321,7 @@ function createCaptchaChallenge({
   promptText = '',
   expectedAnswer,
   metadata = {},
+  attemptCount = 0,
   ttlMinutes = CHALLENGE_TTL_MINUTES,
 }) {
   const id = uuidv4();
@@ -337,7 +338,7 @@ function createCaptchaChallenge({
     challenge_type: normalizeChallengeKey(challengeType, 'image_code'),
     prompt_text: normalizeText(promptText, 140, ''),
     expected_answer_hash: hashAnswer(expectedAnswer),
-    attempt_count: 0,
+    attempt_count: Math.max(0, Number(attemptCount || 0)),
     metadata_json: JSON.stringify(metadata || {}),
     status: 'pending',
     expires_at: toExpiry(ttlMinutes),

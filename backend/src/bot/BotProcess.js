@@ -62,9 +62,7 @@ const {
   recordPublishedCaptchaPanel,
   createCaptchaChallenge,
   getActiveCaptchaChallengeById,
-  getActiveCaptchaChallengeForUser,
   validateCaptchaChallenge,
-  normalizeAnswer: normalizeCaptchaAnswer,
 } = require('../services/captchaGeneratorService');
 const { buildCaptchaPngAttachment } = require('../services/captchaImageService');
 const config = require('../config');
@@ -2319,11 +2317,15 @@ class BotProcess extends EventEmitter {
 
   _buildCaptchaPanelPayload(configRow) {
     const assets = this._buildCaptchaPanelAssets(configRow);
+    const color = Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16);
 
     const embed = {
-      color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
+      color,
       title: String(configRow.panel_title || 'Vérification du serveur'),
       description: String(configRow.panel_description || '').trim() || 'Clique sur ce bouton ci-dessous pour vérifier ton accès au serveur.',
+      footer: {
+        text: 'Une verification privee suffit pour ouvrir le serveur.',
+      },
     };
 
     if (assets.thumbnailUrl) {
@@ -2377,10 +2379,123 @@ class BotProcess extends EventEmitter {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(this._buildCaptchaCustomId('answer', challenge.id))
-          .setLabel(challenge.challenge_type === 'quick_math' ? 'Reprendre le calcul' : 'Reessayer')
-          .setStyle(ButtonStyle.Secondary)
+          .setLabel(challenge.challenge_type === 'quick_math' ? 'Ouvrir le calcul' : 'Entrer le code')
+          .setStyle(ButtonStyle.Primary)
       ),
     ];
+  }
+
+  async _replyCaptcha(interaction, payload) {
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply(payload);
+    }
+    return interaction.reply({
+      ephemeral: true,
+      ...payload,
+    });
+  }
+
+  async _deferCaptcha(interaction) {
+    if (interaction.deferred || interaction.replied || typeof interaction.deferReply !== 'function') {
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+  }
+
+  _buildCaptchaPromptPayload(configRow, challenge, prompt, {
+    tone = 'info',
+    title = '',
+    intro = '',
+    footer = '',
+  } = {}) {
+    const panelAssets = this._buildCaptchaPanelAssets(configRow);
+    const files = [...panelAssets.files];
+    let visualUrl = panelAssets.imageUrl || '';
+
+    if (prompt.challengeType === 'image_code' && prompt.visualCode) {
+      const codeAttachment = buildCaptchaPngAttachment(prompt.visualCode, challenge.id, configRow.panel_color);
+      files.push(codeAttachment);
+      visualUrl = `attachment://${codeAttachment.name}`;
+    }
+
+    const descriptionParts = [
+      intro,
+      String(prompt.description || '').trim(),
+      String(prompt.promptText || '').trim(),
+    ].filter(Boolean);
+
+    const embed = this._buildCaptchaFeedbackEmbed(configRow, {
+      title: title || prompt.title || 'Verification privee',
+      description: descriptionParts.join('\n\n').slice(0, 4000),
+      tone,
+      imageUrl: visualUrl,
+      footer: footer || 'Tes reponses restent visibles uniquement pour toi.',
+    });
+
+    if (panelAssets.thumbnailUrl) {
+      embed.thumbnail = { url: panelAssets.thumbnailUrl };
+    }
+
+    return {
+      embeds: [embed],
+      components: prompt.responseMode === 'choices'
+        ? this._buildCaptchaChoiceComponents(challenge.id, prompt.choices)
+        : this._buildCaptchaRetryComponents(challenge),
+      files,
+    };
+  }
+
+  _createCaptchaChallengeInstance(configRow, {
+    guildId,
+    discordUserId,
+    discordChannelId = '',
+    challengeType = null,
+    attemptCount = 0,
+  } = {}) {
+    const prompt = this._buildCaptchaChallengePrompt(
+      challengeType || this._pickCaptchaChallengeType(configRow) || 'image_code'
+    );
+
+    const challenge = createCaptchaChallenge({
+      guildId,
+      configId: configRow.id,
+      discordUserId,
+      discordChannelId,
+      challengeType: prompt.challengeType,
+      promptText: prompt.promptText,
+      expectedAnswer: prompt.expectedAnswer,
+      metadata: {
+        ...(prompt.visualCode ? { visualCode: prompt.visualCode } : {}),
+        ...(prompt.choices ? { choices: prompt.choices } : {}),
+      },
+      attemptCount,
+    });
+
+    return {
+      challenge,
+      prompt,
+    };
+  }
+
+  async _buildCaptchaRetryPayload(configRow, activeChallenge, interaction, failureReason) {
+    const nextAttemptCount = Math.max(0, Number(activeChallenge?.attempt_count || 0));
+    const regenerated = this._createCaptchaChallengeInstance(configRow, {
+      guildId: activeChallenge.guild_id,
+      discordUserId: interaction.user.id,
+      discordChannelId: interaction.channelId || activeChallenge.discord_channel_id || '',
+      challengeType: activeChallenge.challenge_type,
+      attemptCount: nextAttemptCount,
+    });
+
+    const intro = failureReason === 'empty'
+      ? 'Reponse vide. Un nouveau defis prive a ete prepare.'
+      : 'Code invalide. Un nouveau defis prive a ete genere.';
+
+    return this._buildCaptchaPromptPayload(configRow, regenerated.challenge, regenerated.prompt, {
+      tone: 'warning',
+      intro,
+      footer: `${Math.max(0, 3 - nextAttemptCount)} essai(s) restant(s) avant expulsion automatique.`,
+    });
   }
 
   _buildCaptchaChallengePrompt(challengeType) {
@@ -2486,6 +2601,26 @@ class BotProcess extends EventEmitter {
     return channel;
   }
 
+  async _syncCaptchaVerifiedChannelVisibility(channel, guild, configRow) {
+    if (!channel?.permissionOverwrites?.edit || !guild?.members?.me?.permissions?.has(PermissionFlagsBits.ManageChannels)) {
+      return;
+    }
+
+    const roleIds = [...new Set((configRow?.verified_role_ids || []).map((roleId) => normalizeSnowflake(roleId)).filter(Boolean))];
+    if (!roleIds.length) return;
+
+    await Promise.all(roleIds.map((roleId) => (
+      channel.permissionOverwrites.edit(roleId, {
+        ViewChannel: false,
+        SendMessages: false,
+        AddReactions: false,
+        ReadMessageHistory: false,
+      }, {
+        reason: 'Masquer le salon CAPTCHA aux membres verifies',
+      }).catch(() => {})
+    )));
+  }
+
   async publishCaptchaPanel(discordGuildId) {
     const guild = this.client?.guilds?.cache?.get(discordGuildId) || await this.client?.guilds?.fetch(discordGuildId);
     if (!guild) {
@@ -2537,6 +2672,8 @@ class BotProcess extends EventEmitter {
     } else {
       message = await channel.send(payload);
     }
+
+    await this._syncCaptchaVerifiedChannelVisibility(channel, guild, configRow);
 
     const saved = recordPublishedCaptchaPanel(internalGuildId, {
       panel_channel_id: channel.id,
@@ -2639,6 +2776,8 @@ class BotProcess extends EventEmitter {
   }
 
   async _handleCaptchaMaxAttempts(interaction, challenge) {
+    await this._deferCaptcha(interaction);
+
     const member = await this._resolveCaptchaMember(interaction);
     let kicked = false;
 
@@ -2646,13 +2785,15 @@ class BotProcess extends EventEmitter {
       kicked = await member.kick('Échec CAPTCHA après 3 tentatives').then(() => true).catch(() => false);
     }
 
-    const content = kicked
-      ? 'Trop d’erreurs CAPTCHA. Accès refusé, tu as été expulsé du serveur.'
-      : 'Trop d’erreurs CAPTCHA. Le bot n’a pas pu t’expulser automatiquement, contacte un administrateur.';
-
-    await interaction.reply({
-      content,
-      ephemeral: true,
+    await this._replyCaptcha(interaction, {
+      embeds: [this._buildCaptchaFeedbackEmbed(null, {
+        title: 'Verification refusee',
+        description: kicked
+          ? 'Trop de tentatives incorrectes. Tu as ete expulse du serveur pour proteger l acces.'
+          : 'Trop de tentatives incorrectes. Le bot n a pas pu t expulser automatiquement, contacte un administrateur.',
+        tone: 'error',
+        footer: 'Nouvelle tentative bloquee apres trop d erreurs consecutives.',
+      })],
       components: [],
     }).catch(() => {});
 
@@ -2686,19 +2827,21 @@ class BotProcess extends EventEmitter {
 
   async _finalizeCaptchaChallenge(interaction, activeChallenge, internalGuildId, answer) {
     if (!activeChallenge || activeChallenge.guild_id !== internalGuildId) {
-      await interaction.reply({ content: 'Ce CAPTCHA a expiré. Relance une vérification.', ephemeral: true }).catch(() => {});
+      await this._replyCaptcha(interaction, { content: 'Ce CAPTCHA a expiré. Relance une vérification.' }).catch(() => {});
       return true;
     }
     if (String(activeChallenge.discord_user_id) !== String(interaction.user.id)) {
-      await interaction.reply({ content: 'Cette vérification ne t’appartient pas.', ephemeral: true }).catch(() => {});
+      await this._replyCaptcha(interaction, { content: 'Cette vérification ne t’appartient pas.' }).catch(() => {});
       return true;
     }
 
     const configRow = getGuildCaptchaConfigById(activeChallenge.config_id);
     if (!configRow?.id || configRow.guild_id !== internalGuildId) {
-      await interaction.reply({ content: 'Configuration CAPTCHA introuvable.', ephemeral: true }).catch(() => {});
+      await this._replyCaptcha(interaction, { content: 'Configuration CAPTCHA introuvable.' }).catch(() => {});
       return true;
     }
+
+    await this._deferCaptcha(interaction);
 
     const result = validateCaptchaChallenge(activeChallenge.id, answer);
     if (!result.ok) {
@@ -2707,23 +2850,32 @@ class BotProcess extends EventEmitter {
       }
 
       const canRetry = ['invalid', 'empty'].includes(result.reason);
-      const content = result.reason === 'expired'
-        ? 'Ce CAPTCHA a expiré. Relance une vérification.'
-        : result.reason === 'empty'
-          ? 'Réponse vide. Réessaie une nouvelle fois.'
-          : configRow.failure_message;
+      if (result.reason === 'expired' || !canRetry) {
+        await this._replyCaptcha(interaction, {
+          embeds: [this._buildCaptchaFeedbackEmbed(configRow, {
+            title: 'Verification expiree',
+            description: 'Ce defis a expire. Clique de nouveau sur le bouton de verification.',
+            tone: 'warning',
+          })],
+          components: [],
+        }).catch(() => {});
+        return true;
+      }
 
-      await interaction.reply({
-        content,
-        ephemeral: true,
-        components: canRetry ? this._buildCaptchaRetryComponents(result.challenge || activeChallenge) : [],
-      }).catch(() => {});
+      const retryPayload = await this._buildCaptchaRetryPayload(
+        configRow,
+        result.challenge || activeChallenge,
+        interaction,
+        result.reason
+      );
+
+      await this._replyCaptcha(interaction, retryPayload).catch(() => {});
       return true;
     }
 
     const member = await this._resolveCaptchaMember(interaction);
     if (!member) {
-      await interaction.reply({ content: 'Membre introuvable pour finaliser la vérification.', ephemeral: true }).catch(() => {});
+      await this._replyCaptcha(interaction, { content: 'Membre introuvable pour finaliser la vérification.' }).catch(() => {});
       return true;
     }
 
@@ -2732,24 +2884,45 @@ class BotProcess extends EventEmitter {
       .filter((role) => role && role.editable)
       .map((role) => role.id);
 
-    if (rolesToGrant.length) {
-      await member.roles.add(rolesToGrant, 'CAPTCHA reussi').catch((error) => {
-        throw new Error(`Impossible d attribuer les roles CAPTCHA: ${error.message}`);
+    await this._replyCaptcha(interaction, {
+      embeds: [this._buildCaptchaFeedbackEmbed(configRow, {
+        title: 'Acces confirme',
+        description: String(configRow.success_message || 'Verification reussie. Acces debloque.').trim(),
+        tone: 'success',
+        footer: 'Ouverture du serveur en cours...',
+      })],
+      components: [],
+    }).catch(() => {});
+
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+
+    try {
+      if (rolesToGrant.length) {
+        await member.roles.add(rolesToGrant, 'CAPTCHA reussi').catch((error) => {
+          throw new Error(`Impossible d attribuer les roles CAPTCHA: ${error.message}`);
+        });
+      }
+
+      await this._sendCaptchaLog({
+        guild: interaction.guild,
+        configRow,
+        member,
+        challengeType: activeChallenge.challenge_type,
+        grantedRoleIds: rolesToGrant,
       });
+    } catch (error) {
+      await this._replyCaptcha(interaction, {
+        embeds: [this._buildCaptchaFeedbackEmbed(configRow, {
+          title: 'Validation interrompue',
+          description: String(error?.message || 'Impossible de finaliser cette verification.'),
+          tone: 'error',
+        })],
+        components: [],
+      }).catch(() => {});
+      return true;
     }
 
-    await this._sendCaptchaLog({
-      guild: interaction.guild,
-      configRow,
-      member,
-      challengeType: activeChallenge.challenge_type,
-      grantedRoleIds: rolesToGrant,
-    });
-
-    await interaction.reply({
-      content: configRow.success_message,
-      ephemeral: true,
-    }).catch(() => {});
+    await interaction.deleteReply().catch(() => {});
 
     return true;
   }
@@ -2881,19 +3054,11 @@ class BotProcess extends EventEmitter {
       return true;
     }
 
-    const prompt = this._buildCaptchaChallengePrompt(selectedType);
-    const challenge = createCaptchaChallenge({
+    const { prompt, challenge } = this._createCaptchaChallengeInstance(configRow, {
       guildId: internalGuildId,
-      configId: configRow.id,
       discordUserId: interaction.user.id,
       discordChannelId: interaction.channelId || '',
-      challengeType: prompt.challengeType,
-      promptText: prompt.promptText,
-      expectedAnswer: prompt.expectedAnswer,
-      metadata: {
-        ...(prompt.visualCode ? { visualCode: prompt.visualCode } : {}),
-        ...(prompt.choices ? { choices: prompt.choices } : {}),
-      },
+      challengeType: selectedType,
     });
 
     if (prompt.responseMode === 'modal') {
@@ -2901,31 +3066,15 @@ class BotProcess extends EventEmitter {
       return true;
     }
 
-    if (prompt.responseMode === 'choices') {
-      await interaction.reply({
-        ephemeral: true,
-        embeds: [{
-          color: Number.parseInt(String(configRow.panel_color || '#06b6d4').replace('#', ''), 16),
-          title: prompt.title,
-          description: `${prompt.description}\n\n${prompt.promptText}`,
-        }],
-        components: this._buildCaptchaChoiceComponents(challenge.id, prompt.choices),
-      }).catch(() => {});
-      return true;
-    }
-
-    const attachment = buildCaptchaPngAttachment(prompt.visualCode, challenge.id, configRow.panel_color);
     await interaction.reply({
       ephemeral: true,
-      embeds: [
-        this._buildCaptchaFeedbackEmbed(configRow, {
-          title: 'CAPTCHA',
-          description: 'Recopie le code affiché, puis envoie-le directement dans ce salon.',
-          imageUrl: `attachment://${attachment.name}`,
-          footer: 'Après 3 erreurs consécutives, le membre est expulsé automatiquement.',
-        }),
-      ],
-      files: [attachment],
+      ...this._buildCaptchaPromptPayload(configRow, challenge, prompt, {
+        title: prompt.responseMode === 'choices' ? 'Verification visuelle' : prompt.title,
+        intro: prompt.responseMode === 'image'
+          ? 'Le code ci-dessous est genere uniquement pour toi.'
+          : 'Ce defis est prive et visible uniquement par toi.',
+        footer: '3 erreurs consecutives = expulsion automatique du serveur.',
+      }),
     }).catch(() => {});
     return true;
   }
@@ -3812,26 +3961,6 @@ class BotProcess extends EventEmitter {
     const guildId = message.guild.id;
     const configs = await this._getEnabledModules(guildId);
     const internalGuildId = this._resolveInternalGuildId(guildId);
-
-    if (!message.author?.bot) {
-      const pendingCaptcha = internalGuildId
-        ? getActiveCaptchaChallengeForUser(internalGuildId, message.author?.id, message.channelId)
-        : null;
-      const normalizedCaptchaAnswer = normalizeCaptchaAnswer(message.content);
-      if (
-        pendingCaptcha
-        && pendingCaptcha.challenge_type === 'image_code'
-        && normalizedCaptchaAnswer
-        && normalizedCaptchaAnswer.length >= 4
-        && normalizedCaptchaAnswer.length <= 8
-      ) {
-        const handled = await this._handleCaptchaMessageAnswer(message, pendingCaptcha, internalGuildId).catch((error) => {
-          logger.error(`Captcha message error: ${error.message}`);
-          return false;
-        });
-        if (handled) return;
-      }
-    }
 
     // Security modules — process message content
     const promises = [];
