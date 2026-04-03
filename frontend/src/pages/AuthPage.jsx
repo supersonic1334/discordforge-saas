@@ -245,6 +245,7 @@ export default function AuthPage() {
   const { login, register, isLoading } = useAuthStore()
   const blockedHint = useMemo(() => new URLSearchParams(location.search).get('blocked') === '1', [location.search])
   const formRef = useRef(null)
+  const shellRef = useRef(null)
   const pointerX = useMotionValue(50)
   const pointerY = useMotionValue(24)
   const registerCaptchaReady = mode !== 'register' || (!!registerCaptcha?.token && !captchaLoading)
@@ -376,6 +377,11 @@ export default function AuthPage() {
     }
   }, [mode, registerCaptcha, captchaLoading])
 
+  useEffect(() => {
+    if (!shellRef.current) return
+    shellRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [mode])
+
   const submit = async (event) => {
     event.preventDefault()
     setError('')
@@ -464,7 +470,9 @@ export default function AuthPage() {
 
     return (
     <div
+      ref={shellRef}
       className="auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8"
+      data-scrollable={mode === 'register' ? 'true' : 'false'}
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >

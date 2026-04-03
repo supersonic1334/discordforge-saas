@@ -442,6 +442,21 @@
     scrollbar-width: none;
     touch-action: manipulation;
   }
+  .auth-page-shell[data-scrollable="true"] {
+    overflow-y: auto !important;
+    align-items: flex-start;
+  }
+  .auth-page-shell[data-scrollable="true"] .auth-page-frame {
+    height: auto;
+    min-height: 100%;
+    justify-content: flex-start;
+    padding-top: clamp(0.35rem, 1vh, 0.9rem);
+    padding-bottom: clamp(0.6rem, 1.6vh, 1rem);
+  }
+  .auth-page-shell[data-scrollable="true"] .auth-mobile-panel {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.5rem !important;
+  }
   .auth-page-shell::-webkit-scrollbar {
     display: none;
   }
@@ -577,7 +592,6 @@
     background:
       linear-gradient(180deg, rgba(224, 233, 241, 0.10), rgba(79, 94, 108, 0.10) 26%, rgba(16, 21, 28, 0.92) 58%, rgba(0, 0, 0, 0.98) 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.06),
       0 0 0 1px rgba(8, 12, 18, 0.36),
       0 12px 26px rgba(0, 0, 0, 0.34);
     overflow: hidden;
@@ -593,15 +607,16 @@
     inset: 1px;
     border-radius: 9px;
     background:
-      radial-gradient(circle at 18% 16%, rgba(255,255,255,0.16), transparent 30%),
-      linear-gradient(180deg, rgba(241, 246, 250, 0.12), rgba(137, 151, 164, 0.05) 28%, rgba(23, 29, 38, 0.06) 58%, rgba(0, 0, 0, 0.18));
+      radial-gradient(circle at 18% 16%, rgba(255,255,255,0.12), transparent 24%),
+      linear-gradient(180deg, rgba(241, 246, 250, 0.08), rgba(137, 151, 164, 0.04) 24%, rgba(23, 29, 38, 0.05) 58%, rgba(0, 0, 0, 0.16));
     pointer-events: none;
-    opacity: 0.98;
+    opacity: 0.92;
   }
   .sidebar-email-fast::after {
     content: '';
     position: absolute;
-    inset: 0;
+    inset: 1px;
+    border-radius: 9px;
     background-image:
       radial-gradient(circle at 12% 10%, rgba(255,255,255,0.86) 0 1px, transparent 1.5px),
       radial-gradient(circle at 28% 22%, rgba(235,243,250,0.72) 0 1.1px, transparent 1.7px),
@@ -612,10 +627,10 @@
       radial-gradient(circle at 38% 44%, rgba(255,255,255,0.66) 0 1px, transparent 1.55px),
       radial-gradient(circle at 74% 32%, rgba(228,237,245,0.62) 0 0.95px, transparent 1.45px);
     background-repeat: repeat;
-    background-size: 160px 80px;
-    animation: email-fast-snowfall 14s linear infinite;
+    background-size: 140px 110px;
+    animation: email-fast-snowfall 7.8s linear infinite;
     pointer-events: none;
-    opacity: 0.52;
+    opacity: 0.68;
   }
   .sidebar-email-fast:hover {
     opacity: 0.98;
@@ -679,25 +694,25 @@
   @keyframes email-fast-snowfall {
     0% {
       background-position:
-        0 -8px,
-        0 0,
-        0 -10px,
-        0 -4px,
-        0 -12px,
-        0 -2px,
-        0 -6px,
-        0 -14px;
+        0 -42px,
+        0 -18px,
+        0 -56px,
+        0 -22px,
+        0 -64px,
+        0 -16px,
+        0 -36px,
+        0 -72px;
     }
     100% {
       background-position:
-        -10px 32px,
-        8px 42px,
-        -14px 40px,
-        10px 38px,
-        -8px 46px,
-        12px 36px,
-        -6px 41px,
-        9px 48px;
+        -14px 78px,
+        10px 92px,
+        -18px 88px,
+        12px 84px,
+        -10px 98px,
+        16px 82px,
+        -8px 90px,
+        13px 104px;
     }
   }
   .sidebar-resize-rail {
@@ -925,7 +940,7 @@
     margin-inline: auto !important;
   }
 
-  body[data-keyboard-open="false"] .auth-page-shell {
+  body[data-keyboard-open="false"] .auth-page-shell[data-scrollable="false"] {
     overflow-y: hidden !important;
   }
 

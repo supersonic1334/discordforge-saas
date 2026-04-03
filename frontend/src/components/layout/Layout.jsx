@@ -257,7 +257,7 @@ const SidebarContent = memo(function SidebarContent({
           {!collapsed && t('layout.nav.settings')}
         </Link>
 
-        <div className="sidebar-special-separator" />
+        {!canAccessOsintTools && <div className="sidebar-special-separator" />}
 
         {canAccessOsintTools && (
           <Link
