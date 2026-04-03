@@ -2323,9 +2323,6 @@ class BotProcess extends EventEmitter {
       color,
       title: String(configRow.panel_title || 'Vérification du serveur'),
       description: String(configRow.panel_description || '').trim() || 'Clique sur ce bouton ci-dessous pour vérifier ton accès au serveur.',
-      footer: {
-        text: 'Une verification privee suffit pour ouvrir le serveur.',
-      },
     };
 
     if (assets.thumbnailUrl) {
