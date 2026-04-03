@@ -11,6 +11,8 @@ const emailPolicyService = require('./emailPolicyService');
 const mailService = require('./mailService');
 const authChallengeService = require('./authChallengeService');
 const { buildRequestInsight } = require('./requestInsightService');
+const discordService = require('./discordService');
+const { decrypt, encrypt } = require('./encryptionService');
 
 const BCRYPT_ROUNDS = 12;
 const FULLY_HIDDEN_EMAIL = '********@********.***';
@@ -67,8 +69,150 @@ function buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl
     discord_username: username || currentUser?.discord_username || null,
     discord_global_name: globalName || currentUser?.discord_global_name || null,
     discord_avatar_url: avatarUrl || currentUser?.discord_avatar_url || null,
-    discord_token: accessToken || currentUser?.discord_token || null,
+    discord_token: accessToken ? encrypt(accessToken) : currentUser?.discord_token || null,
   };
+}
+
+function toHexColor(value) {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value !== 'number' || Number.isNaN(value)) return null;
+  return `#${value.toString(16).padStart(6, '0').slice(-6)}`;
+}
+
+function readDiscordAccessToken(storedToken) {
+  if (!storedToken) return null;
+  return decrypt(storedToken) || String(storedToken);
+}
+
+function parseDiscordSnowflakeCreatedAt(discordId) {
+  try {
+    const createdAt = Number((BigInt(String(discordId)) >> 22n) + 1420070400000n);
+    if (!Number.isFinite(createdAt) || createdAt <= 0) return null;
+    return new Date(createdAt).toISOString();
+  } catch {
+    return null;
+  }
+}
+
+function buildDiscordProfileSnapshot(user) {
+  if (!user?.discord_id) return null;
+
+  const avatarUrl = user.discord_avatar_url || null;
+  const bannerUrl = user.discord_banner_url || null;
+  const avatarAnimated = Boolean(Number(user.discord_avatar_animated || 0))
+    || /\.gif(?:\?|$)/i.test(String(avatarUrl || ''));
+  const bannerAnimated = Boolean(Number(user.discord_banner_animated || 0))
+    || /\.gif(?:\?|$)/i.test(String(bannerUrl || ''));
+
+  return {
+    connected: true,
+    id: String(user.discord_id),
+    username: user.discord_username || null,
+    global_name: user.discord_global_name || null,
+    display_name: user.discord_global_name || user.discord_username || user.username || 'Discord user',
+    avatar_url: avatarUrl,
+    banner_url: bannerUrl,
+    banner_color: user.discord_banner_color || null,
+    avatar_animated: avatarAnimated,
+    banner_animated: bannerAnimated,
+    created_at: parseDiscordSnowflakeCreatedAt(user.discord_id),
+    synced_at: user.discord_profile_synced_at || null,
+  };
+}
+
+function shouldRefreshDiscordProfile(user, options = {}) {
+  if (!user?.discord_id || !user?.discord_token) return false;
+  if (options.force) return true;
+  if (!user.discord_profile_synced_at) return true;
+  if (!user.discord_banner_url && !user.discord_banner_hash) return true;
+
+  const lastSyncAt = Date.parse(String(user.discord_profile_synced_at || ''));
+  if (!Number.isFinite(lastSyncAt)) return true;
+
+  return (Date.now() - lastSyncAt) > 1000 * 60 * 60 * 12;
+}
+
+async function enrichDiscordOAuthProfile(oauthProfile = {}) {
+  if (!oauthProfile?.accessToken) {
+    return oauthProfile;
+  }
+
+  try {
+    const remoteProfile = await discordService.getOAuthUser(oauthProfile.accessToken);
+    const profileId = remoteProfile?.id || oauthProfile.providerId || null;
+    const avatarHash = remoteProfile?.avatar || null;
+    const bannerHash = remoteProfile?.banner || null;
+
+    return {
+      ...oauthProfile,
+      providerId: profileId,
+      username: oauthProfile.username || remoteProfile?.username || null,
+      globalName: oauthProfile.globalName || remoteProfile?.global_name || null,
+      avatarUrl: avatarHash
+        ? discordService.getAvatarUrl(profileId, avatarHash, 512, remoteProfile?.discriminator)
+        : oauthProfile.avatarUrl || null,
+      avatarHash,
+      bannerHash,
+      bannerUrl: bannerHash ? discordService.getBannerUrl(profileId, bannerHash, 1024) : null,
+      bannerColor: remoteProfile?.banner_color || toHexColor(remoteProfile?.accent_color),
+      avatarAnimated: avatarHash ? String(avatarHash).startsWith('a_') : false,
+      bannerAnimated: bannerHash ? String(bannerHash).startsWith('a_') : false,
+    };
+  } catch (error) {
+    logger.warn('Discord OAuth profile refresh failed', {
+      discordId: oauthProfile?.providerId || null,
+      message: error?.message || 'unknown_error',
+    });
+    return oauthProfile;
+  }
+}
+
+async function getLinkedDiscordProfile(userOrId, options = {}) {
+  let user = typeof userOrId === 'string'
+    ? db.findOne('users', { id: userOrId })
+    : userOrId;
+
+  if (!user?.discord_id) return null;
+
+  if (!shouldRefreshDiscordProfile(user, options)) {
+    return buildDiscordProfileSnapshot(user);
+  }
+
+  const accessToken = readDiscordAccessToken(user.discord_token);
+  if (!accessToken) {
+    return buildDiscordProfileSnapshot(user);
+  }
+
+  try {
+    const remoteProfile = await discordService.getOAuthUser(accessToken);
+    const avatarHash = remoteProfile?.avatar || null;
+    const bannerHash = remoteProfile?.banner || null;
+    const updates = {
+      discord_username: remoteProfile?.username || user.discord_username || null,
+      discord_global_name: remoteProfile?.global_name || user.discord_global_name || null,
+      discord_avatar_hash: avatarHash || user.discord_avatar_hash || null,
+      discord_avatar_url: avatarHash
+        ? discordService.getAvatarUrl(user.discord_id, avatarHash, 512, remoteProfile?.discriminator)
+        : user.discord_avatar_url || null,
+      discord_banner_hash: bannerHash || null,
+      discord_banner_url: bannerHash ? discordService.getBannerUrl(user.discord_id, bannerHash, 1024) : null,
+      discord_banner_color: remoteProfile?.banner_color || toHexColor(remoteProfile?.accent_color) || null,
+      discord_avatar_animated: avatarHash && String(avatarHash).startsWith('a_') ? 1 : 0,
+      discord_banner_animated: bannerHash && String(bannerHash).startsWith('a_') ? 1 : 0,
+      discord_profile_synced_at: new Date().toISOString(),
+    };
+
+    db.update('users', updates, { id: user.id });
+    user = { ...user, ...updates };
+  } catch (error) {
+    logger.warn('Linked Discord profile sync failed', {
+      userId: user.id,
+      discordId: user.discord_id,
+      message: error?.message || 'unknown_error',
+    });
+  }
+
+  return buildDiscordProfileSnapshot(user);
 }
 
 function escapeHtml(value) {
@@ -249,6 +393,7 @@ function safeUser(user) {
   safe.display_avatar_url = safe.avatar_url || (isDiscordOauthAccount ? safe.discord_avatar_url || null : null);
   safe.is_primary_founder = isPrimaryFounderEmail(safe.email);
   safe.email_verified = !!safe.email_verified;
+  safe.discord_profile = buildDiscordProfileSnapshot(safe);
   if (isPrimaryFounderEmail(safe.email)) {
     safe.email = maskEmail(safe.email, { hideCompletely: true });
   }
@@ -368,9 +513,12 @@ async function login({ email, password, req }) {
 async function upsertOAuthUser({ provider, providerId, email, username, globalName, avatarUrl, accessToken }) {
   const providerField = provider === 'discord' ? 'discord_id' : 'google_id';
   const normalizedEmail = email ? normalizeEmail(email) : null;
+  const nextProfile = provider === 'discord'
+    ? await enrichDiscordOAuthProfile({ provider, providerId, email, username, globalName, avatarUrl, accessToken })
+    : { provider, providerId, email, username, globalName, avatarUrl, accessToken };
 
   // Try find by provider ID
-  let user = db.raw(`SELECT * FROM users WHERE ${providerField} = ?`, [providerId])[0] ?? null;
+  let user = db.raw(`SELECT * FROM users WHERE ${providerField} = ?`, [nextProfile.providerId])[0] ?? null;
 
   // Try find by email (link accounts)
   if (!user && normalizedEmail) {
@@ -385,12 +533,27 @@ async function upsertOAuthUser({ provider, providerId, email, username, globalNa
 
   if (user) {
     const discordIdentityPatch = provider === 'discord'
-      ? buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl, accessToken }, user)
+      ? {
+        ...buildDiscordIdentityPatch({
+          providerId: nextProfile.providerId,
+          username: nextProfile.username,
+          globalName: nextProfile.globalName,
+          avatarUrl: nextProfile.avatarUrl,
+          accessToken: nextProfile.accessToken,
+        }, user),
+        discord_avatar_hash: nextProfile.avatarHash || user.discord_avatar_hash || null,
+        discord_banner_hash: nextProfile.bannerHash || user.discord_banner_hash || null,
+        discord_banner_url: nextProfile.bannerUrl || user.discord_banner_url || null,
+        discord_banner_color: nextProfile.bannerColor || user.discord_banner_color || null,
+        discord_avatar_animated: nextProfile.avatarAnimated ? 1 : 0,
+        discord_banner_animated: nextProfile.bannerAnimated ? 1 : 0,
+        discord_profile_synced_at: new Date().toISOString(),
+      }
       : {};
     db.update('users', {
-      [providerField]: providerId,
-      username: username ?? user.username,
-      avatar_url: avatarUrl ?? user.avatar_url,
+      [providerField]: nextProfile.providerId,
+      username: nextProfile.username ?? user.username,
+      avatar_url: nextProfile.avatarUrl ?? user.avatar_url,
       email_verified: 1,
       email_verified_at: user.email_verified_at || now,
       last_login_at: now,
@@ -399,19 +562,34 @@ async function upsertOAuthUser({ provider, providerId, email, username, globalNa
     user = db.findOne('users', { id: user.id });
   } else {
     const discordIdentityPatch = provider === 'discord'
-      ? buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl, accessToken })
+      ? {
+        ...buildDiscordIdentityPatch({
+          providerId: nextProfile.providerId,
+          username: nextProfile.username,
+          globalName: nextProfile.globalName,
+          avatarUrl: nextProfile.avatarUrl,
+          accessToken: nextProfile.accessToken,
+        }),
+        discord_avatar_hash: nextProfile.avatarHash || null,
+        discord_banner_hash: nextProfile.bannerHash || null,
+        discord_banner_url: nextProfile.bannerUrl || null,
+        discord_banner_color: nextProfile.bannerColor || null,
+        discord_avatar_animated: nextProfile.avatarAnimated ? 1 : 0,
+        discord_banner_animated: nextProfile.bannerAnimated ? 1 : 0,
+        discord_profile_synced_at: new Date().toISOString(),
+      }
       : {};
     const id = uuidv4();
     db.insert('users', {
       id,
-      email: normalizedEmail ?? `${provider}_${providerId}@oauth.local`,
-      username: username ?? `user_${providerId.slice(0, 8)}`,
+      email: normalizedEmail ?? `${provider}_${nextProfile.providerId}@oauth.local`,
+      username: nextProfile.username ?? `user_${String(nextProfile.providerId || providerId).slice(0, 8)}`,
       password_hash: null,
-      avatar_url: avatarUrl,
+      avatar_url: nextProfile.avatarUrl,
       role: 'member',
       email_verified: 1,
       email_verified_at: now,
-      [providerField]: providerId,
+      [providerField]: nextProfile.providerId,
       ...discordIdentityPatch,
       is_active: 1,
       created_at: now,
@@ -425,15 +603,24 @@ async function upsertOAuthUser({ provider, providerId, email, username, globalNa
   return { token, user: safeUser(user) };
 }
 
-function linkDiscordAccount(userId, { providerId, username, globalName, avatarUrl, accessToken }) {
+async function linkDiscordAccount(userId, { providerId, username, globalName, avatarUrl, accessToken }) {
   const user = db.findOne('users', { id: userId });
   if (!user || !user.is_active) {
     throw Object.assign(new Error('Account not found or deactivated'), { status: 404 });
   }
 
+  const nextProfile = await enrichDiscordOAuthProfile({
+    provider: 'discord',
+    providerId,
+    username,
+    globalName,
+    avatarUrl,
+    accessToken,
+  });
+
   const existingOwner = db.raw(
     'SELECT id FROM users WHERE discord_id = ? AND id != ? LIMIT 1',
-    [providerId, userId]
+    [nextProfile.providerId, userId]
   )[0] ?? null;
 
   if (existingOwner) {
@@ -441,7 +628,20 @@ function linkDiscordAccount(userId, { providerId, username, globalName, avatarUr
   }
 
   db.update('users', {
-    ...buildDiscordIdentityPatch({ providerId, username, globalName, avatarUrl, accessToken }, user),
+    ...buildDiscordIdentityPatch({
+      providerId: nextProfile.providerId,
+      username: nextProfile.username,
+      globalName: nextProfile.globalName,
+      avatarUrl: nextProfile.avatarUrl,
+      accessToken: nextProfile.accessToken,
+    }, user),
+    discord_avatar_hash: nextProfile.avatarHash || user.discord_avatar_hash || null,
+    discord_banner_hash: nextProfile.bannerHash || user.discord_banner_hash || null,
+    discord_banner_url: nextProfile.bannerUrl || user.discord_banner_url || null,
+    discord_banner_color: nextProfile.bannerColor || user.discord_banner_color || null,
+    discord_avatar_animated: nextProfile.avatarAnimated ? 1 : 0,
+    discord_banner_animated: nextProfile.bannerAnimated ? 1 : 0,
+    discord_profile_synced_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }, { id: userId });
 
@@ -607,6 +807,7 @@ module.exports = {
   login,
   upsertOAuthUser,
   linkDiscordAccount,
+  getLinkedDiscordProfile,
   changePassword,
   changeUsername,
   updateAvatar,
@@ -619,4 +820,5 @@ module.exports = {
   approveLoginChallenge,
   maskEmail,
   isPrimaryFounderEmail,
+  enrichDiscordOAuthProfile,
 };

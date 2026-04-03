@@ -164,6 +164,31 @@ async function getUser(token, userId) {
   return discordFetch(`/users/${userId}`, token);
 }
 
+async function getOAuthUser(accessToken) {
+  const response = await fetch(`${DISCORD_API}/users/@me`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'User-Agent': 'DiscordBot (https://discord-saas.example.com, 1.0.0)',
+    },
+    timeout: 15000,
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const code = data?.code ?? 0;
+    const message = data?.message ?? `HTTP ${response.status}`;
+    throw new DiscordAPIError(message, response.status, code, data);
+  }
+
+  return data;
+}
+
 async function getGuildMember(token, guildId, userId) {
   return discordFetch(`/guilds/${guildId}/members/${userId}`, token);
 }
@@ -458,6 +483,7 @@ module.exports = {
   getGuildChannels,
   getGuildRoles,
   getUser,
+  getOAuthUser,
   getGuildMember,
   searchGuildMembers,
   getGuildBan,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Crown, Users, Bot, Activity, Ban, ShieldCheck, Settings2, ChevronDown, ChevronUp, Trash2, KeyRound, RefreshCw, Eye, EyeOff, Copy, Check, Save } from 'lucide-react'
+import { Crown, Users, Bot, Activity, Ban, ShieldCheck, Settings2, ChevronDown, ChevronUp, Trash2, KeyRound, RefreshCw, Eye, EyeOff, Copy, Check, Save, Link2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminAPI, authAPI } from '../services/api'
 import { useI18n } from '../i18n'
@@ -61,6 +61,15 @@ function getProviderStatusLabel(locale, status) {
   return labels[key]?.[status] || labels.fr[status] || status
 }
 
+function formatDateTime(locale, value) {
+  if (!value) return '-'
+  try {
+    return new Date(value).toLocaleString(locale)
+  } catch {
+    return value
+  }
+}
+
 export default function AdminPanel() {
   const { t, locale } = useI18n()
   const currentUser = useAuthStore((state) => state.user)
@@ -84,6 +93,7 @@ export default function AdminPanel() {
   const [copiedProviderKeyId, setCopiedProviderKeyId] = useState(null)
   const [providerKeyDeleteDialog, setProviderKeyDeleteDialog] = useState(null)
   const [openAdvancedUserId, setOpenAdvancedUserId] = useState(null)
+  const [openLinkedUserId, setOpenLinkedUserId] = useState(null)
   const [privateEmail, setPrivateEmail] = useState('')
   const [showPrivateEmail, setShowPrivateEmail] = useState(false)
   const [loadingPrivateEmail, setLoadingPrivateEmail] = useState(false)
@@ -135,6 +145,7 @@ export default function AdminPanel() {
     } else {
       setUsers([])
       setOpenAdvancedUserId(null)
+      setOpenLinkedUserId(null)
     }
 
     adminAPI.getAI().then((r) => {
@@ -383,6 +394,7 @@ export default function AdminPanel() {
       await adminAPI.deleteUser(userId)
       setUsers((prev) => prev.filter((user) => user.id !== userId))
       setOpenAdvancedUserId((current) => current === userId ? null : current)
+      setOpenLinkedUserId((current) => current === userId ? null : current)
       toast.success(t('admin.deleted'))
     } catch (e) {
       toast.error(getErrorMessage(e))
@@ -765,6 +777,8 @@ export default function AdminPanel() {
             const isPrimaryFounder = !!user.is_primary_founder
             const isUpdatingThisUser = updatingUserId === user.id
             const isAdvancedOpen = openAdvancedUserId === user.id
+            const linkedDiscord = user.linked_discord || null
+            const isLinkedOpen = openLinkedUserId === user.id
             const canRevealThisEmail = isCurrentUser && isPrimaryFounder && canRevealPrimaryEmail
             const displayedUserEmail = canRevealThisEmail && showPrivateEmail && privateEmail
               ? privateEmail
@@ -823,6 +837,20 @@ export default function AdminPanel() {
                         ))}
                       </select>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => linkedDiscord && setOpenLinkedUserId((current) => current === user.id ? null : user.id)}
+                      disabled={!linkedDiscord}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] leading-none font-mono transition-all border ${
+                        linkedDiscord
+                          ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20'
+                          : 'border-white/10 bg-white/[0.03] text-white/28 cursor-not-allowed'
+                      }`}
+                    >
+                      <Link2 className="w-3 h-3" />
+                      {linkedDiscord ? 'Compte lie' : 'Aucun compte lie'}
+                      {linkedDiscord ? (isLinkedOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
+                    </button>
                     {!isPrimaryFounder && (
                       <button
                         type="button"
@@ -836,6 +864,67 @@ export default function AdminPanel() {
                     )}
                   </div>
                 </div>
+
+                {isLinkedOpen && linkedDiscord && (
+                  <div className="overflow-hidden rounded-2xl border border-neon-cyan/15 bg-[linear-gradient(180deg,rgba(6,182,212,0.08),rgba(255,255,255,0.02))]">
+                    <div
+                      className="h-24 w-full border-b border-white/8"
+                      style={linkedDiscord.banner_url ? {
+                        backgroundImage: `url(${linkedDiscord.banner_url})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      } : {
+                        background: `linear-gradient(135deg, ${linkedDiscord.banner_color || '#0f172a'}, rgba(6,182,212,0.28), rgba(124,58,237,0.22))`,
+                      }}
+                    />
+
+                    <div className="p-4">
+                      <div className="flex items-start gap-4 flex-wrap">
+                        <div className="w-16 h-16 -mt-12 rounded-[22px] border-4 border-[#0b1220] bg-white/[0.04] overflow-hidden shrink-0 flex items-center justify-center text-white font-display font-700 shadow-[0_12px_32px_rgba(0,0,0,0.28)]">
+                          {linkedDiscord.avatar_url ? (
+                            <img src={linkedDiscord.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            String(linkedDiscord.display_name || '?').slice(0, 1).toUpperCase()
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-base font-display font-700 text-white">{linkedDiscord.display_name}</p>
+                            {linkedDiscord.avatar_animated && (
+                              <span className="badge bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20">Avatar anime</span>
+                            )}
+                            {linkedDiscord.banner_animated && (
+                              <span className="badge bg-violet-500/10 text-violet-300 border border-violet-500/20">Banniere animee</span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm text-white/45">
+                            {linkedDiscord.username ? `@${linkedDiscord.username}` : 'Pseudo Discord indisponible'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid sm:grid-cols-2 gap-2 text-xs text-white/65">
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                          <p className="font-mono text-white/25 mb-1">ID Discord</p>
+                          <p className="font-mono break-all">{linkedDiscord.id}</p>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                          <p className="font-mono text-white/25 mb-1">Creation du compte</p>
+                          <p>{formatDateTime(locale, linkedDiscord.created_at)}</p>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                          <p className="font-mono text-white/25 mb-1">Nom global</p>
+                          <p>{linkedDiscord.global_name || '-'}</p>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                          <p className="font-mono text-white/25 mb-1">Couleur de profil</p>
+                          <p>{linkedDiscord.banner_color || '-'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {isAdvancedOpen && !isPrimaryFounder && (
                   <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">

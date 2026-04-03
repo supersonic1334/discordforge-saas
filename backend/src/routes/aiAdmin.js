@@ -190,32 +190,47 @@ aiRouter.post('/transcribe', requireAuth, async (req, res, next) => {
 
 adminRouter.use(requireAuth, requireAdminPanelAccess);
 
-adminRouter.get('/users', requireFounder, (req, res) => {
+adminRouter.get('/users', requireFounder, async (req, res, next) => {
+  try {
   const { page = 1, limit = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
   const users = db.raw(
-    `SELECT id, email, username, role, avatar_url, is_active, last_login_at, created_at
+    `SELECT id, email, username, role, avatar_url, is_active, last_login_at, created_at,
+            discord_id, discord_username, discord_global_name, discord_avatar_hash, discord_avatar_url,
+            discord_banner_hash, discord_banner_url, discord_banner_color,
+            discord_avatar_animated, discord_banner_animated, discord_profile_synced_at, discord_token
      FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?`,
     [Number(limit), offset]
   );
 
   const total = db.raw('SELECT COUNT(*) as count FROM users')[0]?.count ?? 0;
-  const enriched = users.map((u) => {
+  const enriched = await Promise.all(users.map(async (u) => {
     const visibleEmail = getVisibleEmail(u, req.user);
+    const linkedDiscord = await authService.getLinkedDiscordProfile(u, { force: false });
 
     return {
-      ...u,
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      avatar_url: u.avatar_url,
+      is_active: u.is_active,
+      last_login_at: u.last_login_at,
+      created_at: u.created_at,
       email: visibleEmail,
       email_masked: visibleEmail !== (u.email || ''),
       is_primary_founder: isPrimaryFounder(u),
       botStatus: botManager.getBotStatus(u.id)?.status ?? 'stopped',
       hasBotToken: !!db.findOne('bot_tokens', { user_id: u.id }),
       providerKeyCount: aiProviderKeyService.getProviderKeyCountForUser(u.id),
+      linked_discord: linkedDiscord,
     };
-  });
+  }));
 
   res.json({ users: enriched, total, page: Number(page), limit: Number(limit) });
+  } catch (err) {
+    next(err);
+  }
 });
 
 adminRouter.patch('/users/:userId/role', requireFounder, validate(adminRoleSchema), (req, res, next) => {

@@ -39,6 +39,7 @@ import ProviderPanel from './pages/ProviderPanel'
 import EmailFastPage from './pages/EmailFastPage'
 import OSINTPage from './pages/OSINTPage'
 import OAuthCallback from './pages/OAuthCallback'
+import ReviewReminderPopup from './components/reviews/ReviewReminderPopup'
 import { I18nProvider } from './i18n'
 
 function getAccessFingerprint(snapshot) {
@@ -632,6 +633,7 @@ function AppRoot() {
         success: { iconTheme: { primary: '#00e5ff', secondary: '#14141f' } },
         error:   { iconTheme: { primary: '#f87171', secondary: '#14141f' } },
       }} />
+      <ReviewReminderPopup />
 
       <Routes>
         <Route path="/auth" element={<PageTransition><AuthPage /></PageTransition>} />

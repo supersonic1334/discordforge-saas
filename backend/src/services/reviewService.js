@@ -5,11 +5,29 @@ const db = require('../database');
 function formatReview(row, currentUserId = null) {
   if (!row) return null;
 
+  const identitySource = row.discord_id ? 'discord' : 'site';
+  const displayName = row.discord_global_name || row.discord_username || row.username || 'User';
+  const displayAvatarUrl = row.discord_avatar_url || row.avatar_url || null;
+  const displayHandle = row.discord_username
+    ? `@${row.discord_username}`
+    : row.username
+      ? `@${row.username}`
+      : '';
+
   return {
     id: row.id,
     user_id: row.user_id,
-    username: row.username || 'User',
-    avatar_url: row.avatar_url || null,
+    username: displayName,
+    avatar_url: displayAvatarUrl,
+    site_username: row.username || 'User',
+    site_avatar_url: row.avatar_url || null,
+    display_name: displayName,
+    display_avatar_url: displayAvatarUrl,
+    display_handle: displayHandle,
+    identity_source: identitySource,
+    discord_id: row.discord_id || null,
+    discord_username: row.discord_username || null,
+    discord_global_name: row.discord_global_name || null,
     rating_half: Number(row.rating_half || 0),
     rating: Number(row.rating_half || 0) / 2,
     message: row.message || '',
@@ -24,7 +42,11 @@ function getReviewRows() {
     SELECT
       r.*,
       u.username,
-      u.avatar_url
+      u.avatar_url,
+      u.discord_id,
+      u.discord_username,
+      u.discord_global_name,
+      u.discord_avatar_url
     FROM site_reviews r
     JOIN users u ON u.id = r.user_id
     WHERE u.is_active = 1
@@ -76,7 +98,11 @@ function createReview(userId, { rating_half, message }) {
     SELECT
       r.*,
       u.username,
-      u.avatar_url
+      u.avatar_url,
+      u.discord_id,
+      u.discord_username,
+      u.discord_global_name,
+      u.discord_avatar_url
     FROM site_reviews r
     JOIN users u ON u.id = r.user_id
     WHERE r.id = ?
@@ -100,7 +126,11 @@ function updateOwnReviewMessage(userId, { message }) {
     SELECT
       r.*,
       u.username,
-      u.avatar_url
+      u.avatar_url,
+      u.discord_id,
+      u.discord_username,
+      u.discord_global_name,
+      u.discord_avatar_url
     FROM site_reviews r
     JOIN users u ON u.id = r.user_id
     WHERE r.id = ?

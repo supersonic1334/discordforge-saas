@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { reviewsAPI } from '../services/api'
 import { useI18n } from '../i18n'
+import { useAuthStore } from '../stores'
 
 const STAR_POINTS = '12,2.25 15.03,8.42 21.84,9.41 16.92,14.2 18.08,21 12,17.8 5.92,21 7.08,14.2 2.16,9.41 8.97,8.42'
 
@@ -153,13 +154,16 @@ function formatRating(locale, ratingHalf) {
 }
 
 function Avatar({ review }) {
-  if (review?.avatar_url) {
-    return <img src={review.avatar_url} alt={review.username} className="h-12 w-12 rounded-2xl border border-white/10 object-cover shadow-[0_0_18px_rgba(250,204,21,0.12)]" />
+  const avatarUrl = review?.display_avatar_url || review?.avatar_url
+  const displayName = review?.display_name || review?.username
+
+  if (avatarUrl) {
+    return <img src={avatarUrl} alt={displayName} className="h-12 w-12 rounded-2xl border border-white/10 object-cover shadow-[0_0_18px_rgba(250,204,21,0.12)]" />
   }
 
   return (
     <div className="h-12 w-12 rounded-2xl border border-white/10 bg-gradient-to-br from-amber-500/20 to-yellow-400/15 flex items-center justify-center text-sm font-display font-700 text-white">
-      {String(review?.username || '?').slice(0, 2).toUpperCase()}
+      {String(displayName || '?').slice(0, 2).toUpperCase()}
     </div>
   )
 }
@@ -366,6 +370,7 @@ function OverviewCard({ label, value, body, icon: Icon, accent = 'amber' }) {
 
 export default function ReviewsPage() {
   const { locale } = useI18n()
+  const currentUser = useAuthStore((state) => state.user)
   const text = useMemo(() => getText(locale), [locale])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -398,6 +403,11 @@ export default function ReviewsPage() {
   }, [])
 
   useEffect(() => {
+    if (!currentUser?.id || !overview.my_review) return
+    window.localStorage.setItem(`discordforge.review.prompt.completed.${currentUser.id}`, '1')
+  }, [currentUser?.id, overview.my_review])
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       loadOverview({ silent: true, hydrateDraft: false })
     }, 8000)
@@ -415,6 +425,12 @@ export default function ReviewsPage() {
         rating_half: ratingHalf,
         message: message.trim(),
       })
+      if (currentUser?.id) {
+        window.localStorage.setItem(`discordforge.review.prompt.completed.${currentUser.id}`, '1')
+        window.dispatchEvent(new CustomEvent('review:submitted', {
+          detail: { userId: currentUser.id },
+        }))
+      }
       toast.success(text.created)
       await loadOverview({ hydrateDraft: true })
     } catch (error) {
@@ -669,13 +685,19 @@ export default function ReviewsPage() {
                       <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-display text-lg font-700 text-white">{review.username}</p>
+                            <p className="font-display text-lg font-700 text-white">{review.display_name || review.username}</p>
                             {review.is_mine && (
                               <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/18 bg-amber-400/10 px-2.5 py-1 text-[11px] font-mono text-amber-200">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                 {text.yourReview}
                               </span>
                             )}
+                          </div>
+
+                          <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-white/38">
+                            {review.display_handle ? <span>{review.display_handle}</span> : null}
+                            {review.discord_id ? <span>ID {review.discord_id}</span> : null}
+                            <span className="uppercase tracking-[0.16em]">{review.identity_source === 'discord' ? 'Discord' : 'Site'}</span>
                           </div>
 
                           <div className="mt-2 flex items-center gap-3 flex-wrap">

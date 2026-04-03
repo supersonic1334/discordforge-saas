@@ -77,7 +77,14 @@ function ensureUsersRoleConstraint() {
           discord_id        TEXT UNIQUE,
           discord_username  TEXT,
           discord_global_name TEXT,
+          discord_avatar_hash TEXT,
           discord_avatar_url TEXT,
+          discord_banner_hash TEXT,
+          discord_banner_url TEXT,
+          discord_banner_color TEXT,
+          discord_avatar_animated INTEGER NOT NULL DEFAULT 0,
+          discord_banner_animated INTEGER NOT NULL DEFAULT 0,
+          discord_profile_synced_at TEXT,
           google_id         TEXT UNIQUE,
           discord_token     TEXT,
           is_active         INTEGER NOT NULL DEFAULT 1,
@@ -96,7 +103,7 @@ function ensureUsersRoleConstraint() {
         INSERT INTO users__next (
           id, email, username, password_hash, avatar_url, role,
           email_verified, email_verified_at,
-          site_language, ai_language, analytics_layout, discord_id, discord_username, discord_global_name, discord_avatar_url, google_id, discord_token,
+          site_language, ai_language, analytics_layout, discord_id, discord_username, discord_global_name, discord_avatar_hash, discord_avatar_url, discord_banner_hash, discord_banner_url, discord_banner_color, discord_avatar_animated, discord_banner_animated, discord_profile_synced_at, google_id, discord_token,
           is_active, last_seen_ip_hash, last_seen_device_hash, last_seen_client_signature_hash, last_seen_user_agent,
           last_seen_at, last_login_at, created_at, updated_at
         )
@@ -118,9 +125,16 @@ function ensureUsersRoleConstraint() {
           COALESCE(ai_language, 'auto'),
           analytics_layout,
           discord_id,
-          NULL,
-          NULL,
-          NULL,
+          discord_username,
+          discord_global_name,
+          discord_avatar_hash,
+          discord_avatar_url,
+          discord_banner_hash,
+          discord_banner_url,
+          discord_banner_color,
+          COALESCE(discord_avatar_animated, 0),
+          COALESCE(discord_banner_animated, 0),
+          discord_profile_synced_at,
           google_id,
           discord_token,
           COALESCE(is_active, 1),
@@ -295,7 +309,14 @@ function runMigrations() {
   ensureColumn('users', 'last_seen_user_agent', 'TEXT');
   ensureColumn('users', 'discord_username', 'TEXT');
   ensureColumn('users', 'discord_global_name', 'TEXT');
+  ensureColumn('users', 'discord_avatar_hash', 'TEXT');
   ensureColumn('users', 'discord_avatar_url', 'TEXT');
+  ensureColumn('users', 'discord_banner_hash', 'TEXT');
+  ensureColumn('users', 'discord_banner_url', 'TEXT');
+  ensureColumn('users', 'discord_banner_color', 'TEXT');
+  ensureColumn('users', 'discord_avatar_animated', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'discord_banner_animated', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'discord_profile_synced_at', 'TEXT');
   ensureColumn('guild_access_members', 'suspended_until', 'TEXT');
   ensureColumn('users', 'last_seen_at', 'TEXT');
   ensureColumn('users', 'email_fast_vault', 'TEXT');
