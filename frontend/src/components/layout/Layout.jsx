@@ -18,6 +18,17 @@ const SIDEBAR_MAX_WIDTH = 380
 const SIDEBAR_SPRING = { type: 'spring', stiffness: 220, damping: 26, mass: 0.92 }
 const SWIPE_MIN_DISTANCE = 54
 const SWIPE_EDGE_THRESHOLD = 72
+const EMAIL_FAST_SNOW_FLAKES = [
+  { left: '8%', size: '4px', duration: '4.8s', delay: '-0.3s', drift: '-10px', opacity: 0.95 },
+  { left: '16%', size: '3px', duration: '5.6s', delay: '-1.4s', drift: '8px', opacity: 0.72 },
+  { left: '27%', size: '4px', duration: '4.9s', delay: '-2.1s', drift: '-6px', opacity: 0.88 },
+  { left: '39%', size: '3px', duration: '5.2s', delay: '-0.9s', drift: '12px', opacity: 0.76 },
+  { left: '52%', size: '4px', duration: '4.4s', delay: '-2.8s', drift: '-12px', opacity: 0.92 },
+  { left: '64%', size: '3px', duration: '5.9s', delay: '-1.9s', drift: '10px', opacity: 0.68 },
+  { left: '74%', size: '4px', duration: '5.1s', delay: '-0.5s', drift: '-8px', opacity: 0.84 },
+  { left: '84%', size: '3px', duration: '6.2s', delay: '-2.4s', drift: '7px', opacity: 0.7 },
+  { left: '92%', size: '4px', duration: '4.7s', delay: '-1.1s', drift: '-5px', opacity: 0.9 },
+]
 
 function isTouchNavigationEnabled() {
   if (typeof window === 'undefined') return false
@@ -267,6 +278,22 @@ const SidebarContent = memo(function SidebarContent({
             title="Email Fast"
             aria-label="Email Fast"
           >
+            <span className="sidebar-email-fast-snowfield" aria-hidden="true">
+              {EMAIL_FAST_SNOW_FLAKES.map((flake, index) => (
+                <span
+                  key={`email-fast-snow-${index}`}
+                  className="sidebar-email-fast-snow"
+                  style={{
+                    '--snow-left': flake.left,
+                    '--snow-size': flake.size,
+                    '--snow-duration': flake.duration,
+                    '--snow-delay': flake.delay,
+                    '--snow-drift': flake.drift,
+                    '--snow-opacity': flake.opacity,
+                  }}
+                />
+              ))}
+            </span>
             <span className="sidebar-email-fast-icon" aria-hidden="true">
               <Mail className="h-[1.05rem] w-[1.05rem]" strokeWidth={2.1} />
             </span>
