@@ -267,7 +267,9 @@ const SidebarContent = memo(function SidebarContent({
             title="Email Fast"
             aria-label="Email Fast"
           >
-            <span className="sidebar-email-fast-icon" aria-hidden="true">✉️</span>
+            <span className="sidebar-email-fast-icon" aria-hidden="true">
+              <Mail className="h-[1.05rem] w-[1.05rem]" strokeWidth={2.1} />
+            </span>
             {!collapsed && (
               <>
                 <span className="sidebar-email-fast-label">Email Fast</span>
