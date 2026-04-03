@@ -805,6 +805,21 @@ export default function AdminPanel() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-display font-600 text-white">{user.username}</p>
+                      {!isPrimaryFounder && (
+                        <select
+                          value={user.role}
+                          onChange={(e) => setRole(user.id, e.target.value)}
+                          disabled={isCurrentFounder || isUpdatingThisUser}
+                          title={isCurrentFounder ? t('admin.selfFounderLock') : undefined}
+                          className={`select-compact min-w-[118px] max-w-[138px] ${(
+                            isCurrentFounder || isUpdatingThisUser
+                          ) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        >
+                          {roleOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      )}
                       <span className={`badge capitalize ${roleBadgeClass}`}>{roleLabel}</span>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap mt-1">
@@ -825,19 +840,6 @@ export default function AdminPanel() {
                   <div className="flex items-center gap-2 flex-wrap justify-end">
                     <span className={`badge ${user.is_active ? 'badge-online' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>{user.is_active ? t('admin.accessAllowed') : t('admin.accessBlocked')}</span>
                     <span className={`badge ${user.hasBotToken && user.botStatus === 'running' ? 'badge-online' : 'badge-offline'}`}>{t('admin.bot')}: {botStatusLabel}</span>
-                    {!isPrimaryFounder && (
-                      <select
-                        value={user.role}
-                        onChange={(e) => setRole(user.id, e.target.value)}
-                        disabled={isCurrentFounder || isUpdatingThisUser}
-                        title={isCurrentFounder ? t('admin.selfFounderLock') : undefined}
-                        className={`select-compact ${(isCurrentFounder || isUpdatingThisUser) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                      >
-                        {roleOptions.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    )}
                     <button
                       type="button"
                       onClick={() => linkedDiscord && setOpenLinkedUserId((current) => current === user.id ? null : user.id)}
