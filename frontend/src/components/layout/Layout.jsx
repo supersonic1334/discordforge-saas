@@ -378,6 +378,7 @@ export default function Layout() {
   const hasSelectedGuild = !!selectedGuildId
   const isEmailFastRoute = location.pathname === '/email-fast'
   const isOsintRoute = location.pathname === '/dashboard/osint'
+  const isAiAssistantRoute = location.pathname === '/dashboard/ai'
   const canOpenWithoutGuild = (
     location.pathname === '/dashboard/servers'
     || location.pathname === '/dashboard/provider'
@@ -732,7 +733,12 @@ export default function Layout() {
       >
         <MobileHeader hasSelectedGuild={shouldRenderSidebar} setMobileOpen={setMobileOpen} t={t} />
 
-        <main ref={mainScrollRef} className="app-main-scroll flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom">
+        <main
+          ref={mainScrollRef}
+          className={`app-main-scroll flex-1 overflow-y-auto overflow-x-hidden scrollbar-none pb-safe-bottom ${
+            isAiAssistantRoute ? 'app-main-scroll-flush' : ''
+          }`}
+        >
           <Outlet />
         </main>
       </div>
