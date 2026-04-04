@@ -10,6 +10,11 @@
     --app-stable-height: 100dvh;
     --app-width: 100vw;
     --app-keyboard-offset: 0px;
+    --page-shell-3xl: 58rem;
+    --page-shell-4xl: 72rem;
+    --page-shell-5xl: 86rem;
+    --page-shell-6xl: 98rem;
+    --page-shell-7xl: 110rem;
   }
 
   html,
@@ -472,6 +477,7 @@
     display: none;
   }
   .auth-page-frame {
+    width: min(100%, var(--page-shell-7xl));
     height: 100%;
     min-height: 0;
     max-height: 100%;
@@ -480,6 +486,7 @@
     gap: clamp(0.85rem, 1.5vh, 2.25rem);
   }
   .auth-mobile-panel {
+    width: min(100%, clamp(21rem, 94vw, 42rem));
     display: flex;
     max-height: 100%;
     flex-direction: column;
@@ -492,10 +499,10 @@
   }
   .auth-mobile-logo-shell {
     margin-bottom: clamp(0.55rem, 1.2vh, 1.05rem) !important;
-    max-width: min(360px, 70vw) !important;
+    max-width: min(560px, 92vw) !important;
   }
   .auth-mobile-logo {
-    max-height: min(164px, 16.5vh);
+    max-height: min(196px, 18vh);
   }
   .auth-card-surface {
     padding: clamp(0.95rem, 1.8vh, 1.35rem) !important;
@@ -516,6 +523,31 @@
     min-height: 100%;
     width: 100%;
     max-width: 100%;
+  }
+  .page-transition-shell > .mx-auto.max-w-3xl,
+  .page-transition-shell > div.mx-auto.max-w-3xl {
+    width: min(100%, var(--page-shell-3xl));
+    max-width: var(--page-shell-3xl);
+  }
+  .page-transition-shell > .mx-auto.max-w-4xl,
+  .page-transition-shell > div.mx-auto.max-w-4xl {
+    width: min(100%, var(--page-shell-4xl));
+    max-width: var(--page-shell-4xl);
+  }
+  .page-transition-shell > .mx-auto.max-w-5xl,
+  .page-transition-shell > div.mx-auto.max-w-5xl {
+    width: min(100%, var(--page-shell-5xl));
+    max-width: var(--page-shell-5xl);
+  }
+  .page-transition-shell > .mx-auto.max-w-6xl,
+  .page-transition-shell > div.mx-auto.max-w-6xl {
+    width: min(100%, var(--page-shell-6xl));
+    max-width: var(--page-shell-6xl);
+  }
+  .page-transition-shell > .mx-auto.max-w-7xl,
+  .page-transition-shell > div.mx-auto.max-w-7xl {
+    width: min(100%, var(--page-shell-7xl));
+    max-width: var(--page-shell-7xl);
   }
   .assistant-shell {
     min-height: 100%;
@@ -1472,6 +1504,20 @@ html {
 @media (min-width: 1440px) {
   .max-w-7xl {
     max-width: 88rem;
+  }
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --page-shell-3xl: 62rem;
+    --page-shell-4xl: 78rem;
+    --page-shell-5xl: 92rem;
+    --page-shell-6xl: 106rem;
+    --page-shell-7xl: 120rem;
+  }
+
+  .auth-mobile-panel {
+    width: min(100%, clamp(23rem, 40vw, 46rem));
   }
 }
 
