@@ -17,39 +17,6 @@ import {
 import { osintAPI } from '../services/api'
 import DiscordIntelPanel from '../components/osint/DiscordIntelPanel'
 
-const PLATFORMS = [
-  { id: 'instagram', name: 'Instagram', cat: 'Social', url: (value) => `https://instagram.com/${value}` },
-  { id: 'tiktok', name: 'TikTok', cat: 'Social', url: (value) => `https://tiktok.com/@${value}` },
-  { id: 'twitter', name: 'Twitter/X', cat: 'Social', url: (value) => `https://x.com/${value}` },
-  { id: 'youtube', name: 'YouTube', cat: 'Video', url: (value) => `https://youtube.com/@${value}` },
-  { id: 'snapchat', name: 'Snapchat', cat: 'Social', url: (value) => `https://snapchat.com/add/${value}` },
-  { id: 'facebook', name: 'Facebook', cat: 'Social', url: (value) => `https://facebook.com/${value}` },
-  { id: 'reddit', name: 'Reddit', cat: 'Social', url: (value) => `https://reddit.com/user/${value}` },
-  { id: 'roblox', name: 'Roblox', cat: 'Gaming', url: (value) => `https://roblox.com/user.aspx?username=${value}` },
-  { id: 'steam', name: 'Steam', cat: 'Gaming', url: (value) => `https://steamcommunity.com/id/${value}` },
-  { id: 'twitch', name: 'Twitch', cat: 'Gaming', url: (value) => `https://twitch.tv/${value}` },
-  { id: 'github', name: 'GitHub', cat: 'Dev', url: (value) => `https://github.com/${value}` },
-  { id: 'gitlab', name: 'GitLab', cat: 'Dev', url: (value) => `https://gitlab.com/${value}` },
-  { id: 'linkedin', name: 'LinkedIn', cat: 'Pro', url: (value) => `https://linkedin.com/in/${value}` },
-  { id: 'spotify', name: 'Spotify', cat: 'Music', url: (value) => `https://open.spotify.com/user/${value}` },
-  { id: 'soundcloud', name: 'SoundCloud', cat: 'Music', url: (value) => `https://soundcloud.com/${value}` },
-  { id: 'telegram', name: 'Telegram', cat: 'Social', url: (value) => `https://t.me/${value}` },
-  { id: 'medium', name: 'Medium', cat: 'Blog', url: (value) => `https://medium.com/@${value}` },
-  { id: 'pinterest', name: 'Pinterest', cat: 'Social', url: (value) => `https://pinterest.com/${value}` },
-  { id: 'tumblr', name: 'Tumblr', cat: 'Blog', url: (value) => `https://${value}.tumblr.com` },
-  { id: 'patreon', name: 'Patreon', cat: 'Creator', url: (value) => `https://patreon.com/${value}` },
-  { id: 'vimeo', name: 'Vimeo', cat: 'Video', url: (value) => `https://vimeo.com/${value}` },
-  { id: 'lastfm', name: 'Last.fm', cat: 'Music', url: (value) => `https://last.fm/user/${value}` },
-  { id: 'devto', name: 'Dev.to', cat: 'Dev', url: (value) => `https://dev.to/${value}` },
-  { id: 'kofi', name: 'Ko-fi', cat: 'Creator', url: (value) => `https://ko-fi.com/${value}` },
-]
-
-const CONFIDENCE_TONE = {
-  haute: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200',
-  moyenne: 'border-amber-400/20 bg-amber-400/10 text-amber-100',
-  faible: 'border-red-400/20 bg-red-400/10 text-red-200',
-}
-
 function getErrorPayload(error) {
   const rawMessage = error?.response?.data?.error || error?.message || 'Une erreur est survenue'
   if (String(rawMessage).toLowerCase().includes('ia non configuree')) {
@@ -84,8 +51,8 @@ function ErrorPanel({ error, onRetry }) {
               {error.raw}
             </pre>
           ) : null}
-          {onRetry ? (
-            <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-3">
+            {onRetry ? (
               <button
                 type="button"
                 onClick={onRetry}
@@ -94,56 +61,30 @@ function ErrorPanel({ error, onRetry }) {
                 <RefreshCw className="h-4 w-4" />
                 Reessayer
               </button>
-              {error.actionHref ? (
-                <a
-                  href={error.actionHref}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-mono text-white/80 transition-all hover:border-white/20 hover:text-white"
-                >
-                  {error.actionLabel || 'Ouvrir'}
-                </a>
-              ) : null}
-            </div>
-          ) : error.actionHref ? (
-            <a
-              href={error.actionHref}
-              className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-mono text-white/80 transition-all hover:border-white/20 hover:text-white"
-            >
-              {error.actionLabel || 'Ouvrir'}
-            </a>
-          ) : null}
+            ) : null}
+            {error.actionHref ? (
+              <a
+                href={error.actionHref}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-mono text-white/80 transition-all hover:border-white/20 hover:text-white"
+              >
+                {error.actionLabel || 'Ouvrir'}
+              </a>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function MetricTile({ label, value, hint = '', tone = '' }) {
+function MetricTile({ label, value, hint = '' }) {
   return (
-    <div className={`feature-metric ${tone}`}>
+    <div className="feature-metric">
       <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">{label}</p>
       <p className="mt-2 font-display text-2xl font-800 text-white">{value}</p>
       {hint ? <p className="mt-2 text-xs text-white/45">{hint}</p> : null}
     </div>
   )
-}
-
-function formatDuration(durationMs) {
-  if (!Number.isFinite(Number(durationMs))) return '--'
-  const seconds = Number(durationMs) / 1000
-  return seconds < 1 ? `${Math.max(1, Math.round(Number(durationMs)))} ms` : `${seconds.toFixed(seconds >= 10 ? 0 : 1)} s`
-}
-
-function formatDate(value) {
-  if (!value) return '--'
-
-  try {
-    return new Intl.DateTimeFormat('fr-FR', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(new Date(value))
-  } catch {
-    return value
-  }
 }
 
 function formatFileSize(bytes) {
@@ -152,68 +93,141 @@ function formatFileSize(bytes) {
   return size < 1024 * 1024 ? `${Math.round(size / 1024)} Ko` : `${(size / (1024 * 1024)).toFixed(2)} Mo`
 }
 
-function StatusBanner({ active, title, detail }) {
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('Impossible de lire le fichier image'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function UsernameProfileCard({ profile }) {
+  const [open, setOpen] = useState(false)
+
   return (
-    <div className={`rounded-[22px] border px-4 py-4 ${active ? 'border-emerald-400/18 bg-emerald-400/10' : 'border-amber-400/18 bg-amber-400/10'}`}>
-      <div className="flex items-start gap-3">
-        <div className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl border ${active ? 'border-emerald-400/18 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/18 bg-amber-400/10 text-amber-100'}`}>
-          {active ? <ShieldCheck className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+    <div className="spotlight-card border-neon-cyan/18 bg-neon-cyan/[0.05] p-5">
+      <div className="relative z-[1] flex h-full flex-col gap-4">
+        <div className="flex items-start gap-4">
+          {profile.imageUrl ? (
+            <img
+              src={profile.imageUrl}
+              alt={profile.headline || profile.siteName}
+              className="h-16 w-16 rounded-[22px] border border-white/10 object-cover shadow-[0_18px_36px_rgba(0,0,0,0.28)]"
+            />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/[0.04]">
+              <Fingerprint className="h-6 w-6 text-neon-cyan/80" />
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate font-display text-xl font-700 text-white">{profile.platformName || profile.siteName}</p>
+              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-emerald-200">
+                Verifie
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">
+              {profile.domain || profile.siteName || '--'}
+            </p>
+            {profile.headline && profile.headline !== profile.platformName ? (
+              <p className="mt-2 text-sm text-white/72">{profile.headline}</p>
+            ) : null}
+          </div>
         </div>
-        <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{title}</p>
-          <p className="mt-1 text-sm leading-6 text-white/70">{detail}</p>
+
+        <div className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-4 text-sm leading-6 text-white/70">
+          {profile.summary}
+        </div>
+
+        {profile.facts?.length ? (
+          <div className="flex flex-wrap gap-2">
+            {profile.facts.map((fact) => (
+              <span key={`${fact.label}-${fact.value}`} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/60">
+                {fact.label}: {fact.value}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {profile.insights?.length ? (
+          <div className="space-y-2">
+            {profile.insights.slice(0, open ? profile.insights.length : 2).map((insight) => (
+              <div key={insight} className="rounded-[16px] border border-white/8 bg-black/15 px-4 py-3 text-sm leading-6 text-white/68">
+                {insight}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {open && profile.sections?.length ? (
+          <div className="grid gap-3">
+            {profile.sections.map((section) => (
+              <div key={section.title} className="rounded-[18px] border border-white/8 bg-black/15 p-4">
+                <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{section.title}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {section.items.map((item) => (
+                    <span key={item} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/60">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="mt-auto flex flex-wrap gap-3">
+          {profile.sections?.length || (profile.insights?.length || 0) > 2 ? (
+            <button
+              type="button"
+              onClick={() => setOpen((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:text-white"
+            >
+              {open ? 'Refermer' : 'Infos +'}
+            </button>
+          ) : null}
+
+          {profile.openUrl ? (
+            <a
+              href={profile.openUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15"
+            >
+              Ouvrir le profil
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          ) : null}
         </div>
       </div>
     </div>
   )
 }
 
-function statusBadge(result, loading) {
-  if (loading) return { label: 'Scan', tone: 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan' }
-  if (!result) return { label: 'Attente', tone: 'border-white/10 bg-white/[0.04] text-white/45' }
-  if (result.supported === false) return { label: 'Hors corpus', tone: 'border-white/10 bg-white/[0.04] text-white/45' }
-  if (result.found) {
-    return result.confidence >= 70
-      ? { label: 'Trouve', tone: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' }
-      : { label: 'Probable', tone: 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200' }
-  }
-  return result.confidence <= 30
-    ? { label: 'Absent', tone: 'border-red-400/20 bg-red-400/10 text-red-200' }
-    : { label: 'Inconnu', tone: 'border-white/10 bg-white/[0.04] text-white/55' }
-}
-
 function UsernameTracker({ status }) {
-  const categories = useMemo(() => ['Tous', ...new Set(PLATFORMS.map((platform) => platform.cat))], [])
   const [input, setInput] = useState('')
-  const [username, setUsername] = useState('')
-  const [filter, setFilter] = useState('Tous')
   const [phase, setPhase] = useState('idle')
+  const [filter, setFilter] = useState('Tous')
   const [scanData, setScanData] = useState(null)
   const [error, setError] = useState(null)
 
-  const results = scanData?.results || {}
-  const scanInput = scanData?.input || null
-  const resolvedUsername = scanInput?.username || username
-  const foundPlatforms = useMemo(
-    () => PLATFORMS.filter((platform) => results[platform.id]?.found),
-    [results],
+  const profiles = useMemo(() => {
+    const rows = Array.isArray(scanData?.profiles) ? scanData.profiles : []
+    return rows.filter((entry) => entry?.openUrl || entry?.summary || entry?.headline)
+  }, [scanData])
+  const categories = useMemo(() => ['Tous', ...new Set(profiles.map((entry) => entry.category).filter(Boolean))], [profiles])
+  const filteredProfiles = useMemo(
+    () => profiles.filter((entry) => filter === 'Tous' || entry.category === filter),
+    [filter, profiles]
   )
-  const filteredPlatforms = useMemo(
-    () => foundPlatforms.filter((platform) => filter === 'Tous' || platform.cat === filter),
-    [filter, foundPlatforms],
-  )
-  const foundRows = useMemo(
-    () => (scanData?.sites || []).filter((entry) => entry.status === 'found'),
-    [scanData],
-  )
-  const totalFound = Number(scanData?.summary?.found || foundRows.length || foundPlatforms.length || 0)
 
   async function handleScan() {
     const cleaned = input.trim().replace(/^@+/, '')
     if (!cleaned || phase === 'loading' || !status.usernameConfigured) return
 
     setPhase('loading')
-    setUsername(cleaned)
     setScanData(null)
     setError(null)
 
@@ -244,7 +258,7 @@ function UsernameTracker({ status }) {
                     void handleScan()
                   }
                 }}
-                placeholder="Pseudo, alias ou ID Discord..."
+                placeholder="Pseudo ou ID Discord..."
                 className="input-field pl-11"
                 disabled={phase === 'loading' || status.loading}
               />
@@ -258,14 +272,13 @@ function UsernameTracker({ status }) {
                 className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 px-5 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15 disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <RefreshCw className={`h-4 w-4 ${phase === 'loading' ? 'animate-spin' : ''}`} />
-                {phase === 'loading' ? 'Sweep...' : 'Lancer le sweep'}
+                {phase === 'loading' ? 'Recherche...' : 'Scanner'}
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   setInput('')
-                  setUsername('')
                   setScanData(null)
                   setError(null)
                   setFilter('Tous')
@@ -283,20 +296,26 @@ function UsernameTracker({ status }) {
               <div className="h-2 overflow-hidden rounded-full bg-white/[0.05]">
                 <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-neon-cyan via-cyan-400 to-violet-400" />
               </div>
-              <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">
-                Analyse de {username || input.trim()}
-              </p>
+              <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Sweep public en cours</p>
             </div>
           ) : null}
         </div>
       </div>
 
       {!status.usernameConfigured ? (
-        <StatusBanner
-          active={false}
-          title="Sweep indisponible"
-          detail="Le corpus OSINT local n est pas charge sur le serveur. Tu peux saisir un pseudo, mais le sweep reseau restera bloque tant que le moteur n est pas disponible."
-        />
+        <div className="rounded-[22px] border border-amber-400/18 bg-amber-400/10 px-4 py-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl border border-amber-400/18 bg-amber-400/10 text-amber-100">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Moteur indisponible</p>
+              <p className="mt-1 text-sm leading-6 text-white/70">
+                Le corpus OSINT public n est pas charge sur le serveur.
+              </p>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <ErrorPanel error={error} onRetry={phase === 'error' ? () => void handleScan() : null} />
@@ -306,223 +325,72 @@ function UsernameTracker({ status }) {
           <div className="spotlight-card p-5 sm:p-6">
             <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Profils detectes</p>
-                <p className="mt-2 font-display text-3xl font-800 text-white">{totalFound}</p>
-                {resolvedUsername ? (
+                <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Profils verifies</p>
+                <p className="mt-2 font-display text-3xl font-800 text-white">{profiles.length}</p>
+                {scanData?.input?.username ? (
                   <p className="mt-2 text-sm text-white/55">
-                    Recherche active sur <span className="text-white">@{resolvedUsername}</span>
+                    Recherche active sur <span className="text-white">@{scanData.input.username}</span>
                   </p>
                 ) : null}
-                {scanInput?.type === 'discord_id' && scanInput?.discord_user ? (
+                {scanData?.input?.type === 'discord_id' && scanData?.input?.discord_user ? (
                   <p className="mt-1 text-sm text-white/45">
-                    ID Discord resolu vers <span className="text-neon-cyan">@{scanInput.discord_user.username}</span>
+                    ID Discord resolu vers <span className="text-neon-cyan">@{scanData.input.discord_user.username}</span>
                   </p>
                 ) : null}
               </div>
 
-              {scanInput?.discord_user ? (
-                <div className="rounded-[22px] border border-neon-cyan/18 bg-neon-cyan/[0.06] px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    {scanInput.discord_user.avatar_url ? (
-                      <img
-                        src={scanInput.discord_user.avatar_url}
-                        alt={scanInput.discord_user.username}
-                        className="h-14 w-14 rounded-[18px] border border-white/10 object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] font-mono text-xs uppercase tracking-[0.18em] text-white/65">
-                        {(scanInput.discord_user.username || '?').slice(0, 2)}
-                      </div>
-                    )}
-                    <div>
-                      <p className="font-display text-lg font-700 text-white">
-                        {scanInput.discord_user.display_name || scanInput.discord_user.global_name || scanInput.discord_user.username}
-                      </p>
-                      <p className="mt-1 text-xs font-mono uppercase tracking-[0.18em] text-white/45">
-                        {scanInput.discord_user.username} {scanInput.discord_user.id ? `- ${scanInput.discord_user.id}` : ''}
-                      </p>
-                    </div>
-                  </div>
+              {profiles.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => setFilter(category)}
+                      className={`rounded-full border px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] transition-all ${
+                        filter === category
+                          ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan'
+                          : 'border-white/10 bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/80'
+                      }`}
+                    >
+                      {category}
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
           </div>
 
-          {foundPlatforms.length ? (
-          <div className="spotlight-card p-4">
-            <div className="relative z-[1] flex flex-wrap gap-2">
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setFilter(category)}
-                  className={`rounded-full border px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] transition-all ${
-                    filter === category
-                      ? 'border-neon-cyan/20 bg-neon-cyan/10 text-neon-cyan'
-                      : 'border-white/10 bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/80'
-                  }`}
-                >
-                  {category}
-                </button>
+          {filteredProfiles.length ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {filteredProfiles.map((profile) => (
+                <UsernameProfileCard key={`${profile.platformId}-${profile.openUrl || profile.siteName}`} profile={profile} />
               ))}
-              {foundPlatforms.length ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    foundPlatforms.forEach((platform) => {
-                      const result = results[platform.id]
-                      const href = result?.profile_url || result?.main_url || platform.url(resolvedUsername || username)
-                      if (href) {
-                        window.open(href, '_blank', 'noopener,noreferrer')
-                      }
-                    })
-                  }}
-                  className="ml-auto inline-flex items-center gap-2 rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-neon-cyan transition-all hover:bg-neon-cyan/15"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Ouvrir tout
-                </button>
-              ) : null}
             </div>
-          </div>
-          ) : null}
-
-          {filteredPlatforms.length ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filteredPlatforms.map((platform) => {
-              const result = results[platform.id]
-              const href = result?.profile_url || result?.main_url || platform.url(resolvedUsername || username)
-              return (
-                <div key={platform.id} className="spotlight-card border-neon-cyan/18 bg-neon-cyan/[0.05] p-4">
-                  <div className="relative z-[1] flex h-full flex-col gap-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-display text-base font-700 text-white">{platform.name}</p>
-                        <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/30">{platform.cat}</p>
-                      </div>
-                      <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-emerald-200">
-                        Trouve
-                      </span>
-                    </div>
-
-                    <div className="min-h-[74px] rounded-[18px] border border-white/8 bg-black/15 px-3 py-3 text-sm leading-6 text-white/60">
-                      {result?.info || 'Aucune conclusion detaillee pour le moment.'}
-                    </div>
-
-                    {result?.details?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {result.details.map((detail) => (
-                          <span key={detail} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">
-                            {detail}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {href ? (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-auto inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Ouvrir
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          ) : phase === 'done' ? (
+          ) : (
             <div className="spotlight-card p-8 text-center">
               <div className="relative z-[1]">
                 <Fingerprint className="mx-auto h-12 w-12 text-white/10" />
                 <p className="mt-4 font-display text-xl font-700 text-white">Aucun profil detecte</p>
                 <p className="mt-2 text-sm leading-6 text-white/45">
-                  Aucun profil public relie a cette recherche n a ete remonte dans le corpus actuel.
+                  Aucun profil public verifie n a ete remonte pour cette recherche.
                 </p>
               </div>
             </div>
-          ) : null}
-
-          {foundRows.length ? (
-            <div className="spotlight-card p-5 sm:p-6">
-              <div className="relative z-[1] space-y-5">
-                <div>
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Profils trouves</p>
-                  <p className="mt-2 text-sm leading-6 text-white/55">
-                    {foundRows.length} resultat{foundRows.length > 1 ? 's' : ''} public{foundRows.length > 1 ? 's' : ''} trouve{foundRows.length > 1 ? 's' : ''}.
-                  </p>
-                </div>
-
-                <div className="grid gap-4">
-                  {foundRows.slice(0, 120).map((entry) => (
-                    <div key={`${entry.id}-${entry.profileUrl || entry.mainUrl || entry.siteName}`} className="rounded-[22px] border border-emerald-400/18 bg-emerald-400/[0.07] p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-display text-lg font-700 text-white">{entry.siteName}</p>
-                            {entry.category ? <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/45">{entry.category}</span> : null}
-                          </div>
-                          {entry.domain ? <p className="mt-1 text-xs font-mono uppercase tracking-[0.2em] text-white/30">{entry.domain}</p> : null}
-                        </div>
-
-                        <div className="flex flex-wrap gap-3">
-                          {entry.profileUrl ? (
-                            <a
-                              href={entry.profileUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-2 rounded-2xl border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-3 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15"
-                            >
-                              Profil
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          ) : null}
-                          {!entry.profileUrl && entry.mainUrl ? (
-                            <a
-                              href={entry.mainUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:text-white"
-                            >
-                              Ouvrir
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <p className="mt-4 text-sm leading-6 text-white/65">{entry.info}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : null}
+          )}
         </>
       ) : (
         <div className="feature-hero p-10 text-center">
           <div className="relative z-[1]">
             <Fingerprint className="mx-auto h-12 w-12 text-white/10" />
-            <p className="mt-4 font-display text-xl font-700 text-white">Username tracker</p>
-            <p className="mt-2 text-sm leading-6 text-white/45">Lance un sweep reseau massif sur un large corpus de profils publics.</p>
+            <p className="mt-4 font-display text-xl font-700 text-white">Username Tracker</p>
+            <p className="mt-2 text-sm leading-6 text-white/45">
+              Profils publics verifies uniquement, enrichis avec des metadonnees et APIs ouvertes quand elles existent.
+            </p>
           </div>
         </div>
       )}
     </div>
   )
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Impossible de lire le fichier image'))
-    reader.readAsDataURL(file)
-  })
 }
 
 function ImageGeolocator({ status }) {
@@ -607,8 +475,7 @@ function ImageGeolocator({ status }) {
     }
   }
 
-  const coordinates = result?.coordinates
-  const hasCoordinates = Number.isFinite(Number(coordinates?.lat)) && Number.isFinite(Number(coordinates?.lon))
+  const hasCoordinates = Number.isFinite(Number(result?.coordinates?.lat)) && Number.isFinite(Number(result?.coordinates?.lon))
 
   return (
     <div className="space-y-5">
@@ -647,7 +514,7 @@ function ImageGeolocator({ status }) {
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/[0.04]">
                   <Upload className="h-7 w-7 text-neon-cyan/80" />
                 </div>
-                <p className="mt-5 font-display text-xl font-700 text-white">Image geolocator</p>
+                <p className="mt-5 font-display text-xl font-700 text-white">Image Geolocator</p>
                 <p className="mt-2 text-sm leading-6 text-white/45">Glisse une image, clique ici ou colle-la avec Ctrl+V.</p>
               </div>
             )}
@@ -709,24 +576,30 @@ function ImageGeolocator({ status }) {
             <div className="relative z-[1] flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  <span className="feature-chip"><MapPin className="h-3.5 w-3.5" />position estimee</span>
+                  <span className="feature-chip"><MapPin className="h-3.5 w-3.5" />zone probable</span>
                   <span className="feature-chip"><Globe className="h-3.5 w-3.5" />{result.country || 'pays inconnu'}</span>
                 </div>
                 <div>
-                  <h2 className="font-display text-3xl font-800 text-white">{[result.city, result.region, result.country].filter(Boolean).join(', ') || 'Lieu non identifie'}</h2>
+                  <h2 className="font-display text-3xl font-800 text-white">
+                    {[result.city, result.region, result.country].filter(Boolean).join(', ') || 'Lieu non identifie'}
+                  </h2>
                   {result.exact_location ? <p className="mt-3 text-sm leading-6 text-white/65">{result.exact_location}</p> : null}
                 </div>
               </div>
-              <div className={`rounded-full border px-4 py-2 text-[11px] font-mono uppercase tracking-[0.24em] ${CONFIDENCE_TONE[result.confidence] || CONFIDENCE_TONE.moyenne}`}>
-                {result.confidence}
+              <div className="rounded-full border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.24em] text-neon-cyan">
+                {result.confidence || 'moyenne'}
               </div>
             </div>
 
             <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MetricTile label="Pays" value={result.country_code || '--'} hint={result.country || 'inconnu'} />
-              <MetricTile label="Moment" value={result.time_of_day || '--'} hint="approximation" />
-              <MetricTile label="Meteo" value={result.weather_conditions || '--'} hint="signal ambiant" />
-              <MetricTile label="Coordonnees" value={hasCoordinates ? `${Number(coordinates.lat).toFixed(4)}, ${Number(coordinates.lon).toFixed(4)}` : '--'} hint="precision IA" />
+              <MetricTile label="Ville" value={result.city || '--'} hint={result.region || 'zone'} />
+              <MetricTile label="Moment" value={result.time_of_day || '--'} hint={result.weather_conditions || 'ambiance'} />
+              <MetricTile
+                label="Coordonnees"
+                value={hasCoordinates ? `${Number(result.coordinates.lat).toFixed(4)}, ${Number(result.coordinates.lon).toFixed(4)}` : '--'}
+                hint="normalise carto"
+              />
             </div>
           </div>
 
@@ -759,35 +632,66 @@ function ImageGeolocator({ status }) {
                   </div>
                 </div>
               </div>
+
+              {result.reference_images?.length ? (
+                <div className="spotlight-card p-5 sm:p-6">
+                  <div className="relative z-[1]">
+                    <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Images et reperes proches</p>
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      {result.reference_images.map((entry) => (
+                        <a
+                          key={`${entry.title}-${entry.page_url || entry.image_url}`}
+                          href={entry.page_url || entry.image_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="overflow-hidden rounded-[22px] border border-white/8 bg-black/15 transition-all hover:border-white/15 hover:bg-white/[0.04]"
+                        >
+                          {entry.image_url ? (
+                            <img src={entry.image_url} alt={entry.title} className="h-44 w-full object-cover" />
+                          ) : null}
+                          <div className="p-4">
+                            <p className="font-display text-lg font-700 text-white">{entry.title}</p>
+                            <p className="mt-2 text-sm text-white/50">
+                              {entry.distance_m ? `A ${entry.distance_m} m environ` : entry.source || 'Reference publique'}
+                            </p>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-5">
-              <div className="spotlight-card p-5">
-                <div className="relative z-[1] space-y-3">
-                  {result.maps_search ? (
-                    <a
-                      href={`https://www.google.com/maps/search/${encodeURIComponent(result.maps_search)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-between rounded-[20px] border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-4 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15"
-                    >
-                      Google Maps
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  ) : null}
-                  {hasCoordinates ? (
-                    <a
-                      href={`https://www.openstreetmap.org/?mlat=${coordinates.lat}&mlon=${coordinates.lon}&zoom=16`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-between rounded-[20px] border border-violet-400/20 bg-violet-400/10 px-4 py-4 text-sm font-mono text-violet-200 transition-all hover:bg-violet-400/15"
-                    >
-                      OpenStreetMap
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  ) : null}
+              {result.map_links ? (
+                <div className="spotlight-card p-5">
+                  <div className="relative z-[1] space-y-3">
+                    {result.map_links.google ? (
+                      <a
+                        href={result.map_links.google}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between rounded-[20px] border border-neon-cyan/20 bg-neon-cyan/10 px-4 py-4 text-sm font-mono text-neon-cyan transition-all hover:bg-neon-cyan/15"
+                      >
+                        Google Maps
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    ) : null}
+                    {result.map_links.osm ? (
+                      <a
+                        href={result.map_links.osm}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between rounded-[20px] border border-violet-400/20 bg-violet-400/10 px-4 py-4 text-sm font-mono text-violet-200 transition-all hover:bg-violet-400/15"
+                      >
+                        OpenStreetMap
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               {result.alternative_locations?.length ? (
                 <div className="spotlight-card p-5">
@@ -810,8 +714,10 @@ function ImageGeolocator({ status }) {
         <div className="feature-hero p-10 text-center">
           <div className="relative z-[1]">
             <Image className="mx-auto h-12 w-12 text-white/10" />
-            <p className="mt-4 font-display text-xl font-700 text-white">Image geolocator</p>
-            <p className="mt-2 text-sm leading-6 text-white/45">Analyse les indices visuels pour estimer un lieu probable.</p>
+            <p className="mt-4 font-display text-xl font-700 text-white">Image Geolocator</p>
+            <p className="mt-2 text-sm leading-6 text-white/45">
+              Lieu probable, normalisation cartographique et reperes visuels publics proches.
+            </p>
           </div>
         </div>
       )}
@@ -825,13 +731,7 @@ export default function OSINTPage() {
     loading: true,
     configured: false,
     usernameConfigured: false,
-    usernameSiteCount: 0,
-    usernameSource: null,
-    usernameSnapshotUpdatedAt: null,
     imageConfigured: false,
-    provider: null,
-    model: null,
-    imageSupported: false,
   })
 
   useEffect(() => {
@@ -842,13 +742,7 @@ export default function OSINTPage() {
         loading: false,
         configured: Boolean(response.data?.configured),
         usernameConfigured: Boolean(response.data?.usernameConfigured),
-        usernameSiteCount: Number(response.data?.usernameSiteCount || 0),
-        usernameSource: response.data?.usernameSource || null,
-        usernameSnapshotUpdatedAt: response.data?.usernameSnapshotUpdatedAt || null,
         imageConfigured: Boolean(response.data?.imageConfigured),
-        provider: response.data?.provider || null,
-        model: response.data?.model || null,
-        imageSupported: Boolean(response.data?.imageSupported),
       })
     }).catch(() => {
       if (!active) return
@@ -856,13 +750,7 @@ export default function OSINTPage() {
         loading: false,
         configured: false,
         usernameConfigured: false,
-        usernameSiteCount: 0,
-        usernameSource: null,
-        usernameSnapshotUpdatedAt: null,
         imageConfigured: false,
-        provider: null,
-        model: null,
-        imageSupported: false,
       })
     })
     return () => { active = false }

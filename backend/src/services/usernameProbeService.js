@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger').child('UsernameProbeService');
+const { enrichUsernameProfiles } = require('./publicOsintEnrichmentService');
 
 const fetch = global.fetch ? global.fetch.bind(globalThis) : require('node-fetch');
 
@@ -231,6 +232,7 @@ function buildBaseResult(site, profileUrl, probeUrl) {
     siteName: site.siteName,
     profileUrl,
     probeUrl,
+    openUrl: profileUrl || probeUrl || site.mainUrl || '',
     mainUrl: site.mainUrl || '',
     domain: site.domain,
     category: site.category,
@@ -238,7 +240,7 @@ function buildBaseResult(site, profileUrl, probeUrl) {
   };
 }
 
-function foundResult(site, profileUrl, probeUrl, durationMs, info, confidence = 92, detectionType = 'network') {
+function foundResult(site, profileUrl, probeUrl, durationMs, info, confidence = 92, detectionType = 'network', openUrl = '') {
   return {
     ...buildBaseResult(site, profileUrl, probeUrl),
     status: 'found',
@@ -247,6 +249,7 @@ function foundResult(site, profileUrl, probeUrl, durationMs, info, confidence = 
     info,
     detectionType,
     durationMs,
+    openUrl: openUrl || profileUrl || probeUrl || site.mainUrl || '',
   };
 }
 
@@ -283,54 +286,81 @@ async function inspectResponse(site, response, profileUrl, probeUrl, durationMs)
     }
 
     if (statusCode >= 200 && statusCode < 300) {
-      return foundResult(site, profileUrl, probeUrl, durationMs, `Profil public detecte via HTTP ${statusCode}.`, 94, 'status_code');
+      return foundResult(
+        site,
+        profileUrl,
+        probeUrl,
+        durationMs,
+        `Profil public verifie sur ${site.siteName}.`,
+        94,
+        'status_code',
+        response.url
+      );
     }
 
     if ([404, 410].includes(statusCode)) {
-      return notFoundResult(site, profileUrl, probeUrl, durationMs, `Aucun profil public renvoye par le site (HTTP ${statusCode}).`, 97, 'status_code');
+      return notFoundResult(site, profileUrl, probeUrl, durationMs, 'Aucun profil public visible sur cette plateforme.', 97, 'status_code');
     }
 
     if (statusCode === 429 || statusCode >= 500) {
-      return unknownResult(site, profileUrl, probeUrl, durationMs, `Probe limitee ou indisponible (HTTP ${statusCode}).`, 22, 'status_code');
+      return unknownResult(site, profileUrl, probeUrl, durationMs, 'Le site limite ou bloque temporairement la verification.', 22, 'status_code');
     }
 
-    return unknownResult(site, profileUrl, probeUrl, durationMs, `Reponse ambigue du site (HTTP ${statusCode}).`, 42, 'status_code');
+    return unknownResult(site, profileUrl, probeUrl, durationMs, 'Le site a repondu, mais la page reste ambiguë.', 42, 'status_code');
   }
 
   const text = normalizeWhitespace((await response.text().catch(() => '')).toLowerCase());
 
   if ([404, 410].includes(statusCode)) {
-    return notFoundResult(site, profileUrl, probeUrl, durationMs, `Aucun profil public renvoye par le site (HTTP ${statusCode}).`, 97, site.errorType);
+    return notFoundResult(site, profileUrl, probeUrl, durationMs, 'Aucun profil public visible sur cette plateforme.', 97, site.errorType);
   }
 
   if (statusCode === 429 || statusCode >= 500) {
-    return unknownResult(site, profileUrl, probeUrl, durationMs, `Le site a limite ou refuse la requete (HTTP ${statusCode}).`, 22, site.errorType);
+    return unknownResult(site, profileUrl, probeUrl, durationMs, 'Le site limite ou refuse temporairement la verification.', 22, site.errorType);
   }
 
   if (site.errorType === 'message') {
     const matchesErrorMessage = site.errorMessages.some((entry) => text.includes(entry));
 
     if (matchesErrorMessage) {
-      return notFoundResult(site, profileUrl, probeUrl, durationMs, 'Le message d absence connu du site a ete detecte.', 95, 'message');
+      return notFoundResult(site, profileUrl, probeUrl, durationMs, 'Le site signale qu aucun profil public ne correspond.', 95, 'message');
     }
 
     if (statusCode >= 200 && statusCode < 300) {
-      return foundResult(site, profileUrl, probeUrl, durationMs, `Profil public detecte sans message d absence (HTTP ${statusCode}).`, 88, 'message');
+      return foundResult(
+        site,
+        profileUrl,
+        probeUrl,
+        durationMs,
+        `Profil public verifie sur ${site.siteName}.`,
+        88,
+        'message',
+        response.url
+      );
     }
 
-    return unknownResult(site, profileUrl, probeUrl, durationMs, `Le site a repondu mais le signal reste ambigu (HTTP ${statusCode}).`, 40, 'message');
+    return unknownResult(site, profileUrl, probeUrl, durationMs, 'Le site a repondu, mais le signal reste ambigu.', 40, 'message');
   }
 
   const responseUrl = normalizeWhitespace(response.url);
   if (site.errorUrl && isSameUrlFamily(responseUrl, site.errorUrl)) {
-    return notFoundResult(site, profileUrl, probeUrl, durationMs, 'Redirection vers la page d erreur connue du site.', 95, 'response_url');
+    return notFoundResult(site, profileUrl, probeUrl, durationMs, 'Le site redirige vers sa page d erreur, aucun profil public detecte.', 95, 'response_url');
   }
 
   if (statusCode >= 200 && statusCode < 300) {
-    return foundResult(site, profileUrl, probeUrl, durationMs, 'Profil public detecte via l URL finale du site.', 86, 'response_url');
+    return foundResult(
+      site,
+      profileUrl,
+      probeUrl,
+      durationMs,
+      `Profil public verifie sur ${site.siteName}.`,
+      86,
+      'response_url',
+      responseUrl
+    );
   }
 
-  return unknownResult(site, profileUrl, probeUrl, durationMs, `URL finale non concluante (HTTP ${statusCode}).`, 38, 'response_url');
+  return unknownResult(site, profileUrl, probeUrl, durationMs, 'L URL finale ne permet pas de conclure proprement.', 38, 'response_url');
 }
 
 async function probeSite(site, username) {
@@ -373,7 +403,7 @@ async function runConcurrentProbe(sites, username) {
 
 function buildFeaturedResults(siteResults) {
   return FEATURED_PLATFORMS.reduce((accumulator, platform) => {
-    const candidates = siteResults.filter((entry) => entry.featuredPlatformId === platform.id);
+    const candidates = siteResults.filter((entry) => entry.featuredPlatformId === platform.id && entry.found);
     const selected = candidates.sort((left, right) => {
       if (left.found !== right.found) return left.found ? -1 : 1;
       return right.confidence - left.confidence;
@@ -387,10 +417,11 @@ function buildFeaturedResults(siteResults) {
       found: Boolean(selected?.found),
       confidence: selected?.confidence ?? 0,
       info: selected?.found
-        ? `Profil public detecte sur ${selected.siteName || platform.name}.`
-        : (platform.aliases.length ? 'Aucun profil public detecte dans le sweep.' : 'Plateforme absente du corpus actuel.'),
+        ? `Profil public verifie sur ${selected.siteName || platform.name}.`
+        : '',
       site_name: selected?.siteName || platform.name,
       profile_url: selected?.profileUrl || '',
+      open_url: selected?.openUrl || selected?.profileUrl || '',
       main_url: selected?.mainUrl || '',
       domain: selected?.domain || '',
       details,
@@ -424,6 +455,8 @@ async function scanUsername(username) {
   const startedAt = Date.now();
   const siteResults = await runConcurrentProbe(eligibleSites, cleanedUsername);
   const durationMs = Date.now() - startedAt;
+  const foundEntries = siteResults.filter((entry) => entry.status === 'found');
+  const profiles = await enrichUsernameProfiles(foundEntries, cleanedUsername);
 
   const sortedResults = [...siteResults].sort((left, right) => {
     const score = { found: 3, unknown: 2, not_found: 1 };
@@ -447,6 +480,7 @@ async function scanUsername(username) {
 
   return {
     results: buildFeaturedResults(siteResults),
+    profiles,
     sites: sortedResults,
     summary: buildSummary(sortedResults, durationMs, meta),
   };

@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { requireAuth, validate } = require('../middleware');
-const { osintUsernameScanSchema, osintImageScanSchema } = require('../validators/schemas');
+const { osintUsernameScanSchema, osintDiscordLookupSchema, osintImageScanSchema } = require('../validators/schemas');
 const osintService = require('../services/osintService');
 
 const router = express.Router();
@@ -25,6 +25,18 @@ router.post('/username', requireAuth, validate(osintUsernameScanSchema), async (
   } catch (error) {
     return res.status(error.status || 500).json({
       error: error.message || 'OSINT username request failed',
+      ...(error.raw ? { raw: error.raw } : {}),
+    });
+  }
+});
+
+router.post('/discord', requireAuth, validate(osintDiscordLookupSchema), async (req, res) => {
+  try {
+    const payload = await osintService.lookupDiscordPublicProfile(req.user.id, req.body.identity);
+    res.json(payload);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error.message || 'OSINT Discord request failed',
       ...(error.raw ? { raw: error.raw } : {}),
     });
   }

@@ -10,6 +10,10 @@ const { getProviderCatalog } = require('../config/aiCatalog');
 const { decrypt } = require('./encryptionService');
 
 const fetch = global.fetch ? global.fetch.bind(globalThis) : require('node-fetch');
+const OSINT_FETCH_HEADERS = {
+  'user-agent': 'DiscordForgerOSINT/2.0 (+https://discordforge.local)',
+  'accept-language': 'fr-FR,fr;q=0.9,en;q=0.7',
+};
 
 function clamp(number, min, max) {
   return Math.max(min, Math.min(max, number));
@@ -515,6 +519,333 @@ function normalizeCoordinates(coordinates) {
   };
 }
 
+function buildFetchSignal(timeoutMs = 8000) {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(timeoutMs);
+  }
+  return undefined;
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...OSINT_FETCH_HEADERS,
+      accept: 'application/json,text/plain;q=0.9,*/*;q=0.8',
+      ...(options.headers || {}),
+    },
+    signal: options.signal || buildFetchSignal(),
+  });
+
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.json();
+}
+
+function parseDiscordSnowflakeCreatedAt(discordId) {
+  const value = String(discordId || '').trim();
+  if (!/^\d{16,22}$/.test(value)) return null;
+
+  try {
+    const timestamp = Number((BigInt(value) >> 22n) + 1420070400000n);
+    if (!Number.isFinite(timestamp)) return null;
+    return new Date(timestamp).toISOString();
+  } catch {
+    return null;
+  }
+}
+
+function cleanDiscordIdentity(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^<@!?(\d+)>$/, '$1')
+    .replace(/^discord\.gg\//i, '')
+    .replace(/^@+/, '')
+    .slice(0, 120);
+}
+
+function buildDiscordProfileFromApi(user) {
+  if (!user?.id) return null;
+
+  return {
+    id: String(user.id),
+    username: user.username || null,
+    global_name: user.global_name || null,
+    display_name: user.global_name || user.username || user.id,
+    avatar_url: discordService.getAvatarUrl(user.id, user.avatar, 512, user.discriminator),
+    banner_url: discordService.getBannerUrl(user.id, user.banner, 1024),
+    banner_color: user.banner_color || null,
+    avatar_animated: Boolean(user.avatar && String(user.avatar).startsWith('a_')),
+    banner_animated: Boolean(user.banner && String(user.banner).startsWith('a_')),
+    created_at: parseDiscordSnowflakeCreatedAt(user.id),
+    source: 'discord_api',
+  };
+}
+
+function buildDiscordProfileFromRow(row) {
+  if (!row?.discord_id) return null;
+
+  return {
+    id: String(row.discord_id),
+    username: row.discord_username || null,
+    global_name: row.discord_global_name || null,
+    display_name: row.discord_global_name || row.discord_username || row.username || row.discord_id,
+    avatar_url: row.discord_avatar_url || row.avatar_url || null,
+    banner_url: row.discord_banner_url || null,
+    banner_color: row.discord_banner_color || null,
+    avatar_animated: Boolean(Number(row.discord_avatar_animated || 0)),
+    banner_animated: Boolean(Number(row.discord_banner_animated || 0)),
+    created_at: parseDiscordSnowflakeCreatedAt(row.discord_id),
+    source: 'site_link',
+  };
+}
+
+function buildDiscordCandidate(row) {
+  return {
+    id: String(row.discord_id || row.id),
+    username: row.discord_username || null,
+    global_name: row.discord_global_name || null,
+    display_name: row.discord_global_name || row.discord_username || row.username || row.discord_id || row.id,
+    avatar_url: row.discord_avatar_url || row.avatar_url || null,
+    source: row.discord_id ? 'site_link' : 'site_user',
+  };
+}
+
+function formatDiscordLookupResponse(identity, profile, candidates = [], note = '') {
+  return {
+    query: identity,
+    profile,
+    candidates,
+    note: note || '',
+  };
+}
+
+async function fetchDiscordProfileFromBot(userId, discordId) {
+  const tokenRow = db.findOne('bot_tokens', { user_id: userId });
+  if (!tokenRow?.encrypted_token) return null;
+
+  try {
+    const token = decrypt(tokenRow.encrypted_token);
+    const user = await discordService.getUser(token, discordId);
+    return buildDiscordProfileFromApi(user);
+  } catch (error) {
+    logger.debug?.('Discord public profile lookup failed via bot token', {
+      userId,
+      discordId,
+      message: error?.message || 'lookup_failed',
+    });
+    return null;
+  }
+}
+
+function searchLinkedDiscordCandidates(identity) {
+  const lowered = String(identity || '').trim().toLowerCase();
+  if (!lowered) return [];
+
+  return db.raw(
+    `
+      SELECT
+        id,
+        username,
+        avatar_url,
+        discord_id,
+        discord_username,
+        discord_global_name,
+        discord_avatar_url,
+        discord_banner_url,
+        discord_banner_color,
+        discord_avatar_animated,
+        discord_banner_animated,
+        discord_profile_synced_at
+      FROM users
+      WHERE discord_id = ?
+         OR lower(COALESCE(discord_username, '')) = ?
+         OR lower(COALESCE(discord_global_name, '')) = ?
+      ORDER BY updated_at DESC
+      LIMIT 8
+    `,
+    [identity, lowered, lowered]
+  );
+}
+
+async function lookupDiscordPublicProfile(userId, identity) {
+  const cleanedIdentity = cleanDiscordIdentity(identity);
+  if (!cleanedIdentity) {
+    const error = new Error('Identifiant Discord invalide');
+    error.status = 400;
+    throw error;
+  }
+
+  const directId = /^\d{16,22}$/.test(cleanedIdentity) ? cleanedIdentity : null;
+
+  if (directId) {
+    const liveProfile = await fetchDiscordProfileFromBot(userId, directId);
+    if (liveProfile) {
+      const linkedRow = db.findOne('users', { discord_id: directId });
+      return formatDiscordLookupResponse(cleanedIdentity, liveProfile, linkedRow ? [buildDiscordCandidate(linkedRow)] : []);
+    }
+
+    const linkedRow = db.findOne('users', { discord_id: directId });
+    if (linkedRow) {
+      return formatDiscordLookupResponse(cleanedIdentity, buildDiscordProfileFromRow(linkedRow), [buildDiscordCandidate(linkedRow)]);
+    }
+
+    const error = new Error('Profil Discord introuvable pour cet ID');
+    error.status = 404;
+    throw error;
+  }
+
+  const candidates = searchLinkedDiscordCandidates(cleanedIdentity);
+  if (!candidates.length) {
+    const error = new Error('Aucun profil Discord public resoluble. Utilise de preference un ID ou une mention.');
+    error.status = 404;
+    throw error;
+  }
+
+  const primary = candidates[0];
+  const liveProfile = primary?.discord_id ? await fetchDiscordProfileFromBot(userId, primary.discord_id) : null;
+
+  return formatDiscordLookupResponse(
+    cleanedIdentity,
+    liveProfile || buildDiscordProfileFromRow(primary),
+    candidates.map(buildDiscordCandidate),
+    'Recherche publique fiable : ID ou mention Discord recommandes.'
+  );
+}
+
+function pickAddressField(address, keys) {
+  for (const key of keys) {
+    const value = normalizeShortText(address?.[key], 120);
+    if (value) return value;
+  }
+  return '';
+}
+
+async function reverseGeocodeCoordinates(coordinates) {
+  if (!coordinates) return null;
+
+  try {
+    return await fetchJson(
+      `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(coordinates.lat)}&lon=${encodeURIComponent(coordinates.lon)}&format=jsonv2&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          accept: 'application/json',
+        },
+      }
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function geocodeFromQuery(query) {
+  const cleanedQuery = normalizeShortText(query, 220);
+  if (!cleanedQuery) return null;
+
+  try {
+    const payload = await fetchJson(
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(cleanedQuery)}`
+    );
+    return Array.isArray(payload) ? payload[0] || null : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchWikipediaReferences(coordinates) {
+  if (!coordinates) return [];
+
+  try {
+    const geoPayload = await fetchJson(
+      `https://fr.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${encodeURIComponent(`${coordinates.lat}|${coordinates.lon}`)}&gsradius=2500&gslimit=4&format=json&origin=*`
+    );
+    const geoItems = Array.isArray(geoPayload?.query?.geosearch) ? geoPayload.query.geosearch : [];
+    if (!geoItems.length) return [];
+
+    const pageIds = geoItems.map((entry) => entry.pageid).join('|');
+    const pagePayload = await fetchJson(
+      `https://fr.wikipedia.org/w/api.php?action=query&pageids=${encodeURIComponent(pageIds)}&prop=pageimages|info&inprop=url&pithumbsize=720&format=json&origin=*`
+    );
+    const pages = pagePayload?.query?.pages || {};
+
+    return geoItems.map((item) => {
+      const page = pages[item.pageid] || {};
+      return {
+        title: normalizeShortText(item.title, 120),
+        distance_m: Number.isFinite(Number(item.dist)) ? Math.round(Number(item.dist)) : null,
+        image_url: page?.thumbnail?.source || null,
+        page_url: page?.fullurl || null,
+        source: 'Wikipedia',
+      };
+    }).filter((entry) => entry.title && (entry.image_url || entry.page_url));
+  } catch {
+    return [];
+  }
+}
+
+function buildMapLinks(coordinates, mapsSearch) {
+  if (coordinates) {
+    return {
+      google: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${coordinates.lat},${coordinates.lon}`)}`,
+      osm: `https://www.openstreetmap.org/?mlat=${coordinates.lat}&mlon=${coordinates.lon}&zoom=16`,
+    };
+  }
+
+  const cleanedQuery = normalizeShortText(mapsSearch, 220);
+  if (!cleanedQuery) return null;
+
+  return {
+    google: `https://www.google.com/maps/search/${encodeURIComponent(cleanedQuery)}`,
+    osm: `https://www.openstreetmap.org/search?query=${encodeURIComponent(cleanedQuery)}`,
+  };
+}
+
+async function enhanceGeolocationResult(result) {
+  let nextCoordinates = result.coordinates;
+  let reverseGeocode = null;
+
+  if (!nextCoordinates && result.maps_search) {
+    const geocoded = await geocodeFromQuery(result.maps_search);
+    const lat = Number(geocoded?.lat);
+    const lon = Number(geocoded?.lon);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      nextCoordinates = normalizeCoordinates({ lat, lon });
+    }
+  }
+
+  if (nextCoordinates) {
+    reverseGeocode = await reverseGeocodeCoordinates(nextCoordinates);
+  }
+
+  const address = reverseGeocode?.address || {};
+  const resolvedCountry = result.country || normalizeShortText(address.country, 120);
+  const resolvedCountryCode = result.country_code || normalizeShortText(address.country_code, 12).toUpperCase();
+  const resolvedRegion = result.region || pickAddressField(address, ['state', 'region', 'county']);
+  const resolvedCity = result.city || pickAddressField(address, ['city', 'town', 'village', 'municipality']);
+  const resolvedDistrict = result.district || pickAddressField(address, ['suburb', 'borough', 'city_district', 'neighbourhood']);
+  const resolvedExactLocation = result.exact_location || normalizeShortText(reverseGeocode?.display_name, 220);
+  const resolvedMapsSearch = result.maps_search || [resolvedExactLocation, resolvedCity, resolvedRegion, resolvedCountry].filter(Boolean).join(', ');
+  const reference_images = await fetchWikipediaReferences(nextCoordinates);
+
+  return {
+    ...result,
+    country: resolvedCountry,
+    country_code: resolvedCountryCode,
+    region: resolvedRegion,
+    city: resolvedCity,
+    district: resolvedDistrict,
+    exact_location: resolvedExactLocation,
+    coordinates: nextCoordinates,
+    maps_search: resolvedMapsSearch,
+    map_links: buildMapLinks(nextCoordinates, resolvedMapsSearch),
+    reference_images,
+  };
+}
+
 function normalizeGeolocationResult(rawResult) {
   const clues = Array.isArray(rawResult?.clues) ? rawResult.clues : [];
   const alternatives = Array.isArray(rawResult?.alternative_locations) ? rawResult.alternative_locations : [];
@@ -548,7 +879,7 @@ function normalizeGeolocationResult(rawResult) {
 }
 
 async function scanUsername(userId, username) {
-  const cleanedUsername = String(username || '').trim().replace(/^@+/, '').slice(0, 60);
+  const cleanedUsername = cleanDiscordIdentity(username).slice(0, 60);
   let resolvedInput = {
     query: cleanedUsername,
     type: 'username',
@@ -610,18 +941,21 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
   }
 
   const systemPrompt = [
-    'You are an image geolocation analyst.',
-    'Inspect the photo carefully and infer the most likely location from visible clues only.',
+    'You are a cautious image geolocation analyst.',
+    'Inspect the photo carefully and infer only what is visually supported.',
+    'Prefer city/region precision over invented exact points.',
+    'If coordinates are uncertain, leave them empty instead of guessing.',
     'Return only one JSON object wrapped in <result></result>.',
     'Do not use markdown.',
   ].join(' ');
   const userPrompt = [
-    'Analyze this image and estimate where it was taken from visible clues only.',
-    'Respond with compact JSON only and keep the analysis concise.',
+    'Analyze this image and estimate where it was taken using visible clues only.',
+    'Respond with compact JSON only.',
     'Use this exact schema:',
     '<result>{"confidence":"haute","country":"...","country_code":"...","region":"...","city":"...","district":"...","exact_location":"...","landmark":null,"coordinates":{"lat":0.0,"lon":0.0},"maps_search":"...","clues":[{"type":"Architecture","detail":"...","weight":"high"}],"time_of_day":"...","weather_conditions":"...","analysis":"...","alternative_locations":["..."]}</result>',
-    'Do not return more than 6 clues or 4 alternative locations.',
-    'If a field is unknown, return an empty string or null.',
+    'Target the most plausible city or area when possible.',
+    'Do not return more than 7 clues or 5 alternative locations.',
+    'If a field is unknown, return an empty string or null instead of inventing data.',
   ].join('\n');
 
   const anthropicImageContent = [
@@ -683,8 +1017,11 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
 
     markProviderKeySuccess(aiConfig);
 
+    const normalized = normalizeGeolocationResult(parsed);
+    const enhanced = await enhanceGeolocationResult(normalized);
+
     return {
-      ...normalizeGeolocationResult(parsed),
+      ...enhanced,
       meta: {
         provider: aiConfig.provider,
         model: aiConfig.model,
@@ -722,6 +1059,7 @@ function getStatus() {
 
 module.exports = {
   scanUsername,
+  lookupDiscordPublicProfile,
   geolocateImage,
   getStatus,
 };

@@ -305,7 +305,14 @@ const osintUsernameScanSchema = z.object({
     .trim()
     .min(1)
     .max(60)
-    .regex(/^[A-Za-z0-9._-]+$/, 'Pseudo invalide'),
+    .refine((value) => (
+      /^[A-Za-z0-9._-]+$/.test(value)
+      || /^<@!?\d{16,22}>$/.test(value)
+    ), 'Pseudo invalide'),
+});
+
+const osintDiscordLookupSchema = z.object({
+  identity: z.string().trim().min(2).max(120),
 });
 
 const osintImageScanSchema = z.object({
@@ -546,6 +553,7 @@ module.exports = {
   aiMessageSchema,
   aiContinueActionSchema,
   osintUsernameScanSchema,
+  osintDiscordLookupSchema,
   osintImageScanSchema,
   aiConfigSchema,
   providerAiKeySchema,
