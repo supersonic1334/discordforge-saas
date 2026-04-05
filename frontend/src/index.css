@@ -436,7 +436,7 @@
   }
   .auth-page-shell {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     height: var(--app-height);
     min-height: var(--app-height);
@@ -489,18 +489,18 @@
     height: 100%;
     min-height: 100%;
     max-height: 100%;
-    justify-content: flex-start;
+    justify-content: center;
     overflow: hidden;
     gap: clamp(0.85rem, 1.5vh, 2.25rem);
-    padding-top: clamp(0.1rem, 0.6vh, 0.45rem);
-    padding-bottom: clamp(0.35rem, 0.9vh, 0.75rem);
+    padding-top: clamp(0.5rem, 1.2vh, 1rem);
+    padding-bottom: clamp(0.5rem, 1.2vh, 1rem);
   }
   .auth-mobile-panel {
     width: min(100%, clamp(20rem, 92vw, 30rem));
-    min-height: 100%;
-    height: 100%;
+    min-height: auto;
+    height: auto;
     display: flex;
-    max-height: 100%;
+    max-height: calc(var(--app-height) - max(env(safe-area-inset-top), 10px) - max(env(safe-area-inset-bottom), 10px) - 1.5rem);
     flex-direction: column;
     justify-content: flex-start;
     gap: clamp(0.95rem, 2vh, 1.5rem);
