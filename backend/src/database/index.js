@@ -343,6 +343,20 @@ function runMigrations() {
   ensureColumn('user_security_access_log', 'os_name', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_security_access_log', 'device_type', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_security_access_log', 'device_model', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_precise_locations', 'consent_status', "TEXT NOT NULL DEFAULT 'unknown'");
+  ensureColumn('user_precise_locations', 'permission_state', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_precise_locations', 'latitude', 'REAL');
+  ensureColumn('user_precise_locations', 'longitude', 'REAL');
+  ensureColumn('user_precise_locations', 'accuracy_m', 'REAL');
+  ensureColumn('user_precise_locations', 'altitude_m', 'REAL');
+  ensureColumn('user_precise_locations', 'altitude_accuracy_m', 'REAL');
+  ensureColumn('user_precise_locations', 'heading_deg', 'REAL');
+  ensureColumn('user_precise_locations', 'speed_mps', 'REAL');
+  ensureColumn('user_precise_locations', 'timezone', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_precise_locations', 'reverse_label', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_precise_locations', 'reverse_display_name', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_precise_locations', 'last_error', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_precise_locations', 'captured_at', 'TEXT');
   if (!hadEmailVerifiedColumn) {
     db.exec(`
       UPDATE users

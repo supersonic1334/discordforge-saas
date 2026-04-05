@@ -786,6 +786,7 @@ export default function AdminPanel() {
             const isLinkedOpen = openLinkedUserId === user.id
             const isSecurityOpen = openSecurityUserId === user.id
             const securityAccess = user.security_access || null
+            const preciseLocation = user.precise_location || null
             const currentSecurity = securityAccess?.current || null
             const securityHistory = securityAccess?.recent || []
             const canRevealThisEmail = isCurrentUser && isPrimaryFounder && canRevealPrimaryEmail
@@ -964,6 +965,37 @@ export default function AdminPanel() {
 
                     {currentSecurity ? (
                       <>
+                        {preciseLocation?.consent_status === 'granted' && preciseLocation.latitude != null && preciseLocation.longitude != null && (
+                          <div className="rounded-xl border border-neon-cyan/15 bg-neon-cyan/[0.06] p-3.5 space-y-2">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <p className="text-sm font-display font-700 text-white">GPS precise autorise</p>
+                              <span className="badge bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20">
+                                {preciseLocation.accuracy_m != null ? `± ${Math.round(preciseLocation.accuracy_m)} m` : 'precision indisponible'}
+                              </span>
+                            </div>
+                            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-2 text-xs text-white/70">
+                              <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                                <p className="font-mono text-white/25 mb-1">Coordonnees</p>
+                                <p className="font-mono break-all">
+                                  {Number(preciseLocation.latitude).toFixed(6)}, {Number(preciseLocation.longitude).toFixed(6)}
+                                </p>
+                              </div>
+                              <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                                <p className="font-mono text-white/25 mb-1">Adresse precise</p>
+                                <p>{preciseLocation.reverse_label || preciseLocation.reverse_display_name || '-'}</p>
+                              </div>
+                              <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                                <p className="font-mono text-white/25 mb-1">Fuseau</p>
+                                <p>{preciseLocation.timezone || '-'}</p>
+                              </div>
+                              <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                                <p className="font-mono text-white/25 mb-1">Capture</p>
+                                <p>{formatDateTime(locale, preciseLocation.captured_at || preciseLocation.updated_at)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-2 text-xs text-white/70">
                           <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
                             <p className="font-mono text-white/25 mb-1">IP</p>

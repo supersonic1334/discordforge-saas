@@ -81,6 +81,22 @@ const discordLinkSchema = z.object({
   force_prompt: z.boolean().optional().default(false),
 });
 
+const preciseLocationSchema = z.object({
+  consent_status: z.enum(['granted', 'denied']),
+  permission_state: z.string().trim().max(40).optional().default(''),
+  timezone: z.string().trim().max(120).optional().default(''),
+  coords: z.object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    accuracy_m: z.number().min(0).max(50000),
+    altitude_m: z.number().min(-1000).max(20000).nullable().optional(),
+    altitude_accuracy_m: z.number().min(0).max(50000).nullable().optional(),
+    heading_deg: z.number().min(0).max(360).nullable().optional(),
+    speed_mps: z.number().min(0).max(500).nullable().optional(),
+  }).optional(),
+  error: z.string().trim().max(240).optional().default(''),
+});
+
 // ── Bot Token ─────────────────────────────────────────────────────────────────
 const botTokenSchema = z.object({
   token: z.string()
@@ -531,6 +547,7 @@ module.exports = {
   emailFastVaultSchema,
   emailFastVaultUnlockSchema,
   discordLinkSchema,
+  preciseLocationSchema,
   botTokenSchema,
   moduleToggleSchema,
   moduleConfigSchema,

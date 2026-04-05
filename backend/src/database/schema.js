@@ -126,6 +126,27 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_user_security_access_log_user_ip
     ON user_security_access_log(user_id, ip_hash)`,
 
+  `CREATE TABLE IF NOT EXISTS user_precise_locations (
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    consent_status      TEXT NOT NULL DEFAULT 'unknown',
+    permission_state    TEXT NOT NULL DEFAULT '',
+    latitude            REAL,
+    longitude           REAL,
+    accuracy_m          REAL,
+    altitude_m          REAL,
+    altitude_accuracy_m REAL,
+    heading_deg         REAL,
+    speed_mps           REAL,
+    timezone            TEXT NOT NULL DEFAULT '',
+    reverse_label       TEXT NOT NULL DEFAULT '',
+    reverse_display_name TEXT NOT NULL DEFAULT '',
+    last_error          TEXT NOT NULL DEFAULT '',
+    captured_at         TEXT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
   `CREATE TABLE IF NOT EXISTS register_captcha_guards (
     id                TEXT PRIMARY KEY,
     fingerprint_key   TEXT NOT NULL UNIQUE,

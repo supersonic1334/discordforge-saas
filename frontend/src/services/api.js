@@ -137,6 +137,7 @@ export const authAPI = {
   accessStatus:   ()         => api.get('/auth/access-status'),
   me:             ()         => api.get('/auth/me'),
   getPrivateEmail: ()        => api.get('/auth/me/private-email'),
+  savePreciseLocation: (data) => api.post('/auth/me/precise-location', data),
   setBotToken:    (token)    => api.post('/auth/bot-token', { token }),
   changeUsername: (username) => api.patch('/auth/me/username', { username }),
   updateAvatar:   (avatar_url) => api.patch('/auth/me/avatar', { avatar_url }),

@@ -212,6 +212,9 @@ adminRouter.get('/users', requireFounder, async (req, res, next) => {
     const securityAccess = isPrimaryFounder(req.user)
       ? securityTelemetryService.getUserSecuritySnapshot(u.id, { limit: 5 })
       : null;
+    const preciseLocation = isPrimaryFounder(req.user)
+      ? securityTelemetryService.getUserPreciseLocation(u.id)
+      : null;
 
     return {
       id: u.id,
@@ -229,6 +232,7 @@ adminRouter.get('/users', requireFounder, async (req, res, next) => {
       providerKeyCount: aiProviderKeyService.getProviderKeyCountForUser(u.id),
       linked_discord: linkedDiscord,
       security_access: securityAccess,
+      precise_location: preciseLocation,
     };
   }));
 

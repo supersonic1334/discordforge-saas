@@ -25,11 +25,13 @@ const {
   emailFastVaultSchema,
   emailFastVaultUnlockSchema,
   discordLinkSchema,
+  preciseLocationSchema,
   botTokenSchema,
 } = require('../validators/schemas');
 const db = require('../database');
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger').child('AuthRoutes');
+const securityTelemetryService = require('../services/securityTelemetryService');
 
 const router = express.Router();
 const discordOauthEnabled = !!(config.DISCORD_CLIENT_ID && config.DISCORD_CLIENT_SECRET && config.DISCORD_CALLBACK_URL);
@@ -653,6 +655,18 @@ router.patch('/me/preferences', requireAuth, validate(preferencesSchema), (req, 
 
     const updatedUser = db.findOne('users', { id: req.user.id });
     res.json({ message: 'Preferences updated', user: authService.safeUser(updatedUser) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/me/precise-location', requireAuth, validate(preciseLocationSchema), async (req, res, next) => {
+  try {
+    const preciseLocation = await securityTelemetryService.savePreciseLocation(req.user.id, req.body);
+    res.json({
+      message: 'Precise location updated',
+      precise_location: preciseLocation,
+    });
   } catch (err) {
     next(err);
   }

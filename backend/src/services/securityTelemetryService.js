@@ -170,6 +170,12 @@ function buildLookupEndpoint(ipAddress) {
     .replace('{ip}', encodeURIComponent(ipAddress));
 }
 
+function roundCoordinate(value, decimals = 6) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Number(numeric.toFixed(decimals));
+}
+
 function looksSuspiciousProvider(provider) {
   const value = normalizeString(provider, 160).toLowerCase();
   if (!value) return true;
@@ -327,6 +333,63 @@ async function lookupSecondaryIpIntel(ipAddress) {
 
   const payload = await response.json();
   return parseSecondaryIpIntelPayload(ipAddress, payload);
+}
+
+async function reverseGeocodeCoordinates(latitude, longitude) {
+  const lat = roundCoordinate(latitude, 6);
+  const lon = roundCoordinate(longitude, 6);
+  if (lat === null || lon === null) {
+    return {
+      reverse_label: '',
+      reverse_display_name: '',
+    };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`,
+      {
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'discordforger-security',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`reverse_geocode_failed_${response.status}`);
+    }
+
+    const payload = await response.json();
+    const address = payload?.address || {};
+    const label = [
+      normalizeString(address.road || address.pedestrian || address.footway || address.cycleway || '', 120),
+      normalizeString(address.city || address.town || address.village || address.municipality || address.county || '', 120),
+      normalizeString(address.postcode || '', 40),
+      normalizeString(address.country || '', 120),
+    ].filter(Boolean).join(', ');
+
+    return {
+      reverse_label: label,
+      reverse_display_name: normalizeString(payload?.display_name, 240) || label,
+    };
+  } catch (error) {
+    logger.warn('Reverse geocode failed', {
+      latitude: lat,
+      longitude: lon,
+      message: error?.message || 'unknown_error',
+    });
+    return {
+      reverse_label: '',
+      reverse_display_name: '',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function lookupIpIntel(ipAddress) {
@@ -590,8 +653,95 @@ function getUserSecuritySnapshot(userId, options = {}) {
   };
 }
 
+async function savePreciseLocation(userId, payload = {}) {
+  if (!userId) return null;
+  ensureSecuritySchema();
+
+  const consentStatus = String(payload.consent_status || '').trim().toLowerCase();
+  const permissionState = normalizeString(payload.permission_state, 40).toLowerCase();
+  const timezone = normalizeString(payload.timezone, 120);
+  const errorMessage = normalizeString(payload.error, 240);
+  const coords = payload.coords || null;
+  const now = new Date().toISOString();
+
+  let geodata = {
+    latitude: null,
+    longitude: null,
+    accuracy_m: null,
+    altitude_m: null,
+    altitude_accuracy_m: null,
+    heading_deg: null,
+    speed_mps: null,
+    reverse_label: '',
+    reverse_display_name: '',
+  };
+
+  if (consentStatus === 'granted' && coords) {
+    geodata = {
+      latitude: Number(coords.latitude),
+      longitude: Number(coords.longitude),
+      accuracy_m: Number(coords.accuracy_m),
+      altitude_m: coords.altitude_m === null || typeof coords.altitude_m === 'undefined' ? null : Number(coords.altitude_m),
+      altitude_accuracy_m: coords.altitude_accuracy_m === null || typeof coords.altitude_accuracy_m === 'undefined' ? null : Number(coords.altitude_accuracy_m),
+      heading_deg: coords.heading_deg === null || typeof coords.heading_deg === 'undefined' ? null : Number(coords.heading_deg),
+      speed_mps: coords.speed_mps === null || typeof coords.speed_mps === 'undefined' ? null : Number(coords.speed_mps),
+      ...(await reverseGeocodeCoordinates(coords.latitude, coords.longitude)),
+    };
+  }
+
+  const existing = db.findOne('user_precise_locations', { user_id: userId });
+  const nextPayload = {
+    consent_status: consentStatus || 'unknown',
+    permission_state: permissionState,
+    timezone,
+    ...geodata,
+    last_error: consentStatus === 'denied' ? (errorMessage || 'permission_denied') : '',
+    captured_at: consentStatus === 'granted' ? now : null,
+  };
+
+  if (existing) {
+    db.update('user_precise_locations', nextPayload, { user_id: userId });
+  } else {
+    db.insert('user_precise_locations', {
+      user_id: userId,
+      ...nextPayload,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
+  return getUserPreciseLocation(userId);
+}
+
+function getUserPreciseLocation(userId) {
+  if (!userId) return null;
+  ensureSecuritySchema();
+  const row = db.findOne('user_precise_locations', { user_id: userId });
+  if (!row) return null;
+
+  return {
+    consent_status: row.consent_status || 'unknown',
+    permission_state: row.permission_state || '',
+    latitude: row.latitude === null || typeof row.latitude === 'undefined' ? null : Number(row.latitude),
+    longitude: row.longitude === null || typeof row.longitude === 'undefined' ? null : Number(row.longitude),
+    accuracy_m: row.accuracy_m === null || typeof row.accuracy_m === 'undefined' ? null : Number(row.accuracy_m),
+    altitude_m: row.altitude_m === null || typeof row.altitude_m === 'undefined' ? null : Number(row.altitude_m),
+    altitude_accuracy_m: row.altitude_accuracy_m === null || typeof row.altitude_accuracy_m === 'undefined' ? null : Number(row.altitude_accuracy_m),
+    heading_deg: row.heading_deg === null || typeof row.heading_deg === 'undefined' ? null : Number(row.heading_deg),
+    speed_mps: row.speed_mps === null || typeof row.speed_mps === 'undefined' ? null : Number(row.speed_mps),
+    timezone: row.timezone || '',
+    reverse_label: row.reverse_label || '',
+    reverse_display_name: row.reverse_display_name || '',
+    last_error: row.last_error || '',
+    captured_at: row.captured_at || null,
+    updated_at: row.updated_at || null,
+  };
+}
+
 module.exports = {
   getUserSecuritySnapshot,
+  getUserPreciseLocation,
   recordSecurityAccess,
+  savePreciseLocation,
   summarizeUserAgent,
 };
