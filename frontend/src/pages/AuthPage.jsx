@@ -602,9 +602,9 @@ export default function AuthPage() {
                     <motion.div
                       key="register-username"
                       layout="position"
-                      initial={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0 round 18px)' }}
-                      animate={{ opacity: 1, y: 0, scale: 1, clipPath: 'inset(0 0 0% 0 round 18px)' }}
-                      exit={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0 round 18px)' }}
+                      initial={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0)' }}
+                      animate={{ opacity: 1, y: 0, scale: 1, clipPath: 'inset(0 0 0% 0)' }}
+                      exit={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0)' }}
                       transition={authRevealTransition}
                       style={{ overflow: 'hidden', transformOrigin: 'top center' }}
                     >
@@ -671,9 +671,9 @@ export default function AuthPage() {
                     <motion.div
                       key="register-captcha"
                       layout="position"
-                      initial={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0 round 18px)' }}
-                      animate={{ opacity: 1, y: 0, scale: 1, clipPath: 'inset(0 0 0% 0 round 18px)' }}
-                      exit={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0 round 18px)' }}
+                      initial={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0)' }}
+                      animate={{ opacity: 1, y: 0, scale: 1, clipPath: 'inset(0 0 0% 0)' }}
+                      exit={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0)' }}
                       transition={authRevealTransition}
                       style={{ overflow: 'hidden', transformOrigin: 'top center' }}
                     >
