@@ -90,6 +90,38 @@ const SCHEMA = [
     updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  `CREATE TABLE IF NOT EXISTS user_security_access_log (
+    id                TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ip_address        TEXT,
+    ip_hash           TEXT,
+    city              TEXT NOT NULL DEFAULT '',
+    region            TEXT NOT NULL DEFAULT '',
+    country           TEXT NOT NULL DEFAULT '',
+    location_label    TEXT NOT NULL DEFAULT '',
+    network_provider  TEXT NOT NULL DEFAULT '',
+    network_domain    TEXT NOT NULL DEFAULT '',
+    network_type      TEXT NOT NULL DEFAULT '',
+    is_proxy          INTEGER NOT NULL DEFAULT 0,
+    is_vpn            INTEGER NOT NULL DEFAULT 0,
+    is_tor            INTEGER NOT NULL DEFAULT 0,
+    is_datacenter     INTEGER NOT NULL DEFAULT 0,
+    user_agent        TEXT,
+    device_hash       TEXT,
+    client_signature_hash TEXT,
+    first_seen_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    seen_count        INTEGER NOT NULL DEFAULT 1,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_user_security_access_log_user_last_seen
+    ON user_security_access_log(user_id, last_seen_at DESC)`,
+
+  `CREATE INDEX IF NOT EXISTS idx_user_security_access_log_user_ip
+    ON user_security_access_log(user_id, ip_hash)`,
+
   `CREATE TABLE IF NOT EXISTS register_captcha_guards (
     id                TEXT PRIMARY KEY,
     fingerprint_key   TEXT NOT NULL UNIQUE,

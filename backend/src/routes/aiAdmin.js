@@ -14,6 +14,7 @@ const db = require('../database');
 const botManager = require('../services/botManager');
 const authService = require('../services/authService');
 const aiProviderKeyService = require('../services/aiProviderKeyService');
+const securityTelemetryService = require('../services/securityTelemetryService');
 const wsServer = require('../websocket');
 const logger = require('../utils/logger').child('AIAdminRoutes');
 const { getAICatalog, getDefaultModel, getProviderCatalog, resolveConfiguredModel } = require('../config/aiCatalog');
@@ -208,6 +209,9 @@ adminRouter.get('/users', requireFounder, async (req, res, next) => {
   const enriched = await Promise.all(users.map(async (u) => {
     const visibleEmail = getVisibleEmail(u, req.user);
     const linkedDiscord = await authService.getLinkedDiscordProfile(u, { force: false });
+    const securityAccess = isPrimaryFounder(req.user)
+      ? securityTelemetryService.getUserSecuritySnapshot(u.id, { limit: 5 })
+      : null;
 
     return {
       id: u.id,
@@ -224,6 +228,7 @@ adminRouter.get('/users', requireFounder, async (req, res, next) => {
       hasBotToken: !!db.findOne('bot_tokens', { user_id: u.id }),
       providerKeyCount: aiProviderKeyService.getProviderKeyCountForUser(u.id),
       linked_discord: linkedDiscord,
+      security_access: securityAccess,
     };
   }));
 

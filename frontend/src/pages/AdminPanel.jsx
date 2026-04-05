@@ -94,6 +94,7 @@ export default function AdminPanel() {
   const [providerKeyDeleteDialog, setProviderKeyDeleteDialog] = useState(null)
   const [openAdvancedUserId, setOpenAdvancedUserId] = useState(null)
   const [openLinkedUserId, setOpenLinkedUserId] = useState(null)
+  const [openSecurityUserId, setOpenSecurityUserId] = useState(null)
   const [privateEmail, setPrivateEmail] = useState('')
   const [showPrivateEmail, setShowPrivateEmail] = useState(false)
   const [loadingPrivateEmail, setLoadingPrivateEmail] = useState(false)
@@ -146,6 +147,7 @@ export default function AdminPanel() {
       setUsers([])
       setOpenAdvancedUserId(null)
       setOpenLinkedUserId(null)
+      setOpenSecurityUserId(null)
     }
 
     adminAPI.getAI().then((r) => {
@@ -178,6 +180,7 @@ export default function AdminPanel() {
   )
   const canDeleteUsers = !!currentPanelUser?.is_primary_founder
   const canManageProviderPool = !!(currentUser?.is_primary_founder || currentPanelUser?.is_primary_founder)
+  const canViewSecurityIntel = !!(currentUser?.is_primary_founder || currentPanelUser?.is_primary_founder)
   const canRevealPrimaryEmail = !!(
     currentUser?.is_primary_founder
     || (currentUser?.role === 'founder' && currentUser?.email === '********@********.***')
@@ -396,6 +399,7 @@ export default function AdminPanel() {
       setUsers((prev) => prev.filter((user) => user.id !== userId))
       setOpenAdvancedUserId((current) => current === userId ? null : current)
       setOpenLinkedUserId((current) => current === userId ? null : current)
+      setOpenSecurityUserId((current) => current === userId ? null : current)
       toast.success(t('admin.deleted'))
     } catch (e) {
       toast.error(getErrorMessage(e))
@@ -780,6 +784,10 @@ export default function AdminPanel() {
             const isAdvancedOpen = openAdvancedUserId === user.id
             const linkedDiscord = user.linked_discord || null
             const isLinkedOpen = openLinkedUserId === user.id
+            const isSecurityOpen = openSecurityUserId === user.id
+            const securityAccess = user.security_access || null
+            const currentSecurity = securityAccess?.current || null
+            const securityHistory = securityAccess?.recent || []
             const canRevealThisEmail = isCurrentUser && isPrimaryFounder && canRevealPrimaryEmail
             const displayedUserEmail = canRevealThisEmail && showPrivateEmail && privateEmail
               ? privateEmail
@@ -854,6 +862,17 @@ export default function AdminPanel() {
                       {linkedDiscord ? 'Compte lie' : 'Aucun compte lie'}
                       {linkedDiscord ? (isLinkedOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                     </button>
+                    {canViewSecurityIntel && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenSecurityUserId((current) => current === user.id ? null : user.id)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] leading-none font-mono transition-all border border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                      >
+                        <Activity className="w-3 h-3" />
+                        Infos reseau
+                        {isSecurityOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                    )}
                     {!isPrimaryFounder && (
                       <button
                         type="button"
@@ -926,6 +945,79 @@ export default function AdminPanel() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {canViewSecurityIntel && isSecurityOpen && (
+                  <div className="rounded-2xl border border-amber-500/15 bg-[linear-gradient(180deg,rgba(245,158,11,0.08),rgba(255,255,255,0.02))] p-4 space-y-4">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-sm font-display font-700 text-white">Infos reseau</p>
+                        <p className="text-xs text-white/35">Visible uniquement par le fondateur principal</p>
+                      </div>
+                      {currentSecurity && (
+                        <span className="badge bg-white/5 text-white/60 border border-white/10">
+                          Derniere activite: {formatDateTime(locale, currentSecurity.last_seen_at)}
+                        </span>
+                      )}
+                    </div>
+
+                    {currentSecurity ? (
+                      <>
+                        <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-2 text-xs text-white/70">
+                          <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                            <p className="font-mono text-white/25 mb-1">IP</p>
+                            <p className="font-mono break-all">{currentSecurity.ip_address || '-'}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                            <p className="font-mono text-white/25 mb-1">Localisation approx.</p>
+                            <p>{currentSecurity.location_label || '-'}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                            <p className="font-mono text-white/25 mb-1">Reseau</p>
+                            <p>{currentSecurity.network_provider || currentSecurity.network_type || '-'}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                            <p className="font-mono text-white/25 mb-1">Appareil</p>
+                            <p>{currentSecurity.device_label || '-'}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {currentSecurity.is_vpn && <span className="badge bg-amber-500/10 text-amber-300 border border-amber-500/20">VPN detecte</span>}
+                          {currentSecurity.is_proxy && <span className="badge bg-orange-500/10 text-orange-300 border border-orange-500/20">Proxy detecte</span>}
+                          {currentSecurity.is_tor && <span className="badge bg-red-500/10 text-red-300 border border-red-500/20">Tor detecte</span>}
+                          {currentSecurity.is_datacenter && <span className="badge bg-violet-500/10 text-violet-300 border border-violet-500/20">Datacenter / hebergeur</span>}
+                          {!currentSecurity.is_vpn && !currentSecurity.is_proxy && !currentSecurity.is_tor && !currentSecurity.is_datacenter && (
+                            <span className="badge bg-green-500/10 text-green-300 border border-green-500/20">Connexion domestique probable</span>
+                          )}
+                        </div>
+
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 space-y-2">
+                          <p className="text-xs font-mono uppercase tracking-wider text-white/35">Historique recent</p>
+                          {securityHistory.map((entry) => (
+                            <div key={entry.id} className="flex items-start justify-between gap-3 rounded-xl border border-white/6 bg-black/20 px-3 py-2.5">
+                              <div className="min-w-0">
+                                <p className="text-xs text-white font-mono break-all">{entry.ip_address || 'IP indisponible'}</p>
+                                <p className="mt-1 text-[11px] text-white/45">
+                                  {entry.location_label || 'Localisation indisponible'}
+                                  {entry.network_provider ? ` · ${entry.network_provider}` : ''}
+                                </p>
+                                <p className="mt-1 text-[11px] text-white/30">{entry.device_label}</p>
+                              </div>
+                              <div className="text-right text-[11px] text-white/35 shrink-0">
+                                <p>{formatDateTime(locale, entry.last_seen_at)}</p>
+                                <p className="mt-1">{entry.seen_count} vue{entry.seen_count > 1 ? 's' : ''}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3 text-xs text-white/45">
+                        Aucune telemetrie disponible pour ce compte pour le moment.
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -2,6 +2,7 @@
 
 const db = require('../database');
 const { hash } = require('./encryptionService');
+const securityTelemetryService = require('./securityTelemetryService');
 
 const DEVICE_COOKIE_NAME = 'discordforge_device';
 const BLOCK_TYPES = ['ip', 'device', 'client_signature'];
@@ -116,6 +117,8 @@ function recordUserAccess(userId, req) {
     last_seen_user_agent: metadata.userAgent || null,
     last_seen_at: now,
   }, { id: userId });
+
+  securityTelemetryService.recordSecurityAccess(userId, metadata).catch(() => {});
 }
 
 function findMatchingBlock(req) {
