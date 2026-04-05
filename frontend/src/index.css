@@ -452,29 +452,15 @@
   }
   .auth-page-shell[data-scrollable="true"] {
     overflow-y: auto !important;
-    align-items: flex-start;
     overscroll-behavior-y: contain;
   }
   .auth-page-shell[data-scrollable="true"] .auth-page-frame {
-    height: auto;
-    min-height: 100%;
-    max-height: none;
     overflow: visible;
-    justify-content: flex-start;
-    padding-top: clamp(0.35rem, 1vh, 0.9rem);
-    padding-bottom: clamp(0.6rem, 1.6vh, 1rem);
   }
   .auth-page-shell[data-scrollable="true"] .auth-mobile-panel {
-    height: auto;
     max-height: none;
-    min-height: max-content;
-    justify-content: flex-start;
-    padding-top: 0.25rem !important;
-    padding-bottom: 0.5rem !important;
   }
   .auth-page-shell[data-scrollable="true"] .auth-mobile-card {
-    flex: 0 0 auto;
-    margin-top: 0 !important;
     overflow: visible;
   }
   .auth-page-shell[data-scrollable="true"] .auth-card-surface {
