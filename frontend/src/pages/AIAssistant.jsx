@@ -106,6 +106,7 @@ function getButtonCopy(locale) {
   if (key === 'en') {
     return {
       link: 'Link Discord and continue',
+      linkOnly: 'Link Discord',
       continue: 'Continue action',
       download: 'Download',
       copy: 'Copy',
@@ -114,6 +115,7 @@ function getButtonCopy(locale) {
   if (key === 'es') {
     return {
       link: 'Vincular Discord y continuar',
+      linkOnly: 'Vincular Discord',
       continue: 'Continuar accion',
       download: 'Descargar',
       copy: 'Copiar',
@@ -121,10 +123,19 @@ function getButtonCopy(locale) {
   }
   return {
     link: 'Lier Discord et continuer',
+    linkOnly: 'Lier Discord',
     continue: 'Continuer',
     download: 'Telecharger',
     copy: 'Copier',
   }
+}
+
+function getPendingActionButtonLabel(buttonCopy, pendingAction, linkingDiscord) {
+  if (linkingDiscord) return buttonCopy.continue
+  if (String(pendingAction?.action || '').trim() === 'link_discord_account') {
+    return buttonCopy.linkOnly
+  }
+  return buttonCopy.link
 }
 
 function Message({
@@ -214,7 +225,7 @@ function Message({
                 className="feature-chip text-white/85 hover:text-white disabled:opacity-50"
               >
                 <Link2 className="h-3.5 w-3.5" />
-                {linkingDiscord ? buttonCopy.continue : buttonCopy.link}
+                {getPendingActionButtonLabel(buttonCopy, msg.pendingAction, linkingDiscord)}
               </button>
             </div>
           )}

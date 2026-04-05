@@ -22,6 +22,9 @@ const DEFAULT_AI_QUOTA_WINDOW_HOURS = 5;
 const GLOBAL_QUOTA_ID = 'site-global';
 const DIRECT_ACTIONS = new Set(['start_bot', 'stop_bot', 'restart_bot', 'sync_guilds']);
 const SENSITIVE_ASSISTANT_ACTIONS = new Set(['add_warning', 'kick_user', 'ban_user', 'timeout_user']);
+const GUILD_REQUIRED_ASSISTANT_ACTIONS = new Set([...SENSITIVE_ASSISTANT_ACTIONS, 'list_members']);
+const MAX_ASSISTANT_MEMBER_LIST = 120;
+const MAX_ASSISTANT_MEMBER_FETCH = 1500;
 const IMAGE_REQUEST_MATCHERS = [
   /\b(genere|genere moi|cree|creee?|fabrique|dessine|imagine|produis)\b.*\b(image|illustration|visuel|affiche|logo|banner|banniere|avatar|thumbnail)\b/i,
   /\b(generate|create|make|draw)\b.*\b(image|illustration|poster|logo|banner|avatar|thumbnail)\b/i,
@@ -320,7 +323,11 @@ function buildLinkRequiredMessage(actionBlock) {
     timeout_user: 'mettre un timeout',
     kick_user: 'expulser un membre',
     ban_user: 'bannir un membre',
+    list_members: 'afficher la liste des membres',
   };
+  if (action === 'link_discord_account') {
+    return 'Clique sur le bouton pour lier ton compte Discord au site.';
+  }
   const actionLabel = labels[action] || 'executer cette action';
   return `Lie ton compte Discord pour ${actionLabel}. Des que la liaison est terminee, je reprends automatiquement.`;
 }
@@ -342,6 +349,176 @@ function buildActionResultMessage(actionBlock, actionResult, fallbackText = '') 
   if (successMessage) return successMessage;
   if (fallbackText) return fallbackText;
   return 'Action terminee.';
+}
+
+function buildImageIaStatusMessage() {
+  const imageConfig = getGeminiImageConfig();
+  if (imageConfig?.apiKey) {
+    return `Image IA active. Le moteur ${imageConfig.model} est disponible pour generer des visuels depuis l assistant.`;
+  }
+  return 'Image IA indisponible pour le moment. Configure une cle Gemini image sur le site pour activer la generation.';
+}
+
+function resolveRequestedMemberLimit(normalizedMessage) {
+  const explicitMatch = normalizedMessage.match(/\b(\d{1,3})\b/);
+  if (explicitMatch) {
+    return clamp(Number(explicitMatch[1]) || 0, 10, MAX_ASSISTANT_MEMBER_LIST);
+  }
+
+  if (hasIntent(normalizedMessage, [
+    'tous les membres',
+    'tout les membres',
+    'liste complete',
+    'liste complete des membres',
+    'tout le monde',
+  ])) {
+    return MAX_ASSISTANT_MEMBER_LIST;
+  }
+
+  return 60;
+}
+
+function detectAssistantShortcut(userMessage) {
+  const rawMessage = String(userMessage || '').trim();
+  const normalizedMessage = normalizeIntentText(rawMessage);
+  if (!normalizedMessage) return null;
+
+  const wantsBotRestartCycle = (
+    /\b(bot|le bot|la bot|discord bot)\b/.test(normalizedMessage)
+    && /\b(eteins|eteint|eteindre|eteignes|arrete|arreter|stop|coupe|couper|shutdown|hors ligne)\b/.test(normalizedMessage)
+    && /\b(rallume|rallumer|allume|allumer|demarre|demarrer|relance|relancer|restart|reboot|reconnecte|reconnecter)\b/.test(normalizedMessage)
+  );
+
+  if (wantsBotRestartCycle) {
+    return {
+      type: 'action',
+      action: { action: 'restart_bot', params: {} },
+    };
+  }
+
+  if (matchesIntentPattern(normalizedMessage, [
+    /\b(lie|lier|connecte|connecter|associe|associer)\b.*\b(compte )?discord\b/,
+    /\b(compte )?discord\b.*\b(lie|lier|connecte|connecter|associe|associer)\b/,
+  ])) {
+    return {
+      type: 'action',
+      action: { action: 'link_discord_account', params: {} },
+    };
+  }
+
+  if (matchesIntentPattern(normalizedMessage, [
+    /\b(liste|donne|montre|affiche|sors)\b.*\b(membres|utilisateurs|users|personnes)\b/,
+    /\b(membres|utilisateurs|users|personnes)\b.*\b(serveur|discord)\b/,
+    /\bqui (sont|est)\b.*\b(membres|personnes)\b/,
+    /\b(pseudos|pseudo)\b.*\b(membres|serveur)\b/,
+  ])) {
+    return {
+      type: 'action',
+      action: {
+        action: 'list_members',
+        params: { limit: resolveRequestedMemberLimit(normalizedMessage) },
+      },
+    };
+  }
+
+  if (matchesIntentPattern(normalizedMessage, [
+    /\b(image ia|ia image|generation d image|generateur d image|image assistant)\b.*\b(marche|fonctionne|active|disponible|ok)\b/,
+    /\b(marche|fonctionne|active|disponible)\b.*\b(image ia|ia image|generation d image)\b/,
+  ])) {
+    return { type: 'image_status' };
+  }
+
+  return null;
+}
+
+function resolvePreferredAssistantGuildId(userId, guildId = null) {
+  if (guildId) return guildId;
+  const guilds = getAccessibleGuilds(userId);
+  if (guilds.length === 1) {
+    return guilds[0].id;
+  }
+  return null;
+}
+
+function sanitizeAssistantInline(value) {
+  return String(value || '')
+    .replace(/[`*_~|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getAssistantMemberDisplayName(member) {
+  return sanitizeAssistantInline(
+    member?.nick
+    || member?.user?.global_name
+    || member?.user?.username
+    || member?.user?.id
+    || 'Membre inconnu'
+  );
+}
+
+function getAssistantMemberUsername(member) {
+  return sanitizeAssistantInline(member?.user?.username || '');
+}
+
+async function fetchAssistantGuildMembers(token, guildDiscordId, requestedLimit = 60) {
+  const targetLimit = clamp(Number(requestedLimit) || 60, 10, MAX_ASSISTANT_MEMBER_LIST);
+  const fetchCap = Math.max(targetLimit, Math.min(MAX_ASSISTANT_MEMBER_FETCH, targetLimit * 4));
+  const members = [];
+  let after = '0';
+  let truncated = false;
+
+  while (members.length < fetchCap) {
+    const batchSize = Math.min(1000, fetchCap - members.length);
+    const batch = await discordService.getGuildMembers(token, guildDiscordId, batchSize, after);
+    if (!Array.isArray(batch) || !batch.length) {
+      break;
+    }
+
+    members.push(...batch);
+    after = String(batch[batch.length - 1]?.user?.id || after);
+
+    if (batch.length < batchSize) {
+      break;
+    }
+  }
+
+  if (members.length >= fetchCap) {
+    truncated = true;
+  }
+
+  return {
+    targetLimit,
+    truncated,
+    members,
+  };
+}
+
+function buildAssistantMemberListMessage(guildName, payload) {
+  const visibleMembers = (payload?.members || [])
+    .filter((member) => member?.user?.id && !member?.user?.bot)
+    .sort((left, right) => getAssistantMemberDisplayName(left).localeCompare(getAssistantMemberDisplayName(right), 'fr', { sensitivity: 'base' }));
+
+  if (!visibleMembers.length) {
+    return `Je n ai trouve aucun membre humain visible sur **${sanitizeAssistantInline(guildName)}**.`;
+  }
+
+  const displayedMembers = visibleMembers.slice(0, payload.targetLimit);
+  const lines = displayedMembers.map((member, index) => {
+    const displayName = getAssistantMemberDisplayName(member);
+    const username = getAssistantMemberUsername(member);
+    const usernameSuffix = username && username.toLowerCase() !== displayName.toLowerCase()
+      ? ` (@${username})`
+      : '';
+    return `${index + 1}. ${displayName}${usernameSuffix} - \`${member.user.id}\``;
+  });
+
+  const totalVisible = visibleMembers.length;
+  const truncatedSuffix = payload.truncated && totalVisible >= payload.targetLimit
+    ? `\n\nJ en affiche ${displayedMembers.length}. La liste visible continue au dela, donc selectionne le serveur actif et redemande-moi si tu veux un autre lot.`
+    : `\n\n${totalVisible} membre(s) visible(s) recupere(s).`;
+
+  return `Membres visibles sur **${sanitizeAssistantInline(guildName)}** :\n\n${lines.join('\n')}${truncatedSuffix}`;
 }
 
 function mapAIConfigRow(row) {
@@ -1073,6 +1250,7 @@ TES CAPACITES (UTILISE-LES PLEINEMENT)
 - Demarrer, arreter, redemarrer le bot
 - Synchroniser les serveurs
 - Verifier l'etat en temps reel
+- Comprendre qu'un "eteins puis rallume" = restart complet
 
 **MODERATION AVANCEE:**
 - Avertissements avec points personnalises
@@ -1098,6 +1276,11 @@ TES CAPACITES (UTILISE-LES PLEINEMENT)
 - Messages avec ou sans embed
 - Notifications automatiques
 
+**ASSISTANCE DISCORDFORGER:**
+- Donner la liste des membres visibles d un serveur accessible
+- Guider la liaison du compte Discord et declencher le bouton de liaison si besoin
+- Dire si l image IA est disponible ou non
+
 ═══════════════════════════════════════════════════════════════════
 FORMAT D'ACTION
 ═══════════════════════════════════════════════════════════════════
@@ -1119,6 +1302,8 @@ ACTIONS DISPONIBLES:
 - stop_bot {}
 - restart_bot {}
 - sync_guilds {}
+- list_members { guildId, limit? }
+- link_discord_account {}
 - server_builder { guildId, structure: { categories: [...], roles: [...], cleanup_existing?: bool } }
 - server_clone { sourceGuildId, targetGuildId, cleanup_target?: bool }
 - create_channels { guildId, channels: [{ name, type, category? }] }
@@ -1157,7 +1342,7 @@ REGLES DE COMPORTEMENT
 
 11. **PROACTIVITE**: Si tu vois un probleme ou une amelioration possible, mentionne-le brievement.
 
-12. **UN SEUL BLOC ACTION**: Maximum 1 action par reponse. Pour des actions multiples, fais-les une par une.
+12. **UN SEUL BLOC ACTION**: Maximum 1 action par reponse. Si l'utilisateur veut eteindre puis rallumer le bot, utilise directement restart_bot.
 
 ═══════════════════════════════════════════════════════════════════
 EXEMPLES DE COMPORTEMENT CORRECT
@@ -1489,6 +1674,25 @@ async function executeAction(userId, actionBlock, botToken) {
       const { syncGuildsForUser } = require('./guildSyncService');
       await syncGuildsForUser(userId, proc.client, token);
       return { success: true, message: 'Guilds synced' };
+    }
+
+    case 'list_members': {
+      const guildContext = resolveActionGuildContext(userId, params.guildId);
+      if (!guildContext?.guild) return { error: 'Guild not found' };
+      if (!guildContext.tokenRow) return { error: 'Bot token missing' };
+
+      try {
+        const payload = await fetchAssistantGuildMembers(token, guildContext.guild.guild_id, params.limit);
+        return {
+          success: true,
+          message: buildAssistantMemberListMessage(guildContext.guild.name, payload),
+        };
+      } catch (error) {
+        const hint = error?.status === 403
+          ? 'verifie les permissions du bot et l intent Server Members'
+          : error.message;
+        return { error: `Impossible de lister les membres: ${hint}` };
+      }
     }
 
     case 'server_builder': {
@@ -2204,7 +2408,30 @@ async function executeAssistantActionFlow(userId, actionBlock, { guildId = null,
     };
   }
 
-  if (SENSITIVE_ASSISTANT_ACTIONS.has(normalizedAction.action) && !normalizedAction.params.guildId) {
+  if (normalizedAction.action === 'link_discord_account') {
+    const user = db.findOne('users', { id: userId });
+    if (String(user?.discord_id || '').trim()) {
+      const linkedLabel = user?.discord_global_name || user?.discord_username || user?.discord_id;
+      return {
+        message: `Ton compte Discord est deja lie (${linkedLabel}).`,
+        actionExecuted: {
+          action: normalizedAction.action,
+          result: { success: true, message: 'Compte Discord deja lie' },
+        },
+        requiresDiscordLink: false,
+        pendingAction: null,
+      };
+    }
+
+    return {
+      message: buildLinkRequiredMessage(normalizedAction),
+      actionExecuted: null,
+      requiresDiscordLink: true,
+      pendingAction: normalizedAction,
+    };
+  }
+
+  if (GUILD_REQUIRED_ASSISTANT_ACTIONS.has(normalizedAction.action) && !normalizedAction.params.guildId) {
     return {
       message: buildMissingGuildMessage(),
       actionExecuted: {
@@ -2337,6 +2564,7 @@ async function chat(userId, userMessage, conversationHistory = [], guildId = nul
   const guilds = getAccessibleGuilds(userId);
   const focusedGuild = guildId ? (findAccessibleGuildRecord(userId, guildId)?.guild || null) : null;
   const trimmedMessage = String(userMessage || '').trim().slice(0, 2000);
+  const preferredGuildId = focusedGuild?.id || resolvePreferredAssistantGuildId(userId, guildId);
 
   if (!trimmedMessage) {
     return {
@@ -2349,10 +2577,37 @@ async function chat(userId, userMessage, conversationHistory = [], guildId = nul
     };
   }
 
+  const shortcut = detectAssistantShortcut(trimmedMessage);
+  if (shortcut?.type === 'image_status') {
+    return {
+      message: buildImageIaStatusMessage(),
+      actionExecuted: null,
+      requiresDiscordLink: false,
+      pendingAction: null,
+      usage: null,
+      quota: null,
+    };
+  }
+
+  if (shortcut?.type === 'action' && shortcut.action) {
+    const shortcutResult = await executeAssistantActionFlow(userId, shortcut.action, {
+      guildId: preferredGuildId,
+      fallbackMessage: '',
+    });
+    return {
+      message: shortcutResult.message,
+      actionExecuted: shortcutResult.actionExecuted,
+      requiresDiscordLink: shortcutResult.requiresDiscordLink,
+      pendingAction: shortcutResult.pendingAction,
+      usage: null,
+      quota: null,
+    };
+  }
+
   const directAction = detectImplicitAction(trimmedMessage);
   if (directAction && DIRECT_ACTIONS.has(directAction.action)) {
     const directResult = await executeAssistantActionFlow(userId, directAction, {
-      guildId: focusedGuild?.id || guildId || null,
+      guildId: preferredGuildId,
       fallbackMessage: '',
     });
     return {
@@ -2391,7 +2646,7 @@ async function chat(userId, userMessage, conversationHistory = [], guildId = nul
   }
 
   const actionFlow = await executeAssistantActionFlow(userId, actionBlock, {
-    guildId: focusedGuild?.id || guildId || null,
+    guildId: preferredGuildId,
     fallbackMessage: cleanText,
   });
 
