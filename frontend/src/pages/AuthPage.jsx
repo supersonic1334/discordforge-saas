@@ -250,7 +250,8 @@ export default function AuthPage() {
   const pointerY = useMotionValue(24)
   const isRegister = mode === 'register'
   const registerCaptchaReady = !isRegister || (!!registerCaptcha?.token && !captchaLoading)
-  const authLayoutTransition = { type: 'spring', stiffness: 260, damping: 28, mass: 0.82 }
+  const authLayoutTransition = { type: 'spring', stiffness: 188, damping: 24, mass: 0.94 }
+  const authRevealTransition = { duration: 0.26, ease: [0.22, 1, 0.36, 1] }
 
   const featureCards = [
     {
@@ -596,16 +597,16 @@ export default function AuthPage() {
                 className="auth-form-stack space-y-4"
                 autoComplete="on"
               >
-                <AnimatePresence initial={false} mode="popLayout">
+                <AnimatePresence initial={false} mode="sync">
                   {isRegister && (
                     <motion.div
                       key="register-username"
-                      layout
-                      initial={{ opacity: 0, height: 0, y: -10 }}
-                      animate={{ opacity: 1, height: 'auto', y: 0 }}
-                      exit={{ opacity: 0, height: 0, y: -10 }}
-                      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                      className="overflow-hidden"
+                      layout="position"
+                      initial={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0 round 18px)' }}
+                      animate={{ opacity: 1, y: 0, scale: 1, clipPath: 'inset(0 0 0% 0 round 18px)' }}
+                      exit={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0 round 18px)' }}
+                      transition={authRevealTransition}
+                      style={{ overflow: 'hidden', transformOrigin: 'top center' }}
                     >
                       <div>
                         <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
@@ -665,16 +666,16 @@ export default function AuthPage() {
                   </div>
                 </motion.div>
 
-                <AnimatePresence initial={false} mode="popLayout">
+                <AnimatePresence initial={false} mode="sync">
                   {isRegister && (
                     <motion.div
                       key="register-captcha"
-                      layout
-                      initial={{ opacity: 0, height: 0, y: -10 }}
-                      animate={{ opacity: 1, height: 'auto', y: 0 }}
-                      exit={{ opacity: 0, height: 0, y: -10 }}
-                      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                      className="overflow-hidden"
+                      layout="position"
+                      initial={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0 round 18px)' }}
+                      animate={{ opacity: 1, y: 0, scale: 1, clipPath: 'inset(0 0 0% 0 round 18px)' }}
+                      exit={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0 round 18px)' }}
+                      transition={authRevealTransition}
+                      style={{ overflow: 'hidden', transformOrigin: 'top center' }}
                     >
                       <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 sm:p-4">
                         <div className="flex items-center justify-between gap-3">
@@ -736,6 +737,7 @@ export default function AuthPage() {
                 <AnimatePresence>
                   {error && (
                     <motion.div
+                      layout="position"
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
@@ -749,6 +751,7 @@ export default function AuthPage() {
                 <AnimatePresence>
                   {pendingNotice && (
                     <motion.div
+                      layout="position"
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
@@ -761,6 +764,7 @@ export default function AuthPage() {
                 </AnimatePresence>
 
                 <motion.button
+                  layout="position"
                   type="submit"
                   disabled={isLoading || !registerCaptchaReady}
                   whileTap={{ scale: 0.97 }}
@@ -777,7 +781,7 @@ export default function AuthPage() {
                 </motion.button>
 
                 {oauthButtons.length > 0 && (
-                  <div className="auth-oauth-section space-y-3 pt-1">
+                  <motion.div layout="position" className="auth-oauth-section space-y-3 pt-1">
                     <div className="flex items-center gap-3">
                       <div className="h-px flex-1 bg-white/[0.08]" />
                       <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">
@@ -804,7 +808,7 @@ export default function AuthPage() {
                         )
                       })}
                     </div>
-                  </div>
+                  </motion.div>
                 )}
               </motion.form>
 
