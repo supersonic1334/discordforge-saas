@@ -473,8 +473,12 @@
     padding-bottom: 0.5rem !important;
   }
   .auth-page-shell[data-scrollable="true"] .auth-mobile-card {
+    flex: 0 0 auto;
     margin-top: 0 !important;
     overflow: visible;
+  }
+  .auth-page-shell[data-scrollable="true"] .auth-card-surface {
+    min-height: 0;
   }
   .auth-page-shell::-webkit-scrollbar {
     display: none;
@@ -507,7 +511,11 @@
     margin-bottom: clamp(1.1rem, 2.4vh, 2rem) !important;
   }
   .auth-mobile-card {
-    margin-top: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 0;
+    display: flex;
+    flex-direction: column;
   }
   .auth-mobile-logo-shell {
     margin-bottom: clamp(0.75rem, 1.7vh, 1.3rem) !important;
@@ -517,6 +525,10 @@
     max-height: min(198px, 18vh);
   }
   .auth-card-surface {
+    display: flex;
+    min-height: 100%;
+    flex: 1 1 auto;
+    flex-direction: column;
     padding: clamp(1.15rem, 2.4vh, 1.85rem) !important;
   }
   .auth-form-stack {
@@ -526,7 +538,8 @@
     padding-top: 0 !important;
   }
   .auth-mobile-features {
-    margin-top: clamp(0.95rem, 2vh, 1.4rem) !important;
+    margin-top: auto !important;
+    padding-top: clamp(0.95rem, 2vh, 1.4rem);
   }
   .auth-feature-detail {
     padding: 0.85rem 1rem !important;
