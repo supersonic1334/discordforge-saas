@@ -246,12 +246,14 @@ export default function AuthPage() {
   const blockedHint = useMemo(() => new URLSearchParams(location.search).get('blocked') === '1', [location.search])
   const formRef = useRef(null)
   const shellRef = useRef(null)
+  const cardScrollRef = useRef(null)
   const pointerX = useMotionValue(50)
   const pointerY = useMotionValue(24)
   const isRegister = mode === 'register'
   const registerCaptchaReady = !isRegister || (!!registerCaptcha?.token && !captchaLoading)
   const authLayoutTransition = { type: 'spring', stiffness: 188, damping: 24, mass: 0.94 }
   const authRevealTransition = { duration: 0.26, ease: [0.22, 1, 0.36, 1] }
+  const registerFieldTransition = { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
 
   const featureCards = [
     {
@@ -381,8 +383,8 @@ export default function AuthPage() {
   }, [isRegister, registerCaptcha, captchaLoading])
 
   useEffect(() => {
-    if (!shellRef.current) return
-    shellRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    shellRef.current?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' })
+    cardScrollRef.current?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' })
   }, [mode])
 
   const submit = async (event) => {
@@ -475,7 +477,7 @@ export default function AuthPage() {
     <div
       ref={shellRef}
       className="auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8"
-      data-scrollable={isRegister ? 'true' : 'false'}
+      data-scrollable="false"
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >
@@ -486,7 +488,7 @@ export default function AuthPage() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="auth-mobile-panel w-full max-w-[min(30rem,100%)] pt-4 sm:pt-6 md:pt-10"
+          className={`auth-mobile-panel w-full max-w-[min(30rem,100%)] pt-4 sm:pt-6 md:pt-10 ${isRegister ? 'is-register' : ''}`}
         >
           {/* Logo section */}
             <div className="auth-mobile-hero text-center mb-6 sm:mb-8">
@@ -565,9 +567,9 @@ export default function AuthPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ y: -6, scale: 1.006 }}
-            className="auth-mobile-card gradient-border"
+            className={`auth-mobile-card gradient-border ${isRegister ? 'is-register' : ''}`}
           >
-            <div className="auth-card-surface bg-surface-1 rounded-2xl p-5 sm:p-8">
+            <div className={`auth-card-surface bg-surface-1 rounded-2xl p-5 sm:p-8 ${isRegister ? 'is-register' : ''}`}>
               {/* Tab switcher */}
               <div className="flex bg-white/[0.04] rounded-xl p-1 mb-5 sm:mb-6 border border-white/[0.06]">
                 {[
@@ -588,232 +590,229 @@ export default function AuthPage() {
                 ))}
               </div>
 
-              {/* Auth form */}
-              <motion.form
-                layout
-                transition={{ layout: authLayoutTransition }}
-                ref={formRef}
-                onSubmit={submit}
-                className="auth-form-stack space-y-4"
-                autoComplete="on"
+              <div
+                ref={cardScrollRef}
+                className={`auth-card-scrollzone ${isRegister ? 'is-register' : ''}`}
+                data-scrollable={isRegister ? 'true' : 'false'}
               >
-                <AnimatePresence initial={false} mode="sync">
-                  {isRegister && (
-                    <motion.div
-                      key="register-username"
-                      layout="position"
-                      initial={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0)' }}
-                      animate={{ opacity: 1, y: 0, scale: 1, clipPath: 'inset(0 0 0% 0)' }}
-                      exit={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0)' }}
-                      transition={authRevealTransition}
-                      style={{ overflow: 'hidden', transformOrigin: 'top center' }}
-                    >
-                      <div>
-                        <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
-                        <input
-                          className="input-field"
-                          placeholder={t('auth.usernamePlaceholder')}
-                          value={form.username}
-                          onChange={(event) => set('username', event.target.value)}
-                          required={isRegister}
-                          minLength={2}
-                          maxLength={32}
-                          name="username"
-                          autoComplete="nickname"
-                          inputMode="text"
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* Auth form */}
+                <motion.form
+                  layout
+                  transition={{ layout: authLayoutTransition }}
+                  ref={formRef}
+                  onSubmit={submit}
+                  className="auth-form-stack space-y-4"
+                  autoComplete="on"
+                >
+                  <motion.div
+                    initial={false}
+                    animate={isRegister
+                      ? { height: 'auto', opacity: 1, y: 0, marginBottom: 0 }
+                      : { height: 0, opacity: 0, y: -10, marginBottom: 0 }}
+                    transition={registerFieldTransition}
+                    className="overflow-hidden"
+                    style={{ pointerEvents: isRegister ? 'auto' : 'none' }}
+                  >
+                    <div>
+                      <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
+                      <input
+                        className="input-field"
+                        placeholder={t('auth.usernamePlaceholder')}
+                        value={form.username}
+                        onChange={(event) => set('username', event.target.value)}
+                        required={isRegister}
+                        minLength={2}
+                        maxLength={32}
+                        name="username"
+                        autoComplete="nickname"
+                        inputMode="text"
+                      />
+                    </div>
+                  </motion.div>
 
-                <motion.div layout="position">
-                  <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.email')}</label>
-                  <input
-                    type="email"
-                    className="input-field"
-                    placeholder={t('auth.emailPlaceholder')}
-                    value={form.email}
-                    onChange={(event) => set('email', event.target.value)}
-                    required
-                    name="email"
-                    autoComplete={mode === 'login' ? 'username' : 'email'}
-                    inputMode="email"
-                  />
-                </motion.div>
-
-                <motion.div layout="position">
-                  <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.password')}</label>
-                  <div className="relative">
+                  <motion.div layout="position">
+                    <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.email')}</label>
                     <input
-                      type={showPass ? 'text' : 'password'}
-                      className="input-field pr-12"
-                      placeholder={isRegister ? t('auth.registerPasswordPlaceholder') : '........'}
-                      value={form.password}
-                      onChange={(event) => set('password', event.target.value)}
+                      type="email"
+                      className="input-field"
+                      placeholder={t('auth.emailPlaceholder')}
+                      value={form.email}
+                      onChange={(event) => set('email', event.target.value)}
                       required
-                      name={mode === 'login' ? 'account-password' : 'new-account-password'}
-                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                      name="email"
+                      autoComplete={mode === 'login' ? 'username' : 'email'}
+                      inputMode="email"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPass((value) => !value)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors p-1"
-                      aria-label={showPass ? 'Hide password' : 'Show password'}
-                    >
-                      {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </motion.div>
+                  </motion.div>
 
-                <AnimatePresence initial={false} mode="sync">
-                  {isRegister && (
-                    <motion.div
-                      key="register-captcha"
-                      layout="position"
-                      initial={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0)' }}
-                      animate={{ opacity: 1, y: 0, scale: 1, clipPath: 'inset(0 0 0% 0)' }}
-                      exit={{ opacity: 0, y: -8, scale: 0.985, clipPath: 'inset(0 0 100% 0)' }}
-                      transition={authRevealTransition}
-                      style={{ overflow: 'hidden', transformOrigin: 'top center' }}
-                    >
-                      <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 sm:p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-xs font-mono uppercase tracking-[0.22em] text-white/35">CAPTCHA</div>
-                            <div className="text-sm text-white/70">
-                              {registerCaptcha?.prompt || 'Recopie le code CAPTCHA pour continuer'}
-                            </div>
+                  <motion.div layout="position">
+                    <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.password')}</label>
+                    <div className="relative">
+                      <input
+                        type={showPass ? 'text' : 'password'}
+                        className="input-field pr-12"
+                        placeholder={isRegister ? t('auth.registerPasswordPlaceholder') : '........'}
+                        value={form.password}
+                        onChange={(event) => set('password', event.target.value)}
+                        required
+                        name={mode === 'login' ? 'account-password' : 'new-account-password'}
+                        autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass((value) => !value)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors p-1"
+                        aria-label={showPass ? 'Hide password' : 'Show password'}
+                      >
+                        {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    initial={false}
+                    animate={isRegister
+                      ? { height: 'auto', opacity: 1, y: 0, marginBottom: 0 }
+                      : { height: 0, opacity: 0, y: -10, marginBottom: 0 }}
+                    transition={registerFieldTransition}
+                    className="overflow-hidden"
+                    style={{ pointerEvents: isRegister ? 'auto' : 'none' }}
+                  >
+                    <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 sm:p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-mono uppercase tracking-[0.22em] text-white/35">CAPTCHA</div>
+                          <div className="text-sm text-white/70">
+                            {registerCaptcha?.prompt || 'Recopie le code CAPTCHA pour continuer'}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => loadRegisterCaptcha({ force: true })}
-                            disabled={captchaLoading}
-                            className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/60 transition hover:border-neon-cyan/30 hover:text-neon-cyan disabled:opacity-50"
-                          >
-                            {captchaLoading ? 'Chargement...' : 'Recharger'}
-                          </button>
                         </div>
-
                         <button
                           type="button"
                           onClick={() => loadRegisterCaptcha({ force: true })}
                           disabled={captchaLoading}
-                          className="block w-full overflow-hidden rounded-2xl border border-neon-cyan/20 bg-[#08131f] p-2 transition hover:border-neon-cyan/40 disabled:opacity-70"
+                          className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/60 transition hover:border-neon-cyan/30 hover:text-neon-cyan disabled:opacity-50"
                         >
-                          {registerCaptcha?.image_data_url ? (
-                            <img
-                              src={registerCaptcha.image_data_url}
-                              alt="CAPTCHA"
-                              className="h-28 w-full rounded-xl object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-white/[0.08] text-sm text-white/35">
-                              {captchaLoading ? 'Generation du CAPTCHA...' : 'CAPTCHA indisponible'}
-                            </div>
-                          )}
+                          {captchaLoading ? 'Chargement...' : 'Recharger'}
                         </button>
+                      </div>
 
-                        <div>
-                          <label className="mb-1.5 block text-xs font-mono uppercase tracking-wider text-white/40">
-                            Code CAPTCHA
-                          </label>
-                          <input
-                            className="input-field"
-                            placeholder="Recopie le code CAPTCHA"
-                            value={form.captchaAnswer}
-                            onChange={(event) => set('captchaAnswer', event.target.value)}
-                            required={isRegister}
-                            autoComplete="one-time-code"
-                            inputMode="numeric"
-                            maxLength={8}
+                      <button
+                        type="button"
+                        onClick={() => loadRegisterCaptcha({ force: true })}
+                        disabled={captchaLoading}
+                        className="block w-full overflow-hidden rounded-2xl border border-neon-cyan/20 bg-[#08131f] p-2 transition hover:border-neon-cyan/40 disabled:opacity-70"
+                      >
+                        {registerCaptcha?.image_data_url ? (
+                          <img
+                            src={registerCaptcha.image_data_url}
+                            alt="CAPTCHA"
+                            className="h-28 w-full rounded-xl object-cover"
                           />
-                        </div>
+                        ) : (
+                          <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-white/[0.08] text-sm text-white/35">
+                            {captchaLoading ? 'Generation du CAPTCHA...' : 'CAPTCHA indisponible'}
+                          </div>
+                        )}
+                      </button>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-mono uppercase tracking-wider text-white/40">
+                          Code CAPTCHA
+                        </label>
+                        <input
+                          className="input-field"
+                          placeholder="Recopie le code CAPTCHA"
+                          value={form.captchaAnswer}
+                          onChange={(event) => set('captchaAnswer', event.target.value)}
+                          required={isRegister}
+                          autoComplete="one-time-code"
+                          inputMode="numeric"
+                          maxLength={8}
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        layout="position"
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
+                      >
+                        <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <AnimatePresence>
+                    {pendingNotice && (
+                      <motion.div
+                        layout="position"
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="flex items-start gap-2 p-3 rounded-xl bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan text-sm"
+                      >
+                        <Shield className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>{pendingNotice}</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <motion.button
+                    layout="position"
+                    type="submit"
+                    disabled={isLoading || !registerCaptchaReady}
+                    whileTap={{ scale: 0.97 }}
+                    className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 hover:shadow-[0_0_28px_rgba(0,229,255,0.3),0_0_56px_rgba(0,229,255,0.1)]"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                        {mode === 'login' ? t('auth.loginLoading') : t('auth.registerLoading')}
+                      </span>
+                    ) : !registerCaptchaReady ? (
+                      'Chargement du captcha...'
+                    ) : mode === 'login' ? t('auth.loginSubmit') : t('auth.registerSubmit')}
+                  </motion.button>
+
+                  {oauthButtons.length > 0 && (
+                    <motion.div layout="position" className="auth-oauth-section space-y-3 pt-1">
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-white/[0.08]" />
+                        <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">
+                          {t('auth.oauthDivider', 'Ou')}
+                        </span>
+                        <div className="h-px flex-1 bg-white/[0.08]" />
+                      </div>
+
+                      <div className={`grid gap-3 ${oauthButtons.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                        {oauthButtons.map((provider) => {
+                          const Icon = provider.icon
+                          return (
+                            <motion.button
+                              key={provider.key}
+                              type="button"
+                              onClick={provider.onClick}
+                              whileHover={{ y: -1 }}
+                              whileTap={{ scale: 0.97 }}
+                              className={`w-full py-3 rounded-xl font-display font-600 text-sm transition-all duration-250 flex items-center justify-center gap-2 ${provider.className}`}
+                            >
+                              <Icon className="w-4 h-4 shrink-0" />
+                              {provider.label}
+                            </motion.button>
+                          )
+                        })}
                       </div>
                     </motion.div>
                   )}
-                </AnimatePresence>
+                </motion.form>
 
-                <AnimatePresence>
-                  {error && (
-                    <motion.div
-                      layout="position"
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
-                    >
-                      <AlertCircle className="w-4 h-4 shrink-0" />{error}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <AnimatePresence>
-                  {pendingNotice && (
-                    <motion.div
-                      layout="position"
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="flex items-start gap-2 p-3 rounded-xl bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan text-sm"
-                    >
-                      <Shield className="w-4 h-4 shrink-0 mt-0.5" />
-                      <span>{pendingNotice}</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <motion.button
-                  layout="position"
-                  type="submit"
-                  disabled={isLoading || !registerCaptchaReady}
-                  whileTap={{ scale: 0.97 }}
-                  className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 hover:shadow-[0_0_28px_rgba(0,229,255,0.3),0_0_56px_rgba(0,229,255,0.1)]"
-                >
-                  {isLoading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                      {mode === 'login' ? t('auth.loginLoading') : t('auth.registerLoading')}
-                    </span>
-                  ) : !registerCaptchaReady ? (
-                    'Chargement du captcha...'
-                  ) : mode === 'login' ? t('auth.loginSubmit') : t('auth.registerSubmit')}
-                </motion.button>
-
-                {oauthButtons.length > 0 && (
-                  <motion.div layout="position" className="auth-oauth-section space-y-3 pt-1">
-                    <div className="flex items-center gap-3">
-                      <div className="h-px flex-1 bg-white/[0.08]" />
-                      <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/30">
-                        {t('auth.oauthDivider', 'Ou')}
-                      </span>
-                      <div className="h-px flex-1 bg-white/[0.08]" />
-                    </div>
-
-                    <div className={`grid gap-3 ${oauthButtons.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
-                      {oauthButtons.map((provider) => {
-                        const Icon = provider.icon
-                        return (
-                          <motion.button
-                            key={provider.key}
-                            type="button"
-                            onClick={provider.onClick}
-                            whileHover={{ y: -1 }}
-                            whileTap={{ scale: 0.97 }}
-                            className={`w-full py-3 rounded-xl font-display font-600 text-sm transition-all duration-250 flex items-center justify-center gap-2 ${provider.className}`}
-                          >
-                            <Icon className="w-4 h-4 shrink-0" />
-                            {provider.label}
-                          </motion.button>
-                        )
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </motion.form>
-
-              {/* Feature cards */}
-              <div className="auth-mobile-features mt-5 sm:mt-6 space-y-3">
+                {/* Feature cards */}
+                <div className="auth-mobile-features mt-5 sm:mt-6 space-y-3">
                 <div className="grid grid-cols-3 gap-2">
                   {featureCards.map((feature) => {
                     const active = feature.key === activeFeature
@@ -870,6 +869,7 @@ export default function AuthPage() {
                     <p className="text-xs text-white/45 leading-relaxed">{activeFeatureCard.description}</p>
                   </motion.div>
                 </AnimatePresence>
+                </div>
               </div>
             </div>
           </motion.div>
