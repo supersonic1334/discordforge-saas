@@ -485,7 +485,7 @@ export default function AuthPage() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="auth-mobile-panel w-full max-w-[min(42rem,100%)] pt-4 sm:pt-6 md:pt-10"
+          className="auth-mobile-panel w-full max-w-[min(30rem,100%)] pt-4 sm:pt-6 md:pt-10"
         >
           {/* Logo section */}
             <div className="auth-mobile-hero text-center mb-6 sm:mb-8">
@@ -494,7 +494,7 @@ export default function AuthPage() {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 transition={{ duration: 0.7, ease: 'easeOut' }}
                 whileHover={{ y: -5, scale: 1.01 }}
-                className="auth-mobile-logo-shell relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(560px,92vw)]"
+                className="auth-mobile-logo-shell relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,84vw)]"
               >
               <motion.div
                 animate={{

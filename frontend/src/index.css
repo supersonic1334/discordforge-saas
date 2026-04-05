@@ -10,11 +10,11 @@
     --app-stable-height: 100dvh;
     --app-width: 100vw;
     --app-keyboard-offset: 0px;
-    --page-shell-3xl: 58rem;
-    --page-shell-4xl: 72rem;
-    --page-shell-5xl: 86rem;
-    --page-shell-6xl: 98rem;
-    --page-shell-7xl: 110rem;
+    --page-shell-3xl: 52rem;
+    --page-shell-4xl: 60rem;
+    --page-shell-5xl: 70rem;
+    --page-shell-6xl: 80rem;
+    --page-shell-7xl: 90rem;
   }
 
   html,
@@ -477,7 +477,7 @@
     display: none;
   }
   .auth-page-frame {
-    width: min(100%, var(--page-shell-7xl));
+    width: min(100%, var(--page-shell-6xl));
     height: 100%;
     min-height: 0;
     max-height: 100%;
@@ -486,7 +486,7 @@
     gap: clamp(0.85rem, 1.5vh, 2.25rem);
   }
   .auth-mobile-panel {
-    width: min(100%, clamp(21rem, 94vw, 42rem));
+    width: min(100%, clamp(20rem, 92vw, 30rem));
     display: flex;
     max-height: 100%;
     flex-direction: column;
@@ -499,10 +499,10 @@
   }
   .auth-mobile-logo-shell {
     margin-bottom: clamp(0.55rem, 1.2vh, 1.05rem) !important;
-    max-width: min(560px, 92vw) !important;
+    max-width: min(440px, 84vw) !important;
   }
   .auth-mobile-logo {
-    max-height: min(196px, 18vh);
+    max-height: min(168px, 15vh);
   }
   .auth-card-surface {
     padding: clamp(0.95rem, 1.8vh, 1.35rem) !important;
@@ -1509,15 +1509,64 @@ html {
 
 @media (min-width: 1600px) {
   :root {
-    --page-shell-3xl: 62rem;
-    --page-shell-4xl: 78rem;
-    --page-shell-5xl: 92rem;
-    --page-shell-6xl: 106rem;
-    --page-shell-7xl: 120rem;
+    --page-shell-3xl: 56rem;
+    --page-shell-4xl: 66rem;
+    --page-shell-5xl: 76rem;
+    --page-shell-6xl: 86rem;
+    --page-shell-7xl: 96rem;
   }
 
   .auth-mobile-panel {
-    width: min(100%, clamp(23rem, 40vw, 46rem));
+    width: min(100%, clamp(21rem, 28vw, 32rem));
+  }
+}
+
+@media (max-height: 920px) {
+  .auth-page-shell {
+    padding-top: max(env(safe-area-inset-top), 10px) !important;
+    padding-bottom: max(env(safe-area-inset-bottom), 8px) !important;
+  }
+
+  .auth-page-frame {
+    gap: clamp(0.5rem, 1vh, 1.1rem);
+  }
+
+  .auth-mobile-logo {
+    max-height: min(144px, 12vh);
+  }
+
+  .auth-card-surface {
+    padding: clamp(0.85rem, 1.4vh, 1.1rem) !important;
+  }
+
+  .auth-form-stack {
+    row-gap: clamp(0.55rem, 1vh, 0.8rem) !important;
+  }
+
+  .auth-mobile-features {
+    margin-top: clamp(0.45rem, 0.8vh, 0.75rem) !important;
+  }
+
+  .auth-feature-detail {
+    padding: 0.65rem 0.9rem !important;
+  }
+}
+
+@media (max-height: 780px) {
+  .auth-mobile-hero {
+    margin-bottom: 0.6rem !important;
+  }
+
+  .auth-mobile-logo-shell {
+    margin-bottom: 0.45rem !important;
+  }
+
+  .auth-mobile-logo {
+    max-height: min(116px, 10vh);
+  }
+
+  .auth-feature-detail {
+    display: none !important;
   }
 }
 
