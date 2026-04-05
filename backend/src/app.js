@@ -200,6 +200,14 @@ app.use((req, res, next) => {
     'Permissions-Policy',
     'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(self), midi=(), payment=(), usb=()'
   );
+  res.setHeader(
+    'Accept-CH',
+    'Sec-CH-UA, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Mobile, Sec-CH-UA-Model'
+  );
+  res.setHeader(
+    'Critical-CH',
+    'Sec-CH-UA, Sec-CH-UA-Platform, Sec-CH-UA-Mobile, Sec-CH-UA-Model'
+  );
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Origin-Agent-Cluster', '?1');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');

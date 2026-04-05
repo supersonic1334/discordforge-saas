@@ -44,7 +44,13 @@ function normalizeDeviceId(value) {
 
 function getClientIp(req) {
   return normalizeIp(
-    req.headers['x-forwarded-for']
+    req.headers['cf-connecting-ip']
+    || req.headers['true-client-ip']
+    || req.headers['x-client-ip']
+    || req.headers['x-cluster-client-ip']
+    || req.headers['fly-client-ip']
+    || req.headers['fastly-client-ip']
+    || req.headers['x-forwarded-for']
     || req.headers['x-real-ip']
     || req.ip
     || req.socket?.remoteAddress
@@ -83,14 +89,20 @@ function getRequestAccessMetadata(req) {
   const userAgent = String(req.get('user-agent') || '').slice(0, 500);
   const acceptLanguage = String(req.get('accept-language') || '').slice(0, 200);
   const clientHintsUa = String(req.get('sec-ch-ua') || '').slice(0, 200);
+  const clientHintsUaFull = String(req.get('sec-ch-ua-full-version-list') || '').slice(0, 400);
   const clientHintsPlatform = String(req.get('sec-ch-ua-platform') || '').slice(0, 120);
+  const clientHintsPlatformVersion = String(req.get('sec-ch-ua-platform-version') || '').slice(0, 120);
   const clientHintsMobile = String(req.get('sec-ch-ua-mobile') || '').slice(0, 40);
+  const clientHintsModel = String(req.get('sec-ch-ua-model') || '').slice(0, 160);
   const clientSignatureSource = [
     userAgent.trim().toLowerCase(),
     acceptLanguage.trim().toLowerCase(),
     clientHintsUa.trim().toLowerCase(),
+    clientHintsUaFull.trim().toLowerCase(),
     clientHintsPlatform.trim().toLowerCase(),
+    clientHintsPlatformVersion.trim().toLowerCase(),
     clientHintsMobile.trim().toLowerCase(),
+    clientHintsModel.trim().toLowerCase(),
   ].filter(Boolean).join('|');
   const clientSignatureHash = clientSignatureSource ? hash(`client_signature:${clientSignatureSource}`) : null;
 
@@ -98,6 +110,12 @@ function getRequestAccessMetadata(req) {
     ip,
     deviceId,
     userAgent,
+    clientHintsUa,
+    clientHintsUaFull,
+    clientHintsPlatform,
+    clientHintsPlatformVersion,
+    clientHintsMobile,
+    clientHintsModel,
     clientSignatureHash,
     ipHash: ip ? hash(`ip:${ip}`) : null,
     deviceHash: deviceId ? hash(`device:${deviceId}`) : null,

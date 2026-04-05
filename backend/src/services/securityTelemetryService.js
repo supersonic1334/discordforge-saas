@@ -68,6 +68,77 @@ function summarizeUserAgent(userAgent) {
   return `${browser} · ${os}`;
 }
 
+function normalizeBrandToken(value) {
+  return normalizeString(value, 120)
+    .replace(/^"+|"+$/g, '')
+    .replace(/^'+|'+$/g, '');
+}
+
+function parseClientHintBrands(value) {
+  return String(value || '')
+    .split(',')
+    .map((part) => normalizeBrandToken(part.split(';')[0]))
+    .filter(Boolean);
+}
+
+function detectBrowser(metadata = {}) {
+  const userAgent = String(metadata.userAgent || '');
+  const brands = [
+    ...parseClientHintBrands(metadata.clientHintsUa),
+    ...parseClientHintBrands(metadata.clientHintsUaFull),
+  ].map((item) => item.toLowerCase());
+
+  if (brands.some((item) => item.includes('brave'))) return 'Brave';
+  if (/opt\//i.test(userAgent) || brands.some((item) => item.includes('opera gx'))) return 'Opera GX';
+  if (/opr\//i.test(userAgent) || brands.some((item) => item.includes('opera'))) return 'Opera';
+  if (/edg\//i.test(userAgent) || brands.some((item) => item.includes('edge'))) return 'Edge';
+  if (/samsungbrowser/i.test(userAgent)) return 'Samsung Internet';
+  if (/firefox\//i.test(userAgent) || brands.some((item) => item.includes('firefox'))) return 'Firefox';
+  if (/vivaldi/i.test(userAgent)) return 'Vivaldi';
+  if (/duckduckgo/i.test(userAgent)) return 'DuckDuckGo';
+  if (/safari\//i.test(userAgent) && !/chrome\//i.test(userAgent) && !/chromium/i.test(userAgent)) return 'Safari';
+  if (/chrome\//i.test(userAgent) || brands.some((item) => item.includes('chrome'))) return 'Chrome';
+  return 'Navigateur inconnu';
+}
+
+function detectOs(metadata = {}) {
+  const platformHint = normalizeString(metadata.clientHintsPlatform, 120).replace(/['"]/g, '').toLowerCase();
+  const userAgent = String(metadata.userAgent || '').toLowerCase();
+
+  if (platformHint.includes('android') || userAgent.includes('android')) return 'Android';
+  if (platformHint.includes('ios') || /iphone|ipad|ipod/.test(userAgent)) return 'iOS';
+  if (platformHint.includes('mac') || userAgent.includes('mac os') || userAgent.includes('macintosh')) return 'macOS';
+  if (platformHint.includes('windows') || userAgent.includes('windows')) return 'Windows';
+  if (platformHint.includes('linux') || userAgent.includes('linux')) return 'Linux';
+  if (platformHint.includes('chrome os') || platformHint.includes('chromeos') || userAgent.includes('cros')) return 'ChromeOS';
+  return 'OS inconnu';
+}
+
+function detectDeviceType(metadata = {}) {
+  const mobileHint = normalizeString(metadata.clientHintsMobile, 20).replace(/['"]/g, '').toLowerCase();
+  const userAgent = String(metadata.userAgent || '').toLowerCase();
+
+  if (/ipad|tablet/.test(userAgent)) return 'Tablette';
+  if (mobileHint === '?1' || /iphone|ipod|android.+mobile|windows phone|mobile/.test(userAgent)) return 'Mobile';
+  return 'Ordinateur';
+}
+
+function detectDeviceModel(metadata = {}) {
+  const modelHint = normalizeString(metadata.clientHintsModel, 160).replace(/['"]/g, '');
+  if (modelHint) return modelHint;
+
+  const userAgent = String(metadata.userAgent || '');
+  const androidMatch = userAgent.match(/Android [^;]+;\s*([^;)]+?)\s+Build\//i);
+  if (androidMatch?.[1]) return normalizeString(androidMatch[1], 120);
+  if (/iphone/i.test(userAgent)) return 'iPhone';
+  if (/ipad/i.test(userAgent)) return 'iPad';
+
+  const samsungMatch = userAgent.match(/(SM-[A-Z0-9]+)/i);
+  if (samsungMatch?.[1]) return samsungMatch[1].toUpperCase();
+
+  return '';
+}
+
 function looksLikeDatacenter(text) {
   const normalized = normalizeString(text, 240).toLowerCase();
   if (!normalized) return false;
@@ -99,11 +170,64 @@ function buildLookupEndpoint(ipAddress) {
     .replace('{ip}', encodeURIComponent(ipAddress));
 }
 
+function looksSuspiciousProvider(provider) {
+  const value = normalizeString(provider, 160).toLowerCase();
+  if (!value) return true;
+  return ['popmon', 'point of presence', 'backbone', 'transit', 'gateway'].some((token) => value.includes(token));
+}
+
 function ensureSecuritySchema() {
   if (schemaReady) return;
 
   try {
-    db.runMigrations();
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_security_access_log (
+        id                TEXT PRIMARY KEY,
+        user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        ip_address        TEXT,
+        ip_hash           TEXT,
+        city              TEXT NOT NULL DEFAULT '',
+        region            TEXT NOT NULL DEFAULT '',
+        country           TEXT NOT NULL DEFAULT '',
+        location_label    TEXT NOT NULL DEFAULT '',
+        network_provider  TEXT NOT NULL DEFAULT '',
+        network_domain    TEXT NOT NULL DEFAULT '',
+        network_type      TEXT NOT NULL DEFAULT '',
+        browser_name      TEXT NOT NULL DEFAULT '',
+        os_name           TEXT NOT NULL DEFAULT '',
+        device_type       TEXT NOT NULL DEFAULT '',
+        device_model      TEXT NOT NULL DEFAULT '',
+        is_proxy          INTEGER NOT NULL DEFAULT 0,
+        is_vpn            INTEGER NOT NULL DEFAULT 0,
+        is_tor            INTEGER NOT NULL DEFAULT 0,
+        is_datacenter     INTEGER NOT NULL DEFAULT 0,
+        user_agent        TEXT,
+        device_hash       TEXT,
+        client_signature_hash TEXT,
+        first_seen_at     TEXT NOT NULL DEFAULT (datetime('now')),
+        last_seen_at      TEXT NOT NULL DEFAULT (datetime('now')),
+        seen_count        INTEGER NOT NULL DEFAULT 1,
+        created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_user_security_access_log_user_last_seen ON user_security_access_log(user_id, last_seen_at DESC)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_user_security_access_log_user_ip ON user_security_access_log(user_id, ip_hash)');
+    for (const column of [
+      "browser_name TEXT NOT NULL DEFAULT ''",
+      "os_name TEXT NOT NULL DEFAULT ''",
+      "device_type TEXT NOT NULL DEFAULT ''",
+      "device_model TEXT NOT NULL DEFAULT ''",
+    ]) {
+      const name = column.split(' ')[0];
+      try {
+        db.exec(`ALTER TABLE user_security_access_log ADD COLUMN ${column}`);
+      } catch (error) {
+        if (!String(error?.message || '').includes(`duplicate column name: ${name}`)) {
+          throw error;
+        }
+      }
+    }
   } catch (error) {
     logger.warn('Security telemetry migration check failed', {
       message: error?.message || 'unknown_error',
@@ -120,8 +244,8 @@ function parseIpIntelPayload(ipAddress, payload) {
   const region = normalizeString(payload?.region || payload?.region_name || payload?.regionName, 120);
   const country = normalizeString(payload?.country || payload?.country_name || payload?.countryName, 120);
   const provider = normalizeString(
-    connection?.org
-    || connection?.isp
+    connection?.isp
+    || connection?.org
     || payload?.org
     || payload?.isp
     || payload?.organization
@@ -168,6 +292,43 @@ function parseIpIntelPayload(ipAddress, payload) {
   };
 }
 
+function parseSecondaryIpIntelPayload(ipAddress, payload) {
+  const city = normalizeString(payload?.city, 120);
+  const region = normalizeString(payload?.region || payload?.region_name || payload?.regionName, 120);
+  const country = normalizeString(payload?.country_name || payload?.country || payload?.countryName, 120);
+
+  return {
+    ip_address: normalizeString(payload?.ip || ipAddress, 80),
+    city,
+    region,
+    country,
+    location_label: [city, region, country].filter(Boolean).join(', '),
+    network_provider: normalizeString(payload?.org || payload?.asn || '', 160),
+    network_domain: normalizeString(payload?.org || '', 160),
+    network_type: normalizeString(payload?.version || payload?.network || '', 80),
+    is_proxy: 0,
+    is_vpn: 0,
+    is_tor: 0,
+    is_datacenter: 0,
+  };
+}
+
+async function lookupSecondaryIpIntel(ipAddress) {
+  const response = await fetch(`https://ipapi.co/${encodeURIComponent(ipAddress)}/json/`, {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'discordforger-security',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`secondary_lookup_failed_${response.status}`);
+  }
+
+  const payload = await response.json();
+  return parseSecondaryIpIntelPayload(ipAddress, payload);
+}
+
 async function lookupIpIntel(ipAddress) {
   const ip = normalizeString(ipAddress, 80);
   if (!ip || isPrivateIp(ip)) {
@@ -206,7 +367,27 @@ async function lookupIpIntel(ipAddress) {
       }
 
       const payload = await response.json();
-      const intel = parseIpIntelPayload(ip, payload);
+      let intel = parseIpIntelPayload(ip, payload);
+      if (!intel.location_label || looksSuspiciousProvider(intel.network_provider)) {
+        try {
+          const secondaryIntel = await lookupSecondaryIpIntel(ip);
+          intel = {
+            ...intel,
+            city: secondaryIntel.city || intel.city,
+            region: secondaryIntel.region || intel.region,
+            country: secondaryIntel.country || intel.country,
+            location_label: secondaryIntel.location_label || intel.location_label,
+            network_provider: secondaryIntel.network_provider || intel.network_provider,
+            network_domain: secondaryIntel.network_domain || intel.network_domain,
+            network_type: secondaryIntel.network_type || intel.network_type,
+          };
+        } catch (fallbackError) {
+          logger.warn('Secondary IP intel lookup failed', {
+            ip,
+            message: fallbackError?.message || 'unknown_error',
+          });
+        }
+      }
       intelCache.set(ip, {
         value: intel,
         expiresAt: Date.now() + LOOKUP_CACHE_TTL_MS,
@@ -242,6 +423,10 @@ async function recordSecurityAccess(userId, metadata) {
   const clientSignatureHash = normalizeString(metadata.clientSignatureHash, 120);
   const userAgent = normalizeString(metadata.userAgent, 500);
   const ipAddress = normalizeString(metadata.ip, 80);
+  const browserName = detectBrowser(metadata);
+  const osName = detectOs(metadata);
+  const deviceType = detectDeviceType(metadata);
+  const deviceModel = detectDeviceModel(metadata);
 
   if (!ipHash && !deviceHash && !clientSignatureHash && !ipAddress) {
     return null;
@@ -275,6 +460,10 @@ async function recordSecurityAccess(userId, metadata) {
     network_provider: intel.network_provider || '',
     network_domain: intel.network_domain || '',
     network_type: intel.network_type || '',
+    browser_name: browserName,
+    os_name: osName,
+    device_type: deviceType,
+    device_model: deviceModel,
     is_proxy: intel.is_proxy ? 1 : 0,
     is_vpn: intel.is_vpn ? 1 : 0,
     is_tor: intel.is_tor ? 1 : 0,
@@ -297,6 +486,10 @@ async function recordSecurityAccess(userId, metadata) {
             network_provider = ?,
             network_domain = ?,
             network_type = ?,
+            browser_name = ?,
+            os_name = ?,
+            device_type = ?,
+            device_model = ?,
             is_proxy = ?,
             is_vpn = ?,
             is_tor = ?,
@@ -315,6 +508,10 @@ async function recordSecurityAccess(userId, metadata) {
         payload.network_provider,
         payload.network_domain,
         payload.network_type,
+        payload.browser_name,
+        payload.os_name,
+        payload.device_type,
+        payload.device_model,
         payload.is_proxy,
         payload.is_vpn,
         payload.is_tor,
@@ -355,12 +552,16 @@ function mapSecurityRow(row) {
     network_provider: row.network_provider || '',
     network_domain: row.network_domain || '',
     network_type: row.network_type || '',
+    browser_name: row.browser_name || '',
+    os_name: row.os_name || '',
+    device_type: row.device_type || '',
+    device_model: row.device_model || '',
     is_proxy: !!row.is_proxy,
     is_vpn: !!row.is_vpn,
     is_tor: !!row.is_tor,
     is_datacenter: !!row.is_datacenter,
     user_agent: row.user_agent || '',
-    device_label: summarizeUserAgent(row.user_agent),
+    device_label: [row.browser_name || '', row.os_name || '', row.device_type || ''].filter(Boolean).join(' · ') || summarizeUserAgent(row.user_agent),
     first_seen_at: row.first_seen_at || row.created_at || null,
     last_seen_at: row.last_seen_at || row.updated_at || row.created_at || null,
     seen_count: Number(row.seen_count || 0),

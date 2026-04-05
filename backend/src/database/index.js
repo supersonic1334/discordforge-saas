@@ -339,6 +339,10 @@ function runMigrations() {
   ensureColumn('guild_ticket_generators', 'panel_thumbnail_url', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('guild_ticket_generators', 'panel_image_url', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('guild_ticket_generators', 'transcript_channel_id', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_security_access_log', 'browser_name', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_security_access_log', 'os_name', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_security_access_log', 'device_type', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('user_security_access_log', 'device_model', "TEXT NOT NULL DEFAULT ''");
   if (!hadEmailVerifiedColumn) {
     db.exec(`
       UPDATE users

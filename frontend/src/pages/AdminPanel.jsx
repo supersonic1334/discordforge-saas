@@ -980,6 +980,9 @@ export default function AdminPanel() {
                           <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
                             <p className="font-mono text-white/25 mb-1">Appareil</p>
                             <p>{currentSecurity.device_label || '-'}</p>
+                            {currentSecurity.device_model && (
+                              <p className="mt-1 text-[11px] text-white/35">{currentSecurity.device_model}</p>
+                            )}
                           </div>
                         </div>
 
@@ -988,9 +991,6 @@ export default function AdminPanel() {
                           {currentSecurity.is_proxy && <span className="badge bg-orange-500/10 text-orange-300 border border-orange-500/20">Proxy detecte</span>}
                           {currentSecurity.is_tor && <span className="badge bg-red-500/10 text-red-300 border border-red-500/20">Tor detecte</span>}
                           {currentSecurity.is_datacenter && <span className="badge bg-violet-500/10 text-violet-300 border border-violet-500/20">Datacenter / hebergeur</span>}
-                          {!currentSecurity.is_vpn && !currentSecurity.is_proxy && !currentSecurity.is_tor && !currentSecurity.is_datacenter && (
-                            <span className="badge bg-green-500/10 text-green-300 border border-green-500/20">Connexion domestique probable</span>
-                          )}
                         </div>
 
                         <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 space-y-2">
@@ -1003,7 +1003,10 @@ export default function AdminPanel() {
                                   {entry.location_label || 'Localisation indisponible'}
                                   {entry.network_provider ? ` · ${entry.network_provider}` : ''}
                                 </p>
-                                <p className="mt-1 text-[11px] text-white/30">{entry.device_label}</p>
+                                <p className="mt-1 text-[11px] text-white/30">
+                                  {entry.device_label}
+                                  {entry.device_model ? ` · ${entry.device_model}` : ''}
+                                </p>
                               </div>
                               <div className="text-right text-[11px] text-white/35 shrink-0">
                                 <p>{formatDateTime(locale, entry.last_seen_at)}</p>
