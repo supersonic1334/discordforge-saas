@@ -30,7 +30,11 @@ const IMAGE_REQUEST_MATCHERS = [
   /\b(generate|create|make|draw)\b.*\b(image|illustration|poster|logo|banner|avatar|thumbnail)\b/i,
   /\bimage\b.*\b(discord|serveur|server|logo|banner|avatar)\b/i,
 ];
-const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image-preview';
+const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
+const GEMINI_IMAGE_MODEL_CANDIDATES = [
+  'gemini-2.5-flash-image',
+  'gemini-3-pro-image-preview',
+];
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -354,9 +358,59 @@ function buildActionResultMessage(actionBlock, actionResult, fallbackText = '') 
 function buildImageIaStatusMessage() {
   const imageConfig = getGeminiImageConfig();
   if (imageConfig?.apiKey) {
-    return `Image IA active. Le moteur ${imageConfig.model} est disponible pour generer des visuels depuis l assistant.`;
+    return `Image IA active. Le moteur ${imageConfig.models?.[0] || DEFAULT_GEMINI_IMAGE_MODEL} est disponible pour generer des visuels depuis l assistant.`;
   }
   return 'Image IA indisponible pour le moment. Configure une cle Gemini image sur le site pour activer la generation.';
+}
+
+function pushUniqueAssistantModel(target, modelId) {
+  const normalized = String(modelId || '').trim();
+  if (!normalized || target.includes(normalized)) return;
+  target.push(normalized);
+}
+
+function resolveGeminiImageModelCandidates(selectedModel = '') {
+  const normalized = String(selectedModel || '').trim().toLowerCase();
+  const candidates = [];
+
+  if (normalized === 'gemini-2.5-flash-image' || normalized === 'gemini-3-pro-image-preview') {
+    pushUniqueAssistantModel(candidates, normalized);
+  } else if (normalized.startsWith('gemini-3-pro')) {
+    pushUniqueAssistantModel(candidates, 'gemini-3-pro-image-preview');
+  } else if (normalized.startsWith('gemini-2.5-pro')) {
+    pushUniqueAssistantModel(candidates, 'gemini-3-pro-image-preview');
+    pushUniqueAssistantModel(candidates, 'gemini-2.5-flash-image');
+  } else if (normalized.startsWith('gemini-2.5-flash')) {
+    pushUniqueAssistantModel(candidates, 'gemini-2.5-flash-image');
+  }
+
+  for (const modelId of GEMINI_IMAGE_MODEL_CANDIDATES) {
+    pushUniqueAssistantModel(candidates, modelId);
+  }
+
+  return candidates.length ? candidates : [DEFAULT_GEMINI_IMAGE_MODEL];
+}
+
+function shouldFallbackGeminiImageModel(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    Number(error?.status || 0) === 404
+    || (
+      Number(error?.status || 0) === 400
+      && message.includes('model')
+      && (
+        message.includes('unavailable')
+        || message.includes('not found')
+        || message.includes('not supported')
+        || message.includes('does not exist')
+      )
+    )
+  );
+}
+
+function isRetryableGeminiImageError(error) {
+  const status = Number(error?.status || 0);
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 
 function resolveRequestedMemberLimit(normalizedMessage) {
@@ -650,7 +704,7 @@ function getGeminiImageConfig() {
     return {
       provider: 'gemini',
       apiKey: activeConfig.apiKey,
-      model: GEMINI_IMAGE_MODEL,
+      models: resolveGeminiImageModelCandidates(activeConfig.model),
       providerKeyId: activeConfig.providerKeyId || null,
     };
   }
@@ -661,7 +715,7 @@ function getGeminiImageConfig() {
   return {
     provider: 'gemini',
     apiKey: decrypt(pooledGeminiKey.encrypted_api_key),
-    model: GEMINI_IMAGE_MODEL,
+    models: resolveGeminiImageModelCandidates(pooledGeminiKey.selected_model),
     providerKeyId: pooledGeminiKey.id || null,
   };
 }
@@ -2520,8 +2574,38 @@ async function generateAssistantImage(userId, userMessage) {
   }
 
   let providerResult;
+  let lastError = null;
+  const candidateModels = Array.isArray(imageConfig.models) && imageConfig.models.length
+    ? imageConfig.models
+    : [DEFAULT_GEMINI_IMAGE_MODEL];
   try {
-    providerResult = await requestGeminiImage(imageConfig, prompt);
+    for (const model of candidateModels) {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          providerResult = await requestGeminiImage({ ...imageConfig, model }, prompt);
+          break;
+        } catch (error) {
+          lastError = error;
+
+          if (shouldFallbackGeminiImageModel(error)) {
+            break;
+          }
+
+          if (isRetryableGeminiImageError(error) && attempt < 1) {
+            await new Promise((resolve) => setTimeout(resolve, 900));
+            continue;
+          }
+
+          throw error;
+        }
+      }
+
+      if (providerResult) break;
+    }
+
+    if (!providerResult) {
+      throw lastError || Object.assign(new Error('Aucune image IA disponible pour les modeles Gemini configures.'), { status: 502 });
+    }
   } catch (error) {
     if (imageConfig.providerKeyId && error?.providerKeyStatus) {
       aiProviderKeyService.markProviderKeyStatus(imageConfig.providerKeyId, error.providerKeyStatus, error.message);

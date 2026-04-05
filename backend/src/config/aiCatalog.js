@@ -80,6 +80,21 @@ const AI_PROVIDER_CATALOG = [
         freeTier: true,
       },
       {
+        id: 'gemini-2.5-flash-image',
+        label: 'Gemini 2.5 Flash Image',
+        description: 'Nano Banana image model for fast native image generation.',
+        tokenLimits: { input: 1048576, output: 65536 },
+        rateLimits: { free: { rpm: 10, tpm: 250000, rpd: 250 } },
+        freeTier: true,
+      },
+      {
+        id: 'gemini-3-pro-image-preview',
+        label: 'Gemini 3 Pro Image Preview',
+        description: 'Nano Banana Pro image preview model for higher fidelity assets.',
+        tokenLimits: { input: 1048576, output: 65536 },
+        preview: true,
+      },
+      {
         id: 'gemini-2.5-flash-lite',
         label: 'Gemini 2.5 Flash-Lite',
         description: 'Lowest cost stable Gemini chat model.',
