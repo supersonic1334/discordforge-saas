@@ -487,6 +487,7 @@
   }
   .auth-mobile-panel {
     width: min(100%, clamp(20rem, 92vw, 30rem));
+    min-height: clamp(42rem, 82vh, 52rem);
     display: flex;
     max-height: 100%;
     flex-direction: column;
@@ -495,29 +496,29 @@
     padding-bottom: 0 !important;
   }
   .auth-mobile-hero {
-    margin-bottom: clamp(0.85rem, 1.7vh, 1.6rem) !important;
+    margin-bottom: clamp(1.1rem, 2.4vh, 2rem) !important;
   }
   .auth-mobile-logo-shell {
-    margin-bottom: clamp(0.55rem, 1.2vh, 1.05rem) !important;
+    margin-bottom: clamp(0.75rem, 1.7vh, 1.3rem) !important;
     max-width: min(440px, 84vw) !important;
   }
   .auth-mobile-logo {
-    max-height: min(168px, 15vh);
+    max-height: min(198px, 18vh);
   }
   .auth-card-surface {
-    padding: clamp(0.95rem, 1.8vh, 1.35rem) !important;
+    padding: clamp(1.15rem, 2.4vh, 1.85rem) !important;
   }
   .auth-form-stack {
-    row-gap: clamp(0.7rem, 1.35vh, 1rem) !important;
+    row-gap: clamp(0.8rem, 1.7vh, 1.1rem) !important;
   }
   .auth-oauth-section {
     padding-top: 0 !important;
   }
   .auth-mobile-features {
-    margin-top: clamp(0.7rem, 1.4vh, 1rem) !important;
+    margin-top: clamp(0.95rem, 2vh, 1.4rem) !important;
   }
   .auth-feature-detail {
-    padding: 0.75rem 1rem !important;
+    padding: 0.85rem 1rem !important;
   }
   .page-transition-shell {
     min-height: 100%;
@@ -1518,6 +1519,20 @@ html {
 
   .auth-mobile-panel {
     width: min(100%, clamp(21rem, 28vw, 32rem));
+  }
+}
+
+@media (min-height: 900px) {
+  .auth-mobile-panel {
+    min-height: clamp(46rem, 86vh, 56rem);
+  }
+
+  .auth-mobile-logo {
+    max-height: min(220px, 20vh);
+  }
+
+  .auth-card-surface {
+    padding: clamp(1.35rem, 2.8vh, 2rem) !important;
   }
 }
 
