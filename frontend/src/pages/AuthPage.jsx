@@ -247,13 +247,20 @@ export default function AuthPage() {
   const formRef = useRef(null)
   const shellRef = useRef(null)
   const cardScrollRef = useRef(null)
+  const heroRef = useRef(null)
+  const cardRef = useRef(null)
   const pointerX = useMotionValue(50)
   const pointerY = useMotionValue(24)
   const isRegister = mode === 'register'
   const registerCaptchaReady = !isRegister || (!!registerCaptcha?.token && !captchaLoading)
   const authLayoutTransition = { type: 'spring', stiffness: 188, damping: 24, mass: 0.94 }
   const authRevealTransition = { duration: 0.26, ease: [0.22, 1, 0.36, 1] }
-  const registerFieldTransition = { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
+  const registerFieldTransition = {
+    height: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+    opacity: { duration: 0.16, ease: 'easeOut' },
+    y: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+  }
+  const [registerCardMaxHeight, setRegisterCardMaxHeight] = useState(null)
 
   const featureCards = [
     {
@@ -387,6 +394,50 @@ export default function AuthPage() {
     cardScrollRef.current?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' })
   }, [mode])
 
+  useEffect(() => {
+    if (!isRegister) {
+      setRegisterCardMaxHeight(null)
+      return undefined
+    }
+
+    const updateRegisterCardHeight = () => {
+      const shellElement = shellRef.current
+      const cardElement = cardRef.current
+      const heroElement = heroRef.current
+      if (!shellElement || !cardElement || !heroElement) return
+
+      const shellRect = shellElement.getBoundingClientRect()
+      const cardRect = cardElement.getBoundingClientRect()
+      const heroRect = heroElement.getBoundingClientRect()
+      const shellPaddingBottom = parseFloat(window.getComputedStyle(shellElement).paddingBottom || '0') || 0
+      const heroGap = Math.max(12, cardRect.top - heroRect.bottom)
+      const availableHeight = Math.floor(shellRect.bottom - cardRect.top - shellPaddingBottom)
+      const nextMaxHeight = Math.max(360, availableHeight - Math.max(0, heroGap * 0.18))
+      setRegisterCardMaxHeight((current) => (current === nextMaxHeight ? current : nextMaxHeight))
+    }
+
+    updateRegisterCardHeight()
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => updateRegisterCardHeight())
+      : null
+
+    if (resizeObserver) {
+      if (shellRef.current) resizeObserver.observe(shellRef.current)
+      if (heroRef.current) resizeObserver.observe(heroRef.current)
+      if (cardRef.current) resizeObserver.observe(cardRef.current)
+    }
+
+    window.addEventListener('resize', updateRegisterCardHeight)
+    window.visualViewport?.addEventListener?.('resize', updateRegisterCardHeight)
+
+    return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', updateRegisterCardHeight)
+      window.visualViewport?.removeEventListener?.('resize', updateRegisterCardHeight)
+    }
+  }, [isRegister])
+
   const submit = async (event) => {
     event.preventDefault()
     setError('')
@@ -477,7 +528,7 @@ export default function AuthPage() {
     <div
       ref={shellRef}
       className="auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8"
-      data-scrollable="false"
+      data-scrollable={isRegister ? 'true' : 'false'}
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >
@@ -491,7 +542,7 @@ export default function AuthPage() {
           className={`auth-mobile-panel w-full max-w-[min(30rem,100%)] pt-4 sm:pt-6 md:pt-10 ${isRegister ? 'is-register' : ''}`}
         >
           {/* Logo section */}
-            <div className="auth-mobile-hero text-center mb-6 sm:mb-8">
+            <div ref={heroRef} className="auth-mobile-hero text-center mb-6 sm:mb-8">
               <motion.div
                 initial={{ opacity: 0, scale: 0.92, y: 18 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -562,12 +613,14 @@ export default function AuthPage() {
             </motion.div>
           ) : (
           <motion.div
+            ref={cardRef}
             layout
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ y: -6, scale: 1.006 }}
             className={`auth-mobile-card gradient-border ${isRegister ? 'is-register' : ''}`}
+            style={isRegister && registerCardMaxHeight ? { '--auth-register-card-max': `${registerCardMaxHeight}px` } : undefined}
           >
             <div className={`auth-card-surface bg-surface-1 rounded-2xl p-5 sm:p-8 ${isRegister ? 'is-register' : ''}`}>
               {/* Tab switcher */}
@@ -604,31 +657,91 @@ export default function AuthPage() {
                   className="auth-form-stack space-y-4"
                   autoComplete="on"
                 >
-                  <motion.div
-                    initial={false}
-                    animate={isRegister
-                      ? { height: 'auto', opacity: 1, y: 0, marginBottom: 0 }
-                      : { height: 0, opacity: 0, y: -10, marginBottom: 0 }}
-                    transition={registerFieldTransition}
-                    className="overflow-hidden"
-                    style={{ pointerEvents: isRegister ? 'auto' : 'none' }}
-                  >
-                    <div>
-                      <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
-                      <input
-                        className="input-field"
-                        placeholder={t('auth.usernamePlaceholder')}
-                        value={form.username}
-                        onChange={(event) => set('username', event.target.value)}
-                        required={isRegister}
-                        minLength={2}
-                        maxLength={32}
-                        name="username"
-                        autoComplete="nickname"
-                        inputMode="text"
-                      />
-                    </div>
-                  </motion.div>
+                  <AnimatePresence initial={false}>
+                    {isRegister && (
+                      <motion.div
+                        key="register-only-fields"
+                        layout
+                        initial={{ height: 0, opacity: 0, y: -10 }}
+                        animate={{ height: 'auto', opacity: 1, y: 0 }}
+                        exit={{ height: 0, opacity: 0, y: -10 }}
+                        transition={registerFieldTransition}
+                        className="overflow-hidden"
+                      >
+                        <div className="space-y-4 pb-0.5">
+                          <div>
+                            <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
+                            <input
+                              className="input-field"
+                              placeholder={t('auth.usernamePlaceholder')}
+                              value={form.username}
+                              onChange={(event) => set('username', event.target.value)}
+                              required={isRegister}
+                              minLength={2}
+                              maxLength={32}
+                              name="username"
+                              autoComplete="nickname"
+                              inputMode="text"
+                            />
+                          </div>
+
+                          <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 sm:p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-xs font-mono uppercase tracking-[0.22em] text-white/35">CAPTCHA</div>
+                                <div className="text-sm text-white/70">
+                                  {registerCaptcha?.prompt || 'Recopie le code CAPTCHA pour continuer'}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => loadRegisterCaptcha({ force: true })}
+                                disabled={captchaLoading}
+                                className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/60 transition hover:border-neon-cyan/30 hover:text-neon-cyan disabled:opacity-50"
+                              >
+                                {captchaLoading ? 'Chargement...' : 'Recharger'}
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => loadRegisterCaptcha({ force: true })}
+                              disabled={captchaLoading}
+                              className="block w-full overflow-hidden rounded-2xl border border-neon-cyan/20 bg-[#08131f] p-2 transition hover:border-neon-cyan/40 disabled:opacity-70"
+                            >
+                              {registerCaptcha?.image_data_url ? (
+                                <img
+                                  src={registerCaptcha.image_data_url}
+                                  alt="CAPTCHA"
+                                  className="h-28 w-full rounded-xl object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-white/[0.08] text-sm text-white/35">
+                                  {captchaLoading ? 'Generation du CAPTCHA...' : 'CAPTCHA indisponible'}
+                                </div>
+                              )}
+                            </button>
+
+                            <div>
+                              <label className="mb-1.5 block text-xs font-mono uppercase tracking-wider text-white/40">
+                                Code CAPTCHA
+                              </label>
+                              <input
+                                className="input-field"
+                                placeholder="Recopie le code CAPTCHA"
+                                value={form.captchaAnswer}
+                                onChange={(event) => set('captchaAnswer', event.target.value)}
+                                required={isRegister}
+                                autoComplete="one-time-code"
+                                inputMode="numeric"
+                                maxLength={8}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <motion.div layout="position">
                     <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.email')}</label>
@@ -666,70 +779,6 @@ export default function AuthPage() {
                       >
                         {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
-                    </div>
-                  </motion.div>
-
-                  <motion.div
-                    initial={false}
-                    animate={isRegister
-                      ? { height: 'auto', opacity: 1, y: 0, marginBottom: 0 }
-                      : { height: 0, opacity: 0, y: -10, marginBottom: 0 }}
-                    transition={registerFieldTransition}
-                    className="overflow-hidden"
-                    style={{ pointerEvents: isRegister ? 'auto' : 'none' }}
-                  >
-                    <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 sm:p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-xs font-mono uppercase tracking-[0.22em] text-white/35">CAPTCHA</div>
-                          <div className="text-sm text-white/70">
-                            {registerCaptcha?.prompt || 'Recopie le code CAPTCHA pour continuer'}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => loadRegisterCaptcha({ force: true })}
-                          disabled={captchaLoading}
-                          className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/60 transition hover:border-neon-cyan/30 hover:text-neon-cyan disabled:opacity-50"
-                        >
-                          {captchaLoading ? 'Chargement...' : 'Recharger'}
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => loadRegisterCaptcha({ force: true })}
-                        disabled={captchaLoading}
-                        className="block w-full overflow-hidden rounded-2xl border border-neon-cyan/20 bg-[#08131f] p-2 transition hover:border-neon-cyan/40 disabled:opacity-70"
-                      >
-                        {registerCaptcha?.image_data_url ? (
-                          <img
-                            src={registerCaptcha.image_data_url}
-                            alt="CAPTCHA"
-                            className="h-28 w-full rounded-xl object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-white/[0.08] text-sm text-white/35">
-                            {captchaLoading ? 'Generation du CAPTCHA...' : 'CAPTCHA indisponible'}
-                          </div>
-                        )}
-                      </button>
-
-                      <div>
-                        <label className="mb-1.5 block text-xs font-mono uppercase tracking-wider text-white/40">
-                          Code CAPTCHA
-                        </label>
-                        <input
-                          className="input-field"
-                          placeholder="Recopie le code CAPTCHA"
-                          value={form.captchaAnswer}
-                          onChange={(event) => set('captchaAnswer', event.target.value)}
-                          required={isRegister}
-                          autoComplete="one-time-code"
-                          inputMode="numeric"
-                          maxLength={8}
-                        />
-                      </div>
                     </div>
                   </motion.div>
 

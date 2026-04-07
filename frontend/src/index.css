@@ -478,8 +478,8 @@
     padding-bottom: 0 !important;
   }
   .auth-mobile-panel.is-register {
-    height: calc(var(--app-height) - max(env(safe-area-inset-top), 10px) - max(env(safe-area-inset-bottom), 10px) - 1.5rem);
-    max-height: calc(var(--app-height) - max(env(safe-area-inset-top), 10px) - max(env(safe-area-inset-bottom), 10px) - 1.5rem);
+    height: auto;
+    max-height: none;
   }
   .auth-mobile-hero {
     flex-shrink: 0;
@@ -491,17 +491,18 @@
     margin-top: 0;
   }
   .auth-mobile-card.is-register {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
     display: flex;
     overflow: hidden;
+    max-height: var(--auth-register-card-max, calc(var(--app-height) - max(env(safe-area-inset-top), 10px) - max(env(safe-area-inset-bottom), 10px) - 8rem));
   }
   .auth-mobile-logo-shell {
     margin-bottom: clamp(0.75rem, 1.7vh, 1.3rem) !important;
     max-width: min(480px, 88vw) !important;
   }
   .auth-mobile-logo {
-    max-height: min(214px, 20vh);
+    max-height: min(236px, 24vh);
   }
   .auth-card-surface {
     min-height: auto;
@@ -509,10 +510,11 @@
     padding: clamp(1.15rem, 2.4vh, 1.85rem) !important;
   }
   .auth-card-surface.is-register {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
+    max-height: inherit;
   }
   .auth-card-scrollzone {
     display: flex;
@@ -521,6 +523,7 @@
   }
   .auth-card-scrollzone.is-register {
     flex: 1 1 auto;
+    max-height: calc(var(--auth-register-card-max, calc(var(--app-height) * 0.7)) - clamp(2rem, 5vh, 4rem));
     overflow-y: auto;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
@@ -1519,6 +1522,14 @@ html {
     border-radius: 18px;
   }
 
+  .auth-mobile-logo-shell {
+    max-width: min(520px, 58vw) !important;
+  }
+
+  .auth-mobile-logo {
+    max-height: min(280px, 28vh);
+  }
+
   /* 2-col grids on tablet */
   .md\:grid-cols-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1560,7 +1571,7 @@ html {
   }
 }
 
-@media (max-height: 920px) {
+@media (max-width: 767px) and (max-height: 920px) {
   .auth-page-shell {
     padding-top: max(env(safe-area-inset-top), 10px) !important;
     padding-bottom: max(env(safe-area-inset-bottom), 8px) !important;
@@ -1591,7 +1602,7 @@ html {
   }
 }
 
-@media (max-height: 780px) {
+@media (max-width: 767px) and (max-height: 780px) {
   .auth-mobile-hero {
     margin-bottom: 0.6rem !important;
   }
