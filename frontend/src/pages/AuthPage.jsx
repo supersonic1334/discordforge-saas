@@ -240,6 +240,7 @@ export default function AuthPage() {
   const [accessChecked, setAccessChecked] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const [oauthProviders, setOauthProviders] = useState({ discord: false, google: false })
+  const [compactAuthMode, setCompactAuthMode] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const { login, register, isLoading } = useAuthStore()
@@ -389,6 +390,26 @@ export default function AuthPage() {
   }, [mode])
 
   useEffect(() => {
+    const updateCompactAuthMode = () => {
+      if (typeof window === 'undefined') return
+      const nextCompactMode = (
+        (window.innerWidth <= 1024 && window.innerHeight <= 940)
+        || (window.innerWidth <= 840)
+      )
+      setCompactAuthMode((current) => (current === nextCompactMode ? current : nextCompactMode))
+    }
+
+    updateCompactAuthMode()
+    window.addEventListener('resize', updateCompactAuthMode)
+    window.visualViewport?.addEventListener?.('resize', updateCompactAuthMode)
+
+    return () => {
+      window.removeEventListener('resize', updateCompactAuthMode)
+      window.visualViewport?.removeEventListener?.('resize', updateCompactAuthMode)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!isRegister) {
       setRegisterCardMaxHeight(null)
       return undefined
@@ -521,19 +542,19 @@ export default function AuthPage() {
     return (
     <div
       ref={shellRef}
-      className="auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8"
-      data-scrollable={isRegister ? 'true' : 'false'}
+      className={`auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8 ${compactAuthMode ? 'is-compact-auth' : ''}`}
+      data-scrollable={isRegister || compactAuthMode ? 'true' : 'false'}
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >
       <AuthSnowBackdrop pointerX={pointerX} pointerY={pointerY} />
 
-      <div className="auth-page-frame auth-mobile-shell relative z-10 mx-auto flex w-full max-w-7xl flex-col items-center gap-6 md:gap-10">
+      <div className={`auth-page-frame auth-mobile-shell relative z-10 mx-auto flex w-full max-w-7xl flex-col items-center gap-6 md:gap-10 ${compactAuthMode ? 'is-compact-auth' : ''}`}>
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className={`auth-mobile-panel w-full max-w-[min(30rem,100%)] pt-4 sm:pt-6 md:pt-10 ${isRegister ? 'is-register' : ''}`}
+          className={`auth-mobile-panel w-full max-w-[min(30rem,100%)] pt-4 sm:pt-6 md:pt-10 ${isRegister ? 'is-register' : ''} ${compactAuthMode ? 'is-compact' : ''}`}
         >
           {/* Logo section */}
             <div ref={heroRef} className="auth-mobile-hero text-center mb-6 sm:mb-8">

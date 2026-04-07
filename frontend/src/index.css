@@ -465,6 +465,17 @@
     padding-top: clamp(0.5rem, 1.2vh, 1rem);
     padding-bottom: clamp(0.5rem, 1.2vh, 1rem);
   }
+  .auth-page-shell.is-compact-auth {
+    align-items: flex-start;
+    justify-content: flex-start;
+    overflow-y: auto !important;
+  }
+  .auth-page-frame.is-compact-auth {
+    justify-content: flex-start;
+    gap: clamp(0.5rem, 1vh, 0.9rem);
+    padding-top: max(env(safe-area-inset-top), 0.6rem);
+    padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
+  }
   .auth-mobile-panel {
     width: min(100%, clamp(20rem, 92vw, 30rem));
     min-height: auto;
@@ -481,9 +492,17 @@
     height: auto;
     max-height: none;
   }
+  .auth-mobile-panel.is-compact {
+    width: min(100%, clamp(20rem, 90vw, 46rem));
+    max-height: none;
+    gap: 0.7rem;
+  }
   .auth-mobile-hero {
     flex-shrink: 0;
     margin-bottom: clamp(1.1rem, 2.4vh, 2rem) !important;
+  }
+  .auth-mobile-panel.is-compact .auth-mobile-hero {
+    margin-bottom: 0.55rem !important;
   }
   .auth-mobile-card {
     flex: 0 0 auto;
@@ -505,14 +524,24 @@
     margin-bottom: clamp(0.75rem, 1.7vh, 1.3rem) !important;
     max-width: min(480px, 88vw) !important;
   }
+  .auth-mobile-panel.is-compact .auth-mobile-logo-shell {
+    max-width: min(320px, 46vw) !important;
+    margin-bottom: 0.35rem !important;
+  }
   .auth-mobile-logo {
     max-height: min(236px, 24vh);
+  }
+  .auth-mobile-panel.is-compact .auth-mobile-logo {
+    max-height: min(126px, 16vh);
   }
   .auth-card-surface {
     min-height: auto;
     flex: 0 0 auto;
     width: 100%;
     padding: clamp(1.15rem, 2.4vh, 1.85rem) !important;
+  }
+  .auth-mobile-panel.is-compact .auth-card-surface {
+    padding: 0.95rem !important;
   }
   .auth-card-surface.is-register {
     flex: 0 1 auto;
@@ -542,12 +571,18 @@
   .auth-form-stack {
     row-gap: clamp(0.8rem, 1.7vh, 1.1rem) !important;
   }
+  .auth-mobile-panel.is-compact .auth-form-stack {
+    row-gap: 0.65rem !important;
+  }
   .auth-oauth-section {
     padding-top: 0 !important;
   }
   .auth-mobile-features {
     margin-top: clamp(0.95rem, 2vh, 1.4rem) !important;
     padding-top: 0;
+  }
+  .auth-mobile-panel.is-compact .auth-mobile-features {
+    display: none !important;
   }
   .auth-feature-detail {
     padding: 0.85rem 1rem !important;
