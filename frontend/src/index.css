@@ -491,10 +491,13 @@
     margin-top: 0;
     width: 100%;
   }
+  .auth-mobile-card.gradient-border {
+    background: transparent;
+  }
   .auth-mobile-card.is-register {
     flex: 0 1 auto;
     min-height: 0;
-    display: flex;
+    display: block;
     overflow: hidden;
     max-height: var(--auth-register-card-max, calc(var(--app-height) - max(env(safe-area-inset-top), 10px) - max(env(safe-area-inset-bottom), 10px) - 8rem));
   }
@@ -514,8 +517,7 @@
   .auth-card-surface.is-register {
     flex: 0 1 auto;
     min-height: 0;
-    display: flex;
-    flex-direction: column;
+    display: block;
     max-height: inherit;
   }
   .auth-card-scrollzone {
@@ -525,7 +527,7 @@
     width: 100%;
   }
   .auth-card-scrollzone.is-register {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     max-height: calc(var(--auth-register-card-max, calc(var(--app-height) * 0.7)) - clamp(2rem, 5vh, 4rem));
     overflow-y: auto;
     overscroll-behavior-y: contain;

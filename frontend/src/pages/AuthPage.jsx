@@ -651,9 +651,9 @@ export default function AuthPage() {
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
                       key={mode}
-                      initial={{ opacity: 0, y: 8, scale: 0.995 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -6, scale: 0.995 }}
+                      initial={{ opacity: 0, scale: 0.992 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.992 }}
                       transition={authModeTransition}
                       className="w-full space-y-4"
                     >
