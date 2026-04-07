@@ -669,15 +669,14 @@ export default function AuthPage() {
                   className="auth-form-stack w-full space-y-4"
                   autoComplete="on"
                 >
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.div
-                      key={mode}
-                      initial={{ opacity: 0, scale: 0.992 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.992 }}
-                      transition={authModeTransition}
-                      className="w-full space-y-4"
-                    >
+                  <motion.div
+                    key={mode}
+                    initial={{ opacity: 0, scale: 0.992, y: 4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={authModeTransition}
+                    className="w-full space-y-4"
+                    style={{ transformOrigin: '50% 0%' }}
+                  >
                       {isRegister && (
                         <>
                           <div>
@@ -850,8 +849,7 @@ export default function AuthPage() {
                           </div>
                         </div>
                       )}
-                    </motion.div>
-                  </AnimatePresence>
+                  </motion.div>
                 </motion.form>
 
                 {/* Feature cards */}
