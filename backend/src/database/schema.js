@@ -623,6 +623,52 @@ const SCHEMA = [
     updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  `CREATE TABLE IF NOT EXISTS guild_voice_generators (
+    id                TEXT PRIMARY KEY,
+    guild_id          TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    channel_mode      TEXT NOT NULL DEFAULT 'create' CHECK(channel_mode IN ('existing','create')),
+    creator_channel_id TEXT NOT NULL DEFAULT '',
+    creator_channel_name TEXT NOT NULL DEFAULT 'Creer ta voc',
+    creator_category_id TEXT NOT NULL DEFAULT '',
+    control_title     TEXT NOT NULL DEFAULT 'Ta vocale temporaire',
+    control_description TEXT NOT NULL DEFAULT '',
+    panel_color       TEXT NOT NULL DEFAULT '#22c55e',
+    panel_thumbnail_url TEXT NOT NULL DEFAULT '',
+    panel_image_url   TEXT NOT NULL DEFAULT '',
+    room_name_template TEXT NOT NULL DEFAULT 'Vocal de {username}',
+    default_user_limit INTEGER NOT NULL DEFAULT 0,
+    default_region    TEXT NOT NULL DEFAULT 'auto',
+    delete_when_empty INTEGER NOT NULL DEFAULT 1,
+    allow_claim       INTEGER NOT NULL DEFAULT 1,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(guild_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS guild_temp_voice_rooms (
+    id                TEXT PRIMARY KEY,
+    guild_id          TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    generator_id      TEXT NOT NULL REFERENCES guild_voice_generators(id) ON DELETE CASCADE,
+    owner_discord_user_id TEXT NOT NULL,
+    owner_username    TEXT NOT NULL DEFAULT '',
+    source_channel_id TEXT NOT NULL DEFAULT '',
+    channel_id        TEXT NOT NULL,
+    control_message_id TEXT NOT NULL DEFAULT '',
+    name              TEXT NOT NULL DEFAULT '',
+    user_limit        INTEGER NOT NULL DEFAULT 0,
+    rtc_region        TEXT NOT NULL DEFAULT 'auto',
+    is_locked         INTEGER NOT NULL DEFAULT 0,
+    is_hidden         INTEGER NOT NULL DEFAULT 0,
+    allowed_user_ids  TEXT NOT NULL DEFAULT '[]',
+    blocked_user_ids  TEXT NOT NULL DEFAULT '[]',
+    status            TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed')),
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at         TEXT,
+    UNIQUE(channel_id)
+  )`,
+
   // ────────────────────────────────────────────────────────────────────────────
   // SITE REVIEWS
   // ────────────────────────────────────────────────────────────────────────────
@@ -736,6 +782,9 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_guild_captcha_configs_guild_id ON guild_captcha_configs(guild_id)`,
   `CREATE INDEX IF NOT EXISTS idx_guild_captcha_challenges_lookup ON guild_captcha_challenges(guild_id, discord_user_id, status, expires_at)`,
   `CREATE INDEX IF NOT EXISTS idx_guild_captcha_challenges_config ON guild_captcha_challenges(config_id, status, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_voice_generators_guild_id ON guild_voice_generators(guild_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_temp_voice_rooms_lookup ON guild_temp_voice_rooms(guild_id, channel_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_guild_temp_voice_rooms_owner ON guild_temp_voice_rooms(guild_id, owner_discord_user_id, status, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_site_reviews_updated_at ON site_reviews(updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_user_id ON access_blocks(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_access_blocks_lookup ON access_blocks(block_type, value_hash, is_active)`,

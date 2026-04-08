@@ -66,6 +66,20 @@ const {
   validateCaptchaChallenge,
 } = require('../services/captchaGeneratorService');
 const { buildCaptchaPngAttachment } = require('../services/captchaImageService');
+const {
+  getGuildVoiceGenerator,
+  getGuildVoiceGeneratorById,
+  getGuildVoiceGeneratorForDiscord,
+  recordPublishedVoiceGenerator,
+  getTempVoiceRoomById,
+  getTempVoiceRoomByChannelId,
+  getActiveTempVoiceRoomByOwner,
+  createTempVoiceRoomEntry,
+  updateTempVoiceRoom,
+  closeTempVoiceRoom,
+  buildVoiceRoomName,
+  SUPPORTED_REGIONS,
+} = require('../services/voiceGeneratorService');
 const config = require('../config');
 
 // ── Status enum ───────────────────────────────────────────────────────────────
@@ -86,6 +100,8 @@ const MAX_TICKET_TRANSCRIPT_BYTES = 7_500_000;
 const MAX_TICKET_TRANSCRIPT_MESSAGES = 5000;
 const CAPTCHA_GENERATOR_PREFIX = 'captcha';
 const CAPTCHA_ANSWER_INPUT_ID = 'captcha_answer';
+const VOICE_GENERATOR_PREFIX = 'voicegen';
+const VOICE_MODAL_INPUT_ID = 'voice_value';
 const CAPTCHA_EMOJI_CHOICES = Object.freeze([
   { value: 'shield', emoji: '🛡️', label: 'Bouclier' },
   { value: 'spark', emoji: '✨', label: 'Étincelle' },
@@ -110,6 +126,22 @@ const CAPTCHA_WORD_CHOICES = Object.freeze([
   'PULSE',
   'EMBER',
 ]);
+const VOICE_REGION_LABELS = Object.freeze({
+  auto: 'Auto',
+  rotterdam: 'Europe',
+  'us-east': 'US East',
+  'us-west': 'US West',
+  'us-central': 'US Central',
+  'us-south': 'US South',
+  singapore: 'Singapore',
+  japan: 'Japan',
+  hongkong: 'Hong Kong',
+  india: 'India',
+  sydney: 'Sydney',
+  brazil: 'Brazil',
+  southafrica: 'South Africa',
+  russia: 'Russia',
+});
 
 function parseJsonArray(rawValue) {
   try {
@@ -987,6 +1019,7 @@ class BotProcess extends EventEmitter {
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.GuildBans,
@@ -1027,6 +1060,7 @@ class BotProcess extends EventEmitter {
     c.on(Events.InteractionCreate, (interaction) => this._onInteraction(interaction));
     c.on(Events.GuildMemberAdd, (member) => this._onMemberAdd(member));
     c.on(Events.GuildMemberRemove, (member) => this._onMemberRemove(member));
+    c.on(Events.VoiceStateUpdate, (oldState, newState) => this._onVoiceStateUpdate(oldState, newState));
     c.on(Events.MessageDelete, (msg) => this._onMessageDelete(msg));
     c.on(Events.MessageBulkDelete, (messages) => this._onMessageBulkDelete(messages));
     c.on(Events.MessageUpdate, (oldMsg, newMsg) => this._onMessageUpdate(oldMsg, newMsg));
@@ -2369,6 +2403,721 @@ class BotProcess extends EventEmitter {
     }, TICKET_DELETE_DELAY_MS);
 
     return true;
+  }
+
+  _buildVoiceGeneratorCustomId(type, ...args) {
+    return [VOICE_GENERATOR_PREFIX, type, ...args.map((item) => String(item || '').trim())]
+      .filter(Boolean)
+      .join(':');
+  }
+
+  _parseVoiceGeneratorCustomId(customId) {
+    const parts = String(customId || '').split(':').filter(Boolean);
+    if (parts[0] !== VOICE_GENERATOR_PREFIX || parts.length < 2) return null;
+    return {
+      type: parts[1],
+      args: parts.slice(2),
+    };
+  }
+
+  _sanitizeVoiceChannelName(value, fallback = 'vocale-temporaire') {
+    const normalized = String(value || fallback)
+      .trim()
+      .replace(/[^\p{L}\p{N}\- _]/gu, '')
+      .replace(/\s+/g, ' ')
+      .slice(0, 90);
+
+    return normalized || fallback;
+  }
+
+  _buildVoiceGeneratorAssets(configRow, prefix = 'voice-panel') {
+    const files = [];
+    let thumbnailUrl = String(configRow?.panel_thumbnail_url || '').trim();
+    let imageUrl = String(configRow?.panel_image_url || '').trim();
+
+    const thumbnailAsset = parseImageDataUrl(thumbnailUrl);
+    if (thumbnailAsset) {
+      const fileName = `${prefix}-thumb.${thumbnailAsset.extension}`;
+      files.push(new AttachmentBuilder(thumbnailAsset.buffer, { name: fileName }));
+      thumbnailUrl = `attachment://${fileName}`;
+    }
+
+    const imageAsset = parseImageDataUrl(imageUrl);
+    if (imageAsset) {
+      const fileName = `${prefix}-banner.${imageAsset.extension}`;
+      files.push(new AttachmentBuilder(imageAsset.buffer, { name: fileName }));
+      imageUrl = `attachment://${fileName}`;
+    }
+
+    return {
+      files,
+      thumbnailUrl,
+      imageUrl,
+    };
+  }
+
+  _buildVoiceRegionOptions() {
+    return Object.entries(VOICE_REGION_LABELS)
+      .filter(([value]) => SUPPORTED_REGIONS.has(value))
+      .slice(0, 10)
+      .map(([value, label]) => new StringSelectMenuOptionBuilder()
+        .setLabel(label)
+        .setValue(`region__${value}`)
+        .setDescription(value === 'auto' ? 'Laisser Discord choisir automatiquement' : `Basculer la vocale sur ${label}`));
+  }
+
+  _buildVoiceControlComponents(room, configRow) {
+    const settingsMenu = new StringSelectMenuBuilder()
+      .setCustomId(this._buildVoiceGeneratorCustomId('settings', room.id))
+      .setPlaceholder('Regler la vocale')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('Renommer').setValue('rename').setDescription('Changer le nom de la vocale'),
+        new StringSelectMenuOptionBuilder().setLabel('Limite').setValue('limit').setDescription('Modifier la limite de membres'),
+        new StringSelectMenuOptionBuilder().setLabel('Lock').setValue('lock').setDescription('Fermer la connexion publique'),
+        new StringSelectMenuOptionBuilder().setLabel('Unlock').setValue('unlock').setDescription('Rouvrir la connexion publique'),
+        new StringSelectMenuOptionBuilder().setLabel('Ghost').setValue('ghost').setDescription('Masquer la vocale aux autres'),
+        new StringSelectMenuOptionBuilder().setLabel('Unghost').setValue('unghost').setDescription('Rendre la vocale visible'),
+        new StringSelectMenuOptionBuilder().setLabel('Supprimer').setValue('delete').setDescription('Supprimer la vocale maintenant'),
+        ...(configRow?.allow_claim ? [new StringSelectMenuOptionBuilder().setLabel('Claim').setValue('claim').setDescription('Recuperer la vocale si le createur est parti')] : [])
+      );
+
+    const permissionsMenu = new StringSelectMenuBuilder()
+      .setCustomId(this._buildVoiceGeneratorCustomId('permissions', room.id))
+      .setPlaceholder('Gerer les permissions')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('Inviter').setValue('invite').setDescription('Autoriser un membre dans la vocale'),
+        new StringSelectMenuOptionBuilder().setLabel('Reject').setValue('reject').setDescription('Bloquer ou expulser un membre'),
+        new StringSelectMenuOptionBuilder().setLabel('Transfer').setValue('transfer').setDescription('Transmettre la propriete')
+      );
+
+    const regionMenu = new StringSelectMenuBuilder()
+      .setCustomId(this._buildVoiceGeneratorCustomId('region', room.id))
+      .setPlaceholder(`Region active: ${VOICE_REGION_LABELS[room?.rtc_region || 'auto'] || 'Auto'}`)
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(this._buildVoiceRegionOptions());
+
+    return [
+      new ActionRowBuilder().addComponents(settingsMenu),
+      new ActionRowBuilder().addComponents(permissionsMenu),
+      new ActionRowBuilder().addComponents(regionMenu),
+    ];
+  }
+
+  _buildVoiceRoomControlPayload(room, configRow, guild, channel) {
+    const assets = this._buildVoiceGeneratorAssets(configRow, `voice-room-${room.id}`);
+    const ownerMention = room.owner_discord_user_id ? `<@${room.owner_discord_user_id}>` : 'Inconnu';
+    const memberCount = channel?.members?.size || 0;
+    const embed = {
+      author: {
+        name: guild?.name ? `${guild.name} • Vocal temporaire` : 'Vocal temporaire',
+        icon_url: guild?.iconURL?.({ size: 128 }) || undefined,
+      },
+      title: String(configRow?.control_title || 'Ta vocale temporaire').slice(0, 256),
+      description: String(configRow?.control_description || 'Utilise les menus ci-dessous pour gerer ta vocale temporaire.').slice(0, 4000),
+      color: this._hexColorToInt(configRow?.panel_color, 0x22c55e),
+      fields: [
+        {
+          name: 'Owner',
+          value: ownerMention,
+          inline: true,
+        },
+        {
+          name: 'Membres',
+          value: `${memberCount}/${room.user_limit || 'illimite'}`,
+          inline: true,
+        },
+        {
+          name: 'Etat',
+          value: [
+            room.is_locked ? 'Lock' : 'Ouvert',
+            room.is_hidden ? 'Ghost' : 'Visible',
+            VOICE_REGION_LABELS[room.rtc_region || 'auto'] || 'Auto',
+          ].join(' • '),
+          inline: true,
+        },
+        {
+          name: 'Controles',
+          value: 'Rename, limit, lock, unlock, ghost, unghost, invite, reject, transfer et claim sont disponibles ci-dessous.',
+        },
+      ],
+      footer: {
+        text: 'Les controles directs passent par le bot, pas par les reglages Discord natifs.',
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    if (assets.thumbnailUrl) embed.thumbnail = { url: assets.thumbnailUrl };
+    if (assets.imageUrl) embed.image = { url: assets.imageUrl };
+
+    return {
+      embeds: [embed],
+      components: this._buildVoiceControlComponents(room, configRow),
+      files: assets.files,
+    };
+  }
+
+  async _resolveVoiceGeneratorPublishChannel(guild, configRow) {
+    if (!guild) {
+      throw new Error('Serveur vocal introuvable.');
+    }
+
+    const desiredParentId = normalizeSnowflake(configRow?.creator_category_id);
+    const parent = desiredParentId
+      ? (guild.channels.cache.get(desiredParentId) || await guild.channels.fetch(desiredParentId).catch(() => null))
+      : null;
+
+    if (configRow?.channel_mode === 'create') {
+      const desiredName = this._sanitizeVoiceChannelName(configRow?.creator_channel_name, 'Creer ta voc');
+      const existing = guild.channels.cache.find((channel) => (
+        (channel?.type === ChannelType.GuildVoice || channel?.type === ChannelType.GuildStageVoice)
+        && this._sanitizeVoiceChannelName(channel?.name) === desiredName
+        && (!desiredParentId || channel?.parentId === desiredParentId)
+      ));
+
+      if (existing) return existing;
+
+      if (!guild.members.me?.permissions?.has(PermissionFlagsBits.ManageChannels)) {
+        throw new Error('Le bot doit avoir la permission de gerer les salons pour creer le vocal createur.');
+      }
+
+      return guild.channels.create({
+        name: desiredName,
+        type: ChannelType.GuildVoice,
+        parent: parent?.type === ChannelType.GuildCategory ? parent.id : undefined,
+        userLimit: 0,
+        reason: 'Creation du vocal createur',
+      });
+    }
+
+    const existingId = normalizeSnowflake(configRow?.creator_channel_id);
+    const channel = existingId
+      ? (guild.channels.cache.get(existingId) || await guild.channels.fetch(existingId).catch(() => null))
+      : null;
+
+    if (!channel || (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice)) {
+      throw new Error('Choisis un vocal createur valide.');
+    }
+
+    return channel;
+  }
+
+  async publishVoiceGeneratorPanel(discordGuildId) {
+    const guild = this.client?.guilds?.cache?.get(discordGuildId)
+      || await this.client?.guilds?.fetch?.(discordGuildId).catch(() => null);
+    if (!guild) {
+      throw new Error('Serveur Discord introuvable pour publier le createur vocal');
+    }
+
+    const internalGuildId = this._resolveInternalGuildId(discordGuildId);
+    if (!internalGuildId) {
+      throw new Error('Serveur interne introuvable pour ce systeme vocal');
+    }
+
+    const configRow = getGuildVoiceGeneratorForDiscord(this.userId, discordGuildId);
+    if (!configRow?.id || !configRow.enabled) {
+      throw new Error('Le systeme vocal est desactive.');
+    }
+
+    const creatorChannel = await this._resolveVoiceGeneratorPublishChannel(guild, configRow);
+    if (!creatorChannel?.viewable) {
+      throw new Error('Le bot ne peut pas voir le vocal createur.');
+    }
+
+    recordPublishedVoiceGenerator(internalGuildId, creatorChannel.id);
+
+    return {
+      channel_id: creatorChannel.id,
+      channel_name: creatorChannel.name,
+    };
+  }
+
+  async _resolveVoiceChannelById(guild, channelId) {
+    const normalizedChannelId = normalizeSnowflake(channelId);
+    if (!guild || !normalizedChannelId) return null;
+    return guild.channels.cache.get(normalizedChannelId)
+      || await guild.channels.fetch(normalizedChannelId).catch(() => null);
+  }
+
+  async _resolveVoicePromptMember(guild, rawInput) {
+    const input = String(rawInput || '').trim();
+    if (!guild || !input) return null;
+
+    const mentionMatch = input.match(/^<@!?(\d+)>$/);
+    const directId = mentionMatch?.[1] || (normalizeSnowflake(input) || '');
+    if (directId) {
+      return guild.members.fetch(directId).catch(() => null);
+    }
+
+    const lowered = input.toLowerCase();
+    const cached = guild.members.cache.find((member) => {
+      const values = [
+        member.user?.username,
+        member.user?.globalName,
+        member.displayName,
+        member.user?.tag,
+      ].filter(Boolean).map((value) => String(value).toLowerCase());
+      return values.includes(lowered);
+    });
+    if (cached) return cached;
+
+    return guild.members.fetch({ query: input.slice(0, 32), limit: 5 })
+      .then((collection) => {
+        const exact = collection.find((member) => {
+          const values = [
+            member.user?.username,
+            member.user?.globalName,
+            member.displayName,
+            member.user?.tag,
+          ].filter(Boolean).map((value) => String(value).toLowerCase());
+          return values.includes(lowered);
+        });
+        return exact || collection.first() || null;
+      })
+      .catch(() => null);
+  }
+
+  async _syncVoiceRoomPermissions(guild, room, channel = null) {
+    const resolvedChannel = channel || await this._resolveVoiceChannelById(guild, room?.channel_id);
+    if (!resolvedChannel) return null;
+
+    const ownerId = normalizeSnowflake(room?.owner_discord_user_id);
+    const allowedIds = new Set([ownerId, ...(room?.allowed_user_ids || [])].filter(Boolean));
+    if (room?.is_hidden) {
+      for (const memberId of resolvedChannel.members?.keys?.() || []) {
+        allowedIds.add(memberId);
+      }
+    }
+    const blockedIds = new Set((room?.blocked_user_ids || []).filter(Boolean));
+    blockedIds.delete(ownerId);
+    const overwriteMap = new Map();
+
+    const pushOverwrite = (id, allow = [], deny = []) => {
+      if (!id) return;
+      overwriteMap.set(id, {
+        id,
+        allow: [...new Set(allow.filter(Boolean))],
+        deny: [...new Set(deny.filter(Boolean))],
+      });
+    };
+
+    pushOverwrite(guild.roles.everyone.id, [], [
+      ...(room?.is_hidden ? [PermissionFlagsBits.ViewChannel] : []),
+      ...(room?.is_locked ? [PermissionFlagsBits.Connect] : []),
+    ]);
+
+    pushOverwrite(guild.members.me?.id, [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.Connect,
+      PermissionFlagsBits.MoveMembers,
+      PermissionFlagsBits.ManageChannels,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.EmbedLinks,
+      PermissionFlagsBits.AttachFiles,
+    ], []);
+
+    pushOverwrite(ownerId, [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.Connect,
+      PermissionFlagsBits.MoveMembers,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.EmbedLinks,
+      PermissionFlagsBits.AttachFiles,
+    ], []);
+
+    for (const userId of allowedIds) {
+      if (userId === ownerId || blockedIds.has(userId)) continue;
+      pushOverwrite(userId, [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+      ], []);
+    }
+
+    for (const userId of blockedIds) {
+      pushOverwrite(userId, [], [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.Connect,
+      ]);
+    }
+
+    await resolvedChannel.permissionOverwrites.set([...overwriteMap.values()], 'Sync vocal temporaire').catch(() => {});
+
+    await resolvedChannel.setUserLimit(Number(room?.user_limit || 0)).catch(() => {});
+    await resolvedChannel.setRTCRegion(room?.rtc_region && room.rtc_region !== 'auto' ? room.rtc_region : null).catch(() => {});
+
+    return resolvedChannel;
+  }
+
+  async _syncVoiceRoomControlMessage(guild, room, configRow) {
+    const channel = await this._syncVoiceRoomPermissions(guild, room);
+    if (!channel || typeof channel.send !== 'function') {
+      return room;
+    }
+
+    const payload = this._buildVoiceRoomControlPayload(room, configRow, guild, channel);
+    let message = null;
+
+    if (room.control_message_id && channel.messages?.fetch) {
+      message = await channel.messages.fetch(room.control_message_id).catch(() => null);
+      if (message?.editable) {
+        message = await message.edit({
+          ...payload,
+          attachments: payload.files?.length ? [] : undefined,
+        }).catch(() => null);
+      }
+    }
+
+    if (!message) {
+      message = await channel.send(payload).catch(() => null);
+    }
+
+    if (!message?.id) return room;
+    return updateTempVoiceRoom(room.guild_id, room.id, {
+      control_message_id: message.id,
+      channel_id: channel.id,
+      name: channel.name,
+      user_limit: channel.userLimit || room.user_limit,
+    });
+  }
+
+  _canManageVoiceRoom(member, room) {
+    if (!member || !room) return false;
+    if (member.id === room.owner_discord_user_id) return true;
+    if (member.permissions?.has(PermissionFlagsBits.Administrator)) return true;
+    if (member.permissions?.has(PermissionFlagsBits.ManageChannels)) return true;
+    return false;
+  }
+
+  async _createManagedVoiceRoom(member, internalGuildId, configRow, creatorChannel) {
+    const guild = member.guild;
+    const existing = getActiveTempVoiceRoomByOwner(internalGuildId, member.id);
+
+    if (existing?.channel_id) {
+      const existingChannel = await this._resolveVoiceChannelById(guild, existing.channel_id);
+      if (existingChannel) {
+        await member.voice.setChannel(existingChannel, 'Retour vers la vocale temporaire existante').catch(() => {});
+        await this._syncVoiceRoomControlMessage(guild, existing, configRow);
+        return existing;
+      }
+      closeTempVoiceRoom(internalGuildId, existing.id);
+    }
+
+    const baseName = buildVoiceRoomName(configRow.room_name_template, {
+      username: member.displayName || member.user?.globalName || member.user?.username || member.id,
+      display_name: member.displayName || member.user?.globalName || member.user?.username || member.id,
+      user_tag: member.user?.tag || member.user?.username || member.id,
+    });
+    const existingNames = new Set(guild.channels.cache.map((channel) => String(channel?.name || '').toLowerCase()));
+    let finalName = this._sanitizeVoiceChannelName(baseName, 'vocale-temporaire');
+    let suffix = 1;
+    while (existingNames.has(finalName.toLowerCase())) {
+      finalName = this._sanitizeVoiceChannelName(`${baseName} ${suffix}`, 'vocale-temporaire');
+      suffix += 1;
+    }
+
+    const targetParentId = normalizeSnowflake(configRow.creator_category_id || creatorChannel?.parentId);
+    const parentChannel = targetParentId
+      ? (guild.channels.cache.get(targetParentId) || await guild.channels.fetch(targetParentId).catch(() => null))
+      : null;
+
+    const createdChannel = await guild.channels.create({
+      name: finalName,
+      type: ChannelType.GuildVoice,
+      parent: parentChannel?.type === ChannelType.GuildCategory ? parentChannel.id : undefined,
+      userLimit: Number(configRow.default_user_limit || 0),
+      rtcRegion: configRow.default_region && configRow.default_region !== 'auto' ? configRow.default_region : null,
+      reason: `Creation vocale temporaire pour ${member.user?.tag || member.displayName || member.id}`,
+    });
+
+    let room = createTempVoiceRoomEntry({
+      internalGuildId,
+      generatorId: configRow.id,
+      ownerDiscordUserId: member.id,
+      ownerUsername: member.user?.tag || member.displayName || member.user?.username || member.id,
+      sourceChannelId: creatorChannel?.id || '',
+      channelId: createdChannel.id,
+      name: createdChannel.name,
+      userLimit: configRow.default_user_limit,
+      rtcRegion: configRow.default_region,
+    });
+
+    await this._syncVoiceRoomPermissions(guild, room, createdChannel);
+    await member.voice.setChannel(createdChannel, 'Creation vocale temporaire').catch(() => {});
+    room = await this._syncVoiceRoomControlMessage(guild, room, configRow);
+    return room;
+  }
+
+  async _deleteManagedVoiceRoom(guild, room, reason = 'Suppression vocale temporaire') {
+    if (!room?.id) return;
+    const channel = await this._resolveVoiceChannelById(guild, room.channel_id);
+    closeTempVoiceRoom(room.guild_id, room.id);
+    if (channel?.deletable) {
+      await channel.delete(reason).catch(() => {});
+    }
+  }
+
+  async _showVoiceRoomModal(interaction, roomId, action) {
+    const modal = new ModalBuilder()
+      .setCustomId(this._buildVoiceGeneratorCustomId('modal', action, roomId))
+      .setTitle({
+        rename: 'Renommer la vocale',
+        limit: 'Changer la limite',
+        invite: 'Inviter un membre',
+        reject: 'Refuser un membre',
+        transfer: 'Transferer la vocale',
+      }[action] || 'Gestion vocale');
+
+    const input = new TextInputBuilder()
+      .setCustomId(VOICE_MODAL_INPUT_ID)
+      .setStyle(action === 'rename' ? TextInputStyle.Short : TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(1)
+      .setMaxLength(action === 'rename' ? 90 : 120)
+      .setLabel({
+        rename: 'Nouveau nom',
+        limit: 'Limite (0-99)',
+        invite: 'Mention, ID ou pseudo exact',
+        reject: 'Mention, ID ou pseudo exact',
+        transfer: 'Mention, ID ou pseudo exact',
+      }[action] || 'Valeur')
+      .setPlaceholder({
+        rename: 'Vocal de Supersonic',
+        limit: '0 pour illimite',
+        invite: '@membre ou 123456789',
+        reject: '@membre ou 123456789',
+        transfer: '@membre ou 123456789',
+      }[action] || '');
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    await interaction.showModal(modal);
+  }
+
+  async _handleVoiceRoomAction(interaction, roomId, action, internalGuildId) {
+    const room = getTempVoiceRoomById(internalGuildId, roomId);
+    if (!room || room.status !== 'open') {
+      await interaction.reply({ content: 'Cette vocale temporaire est introuvable.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const configRow = getGuildVoiceGeneratorById(room.generator_id);
+    const channel = await this._resolveVoiceChannelById(interaction.guild, room.channel_id);
+    if (!configRow?.id || !channel) {
+      await interaction.reply({ content: 'Configuration vocale introuvable.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    if (['rename', 'limit', 'invite', 'reject', 'transfer'].includes(action)) {
+      if (!this._canManageVoiceRoom(interaction.member, room)) {
+        await interaction.reply({ content: 'Tu ne peux pas gerer cette vocale.', ephemeral: true }).catch(() => {});
+        return true;
+      }
+      await this._showVoiceRoomModal(interaction, room.id, action);
+      return true;
+    }
+
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+    if (!this._canManageVoiceRoom(interaction.member, room) && action !== 'claim') {
+      await interaction.editReply({ content: 'Tu ne peux pas gerer cette vocale.' }).catch(() => {});
+      return true;
+    }
+
+    let nextRoom = room;
+
+    switch (action) {
+      case 'lock':
+        nextRoom = updateTempVoiceRoom(internalGuildId, room.id, { is_locked: true });
+        break;
+      case 'unlock':
+        nextRoom = updateTempVoiceRoom(internalGuildId, room.id, { is_locked: false });
+        break;
+      case 'ghost':
+        nextRoom = updateTempVoiceRoom(internalGuildId, room.id, { is_hidden: true });
+        break;
+      case 'unghost':
+        nextRoom = updateTempVoiceRoom(internalGuildId, room.id, { is_hidden: false });
+        break;
+      case 'delete':
+        await this._deleteManagedVoiceRoom(interaction.guild, room, `Vocale supprimee par ${interaction.user?.tag || interaction.user?.id}`);
+        await interaction.editReply({ content: 'Vocale temporaire supprimee.' }).catch(() => {});
+        return true;
+      case 'claim': {
+        if (!configRow.allow_claim) {
+          await interaction.editReply({ content: 'Le claim est desactive sur le site.' }).catch(() => {});
+          return true;
+        }
+        if (!channel.members.has(interaction.user.id)) {
+          await interaction.editReply({ content: 'Tu dois etre connecte a cette vocale pour la claim.' }).catch(() => {});
+          return true;
+        }
+        if (room.owner_discord_user_id === interaction.user.id) {
+          await interaction.editReply({ content: 'Tu possedes deja cette vocale.' }).catch(() => {});
+          return true;
+        }
+        if (room.owner_discord_user_id && channel.members.has(room.owner_discord_user_id)) {
+          await interaction.editReply({ content: 'Le createur est encore present dans la vocale.' }).catch(() => {});
+          return true;
+        }
+        nextRoom = updateTempVoiceRoom(internalGuildId, room.id, {
+          owner_discord_user_id: interaction.user.id,
+          owner_username: interaction.user?.tag || interaction.user?.username || interaction.user.id,
+          blocked_user_ids: (room.blocked_user_ids || []).filter((userId) => userId !== interaction.user.id),
+        });
+        break;
+      }
+      default:
+        await interaction.editReply({ content: 'Action vocale inconnue.' }).catch(() => {});
+        return true;
+    }
+
+    const syncedRoom = await this._syncVoiceRoomControlMessage(interaction.guild, nextRoom, configRow);
+    await interaction.editReply({ content: `Action appliquee: ${action}.` }).catch(() => {});
+    return !!syncedRoom;
+  }
+
+  async _handleVoiceRoomRegion(interaction, roomId, regionValue, internalGuildId) {
+    const room = getTempVoiceRoomById(internalGuildId, roomId);
+    if (!room || room.status !== 'open') {
+      await interaction.reply({ content: 'Cette vocale temporaire est introuvable.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    if (!this._canManageVoiceRoom(interaction.member, room)) {
+      await interaction.reply({ content: 'Tu ne peux pas gerer cette vocale.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const nextRegion = SUPPORTED_REGIONS.has(regionValue) ? regionValue : 'auto';
+    const nextRoom = updateTempVoiceRoom(internalGuildId, room.id, { rtc_region: nextRegion });
+    const configRow = getGuildVoiceGeneratorById(room.generator_id);
+    await this._syncVoiceRoomControlMessage(interaction.guild, nextRoom, configRow);
+    await interaction.reply({
+      content: `Region mise a jour: ${VOICE_REGION_LABELS[nextRegion] || 'Auto'}.`,
+      ephemeral: true,
+    }).catch(() => {});
+    return true;
+  }
+
+  async _handleVoiceRoomModal(interaction, action, roomId, internalGuildId) {
+    const room = getTempVoiceRoomById(internalGuildId, roomId);
+    if (!room || room.status !== 'open') {
+      await interaction.reply({ content: 'Cette vocale temporaire est introuvable.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const configRow = getGuildVoiceGeneratorById(room.generator_id);
+    const channel = await this._resolveVoiceChannelById(interaction.guild, room.channel_id);
+    if (!configRow?.id || !channel || !this._canManageVoiceRoom(interaction.member, room)) {
+      await interaction.reply({ content: 'Tu ne peux pas gerer cette vocale.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const value = String(interaction.fields.getTextInputValue(VOICE_MODAL_INPUT_ID) || '').trim();
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+    let nextRoom = room;
+
+    if (action === 'rename') {
+      const nextName = this._sanitizeVoiceChannelName(value, room.name || 'vocale-temporaire');
+      await channel.setName(nextName, `Rename vocal temporaire par ${interaction.user?.tag || interaction.user?.id}`).catch(() => {});
+      nextRoom = updateTempVoiceRoom(internalGuildId, room.id, { name: nextName });
+    } else if (action === 'limit') {
+      const nextLimit = Math.max(0, Math.min(Number(value || 0), 99));
+      nextRoom = updateTempVoiceRoom(internalGuildId, room.id, { user_limit: nextLimit });
+    } else {
+      const targetMember = await this._resolveVoicePromptMember(interaction.guild, value);
+      if (!targetMember) {
+        await interaction.editReply({ content: 'Membre introuvable.' }).catch(() => {});
+        return true;
+      }
+
+      if (action === 'invite') {
+        const allowed = new Set(nextRoom.allowed_user_ids || []);
+        allowed.add(targetMember.id);
+        const blocked = new Set(nextRoom.blocked_user_ids || []);
+        blocked.delete(targetMember.id);
+        nextRoom = updateTempVoiceRoom(internalGuildId, room.id, {
+          allowed_user_ids: [...allowed],
+          blocked_user_ids: [...blocked],
+        });
+      } else if (action === 'reject') {
+        const blocked = new Set(nextRoom.blocked_user_ids || []);
+        blocked.add(targetMember.id);
+        const allowed = new Set(nextRoom.allowed_user_ids || []);
+        allowed.delete(targetMember.id);
+        if (targetMember.voice?.channelId === channel.id) {
+          await targetMember.voice.setChannel(null, 'Refus de la vocale temporaire').catch(() => {});
+        }
+        nextRoom = updateTempVoiceRoom(internalGuildId, room.id, {
+          blocked_user_ids: [...blocked],
+          allowed_user_ids: [...allowed],
+        });
+      } else if (action === 'transfer') {
+        if (targetMember.voice?.channelId !== channel.id) {
+          await interaction.editReply({ content: 'Le membre doit etre connecte a la vocale pour recevoir le transfer.' }).catch(() => {});
+          return true;
+        }
+        nextRoom = updateTempVoiceRoom(internalGuildId, room.id, {
+          owner_discord_user_id: targetMember.id,
+          owner_username: targetMember.user?.tag || targetMember.displayName || targetMember.id,
+          blocked_user_ids: (room.blocked_user_ids || []).filter((userId) => userId !== targetMember.id),
+        });
+      }
+    }
+
+    const syncedRoom = await this._syncVoiceRoomControlMessage(interaction.guild, nextRoom, configRow);
+    await interaction.editReply({ content: `Action appliquee: ${action}.` }).catch(() => {});
+    return !!syncedRoom;
+  }
+
+  async _handleVoiceGeneratorInteraction(interaction) {
+    const parsed = this._parseVoiceGeneratorCustomId(interaction?.customId);
+    if (!parsed || !interaction?.guild) return false;
+
+    const internalGuildId = this._resolveInternalGuildId(interaction.guild.id);
+    if (!internalGuildId) {
+      if (typeof interaction.reply === 'function') {
+        await interaction.reply({ content: 'Serveur vocal introuvable.', ephemeral: true }).catch(() => {});
+      }
+      return true;
+    }
+
+    try {
+      if (interaction.isStringSelectMenu() && parsed.type === 'settings') {
+        return this._handleVoiceRoomAction(interaction, parsed.args[0], interaction.values?.[0], internalGuildId);
+      }
+
+      if (interaction.isStringSelectMenu() && parsed.type === 'permissions') {
+        return this._handleVoiceRoomAction(interaction, parsed.args[0], interaction.values?.[0], internalGuildId);
+      }
+
+      if (interaction.isStringSelectMenu() && parsed.type === 'region') {
+        const rawValue = String(interaction.values?.[0] || '');
+        const regionValue = rawValue.replace(/^region__/, '');
+        return this._handleVoiceRoomRegion(interaction, parsed.args[0], regionValue, internalGuildId);
+      }
+
+      if (interaction.isModalSubmit() && parsed.type === 'modal') {
+        return this._handleVoiceRoomModal(interaction, parsed.args[0], parsed.args[1], internalGuildId);
+      }
+    } catch (error) {
+      logger.error(`Voice interaction error: ${error.message}`);
+      if (!interaction.replied && !interaction.deferred && typeof interaction.reply === 'function') {
+        await interaction.reply({ content: 'Impossible de traiter cette vocale pour le moment.', ephemeral: true }).catch(() => {});
+      } else if (typeof interaction.followUp === 'function') {
+        await interaction.followUp({ content: 'Impossible de traiter cette vocale pour le moment.', ephemeral: true }).catch(() => {});
+      }
+      return true;
+    }
+
+    return false;
   }
 
   _buildCaptchaCustomId(type, ...args) {
@@ -4396,6 +5145,10 @@ class BotProcess extends EventEmitter {
   async _onInteraction(interaction) {
     if (!interaction.guild) return;
 
+    if (await this._handleVoiceGeneratorInteraction(interaction)) {
+      return;
+    }
+
     if (await this._handleCaptchaInteraction(interaction)) {
       return;
     }
@@ -4497,6 +5250,62 @@ class BotProcess extends EventEmitter {
       memberId: member.user?.id || null,
       reason: 'member_join',
     });
+  }
+
+  async _onVoiceStateUpdate(oldState, newState) {
+    const guild = newState?.guild || oldState?.guild;
+    const member = newState?.member || oldState?.member;
+    if (!guild || !member || member.user?.bot) return;
+
+    const internalGuildId = this._resolveInternalGuildId(guild.id);
+    if (!internalGuildId) return;
+
+    const configRow = getGuildVoiceGenerator(internalGuildId);
+    const creatorChannelId = normalizeSnowflake(configRow?.creator_channel_id);
+    const touchedChannelIds = new Set([oldState?.channelId, newState?.channelId].filter(Boolean));
+
+    if (
+      configRow?.enabled
+      && creatorChannelId
+      && newState?.channelId === creatorChannelId
+      && oldState?.channelId !== creatorChannelId
+    ) {
+      const creatorChannel = guild.channels.cache.get(creatorChannelId)
+        || await guild.channels.fetch(creatorChannelId).catch(() => null);
+      if (creatorChannel) {
+        const createdRoom = await this._createManagedVoiceRoom(member, internalGuildId, configRow, creatorChannel).catch((error) => {
+          logger.error(`Voice create error: ${error.message}`);
+          return null;
+        });
+        if (createdRoom?.channel_id) {
+          touchedChannelIds.add(createdRoom.channel_id);
+        }
+      }
+    }
+
+    for (const channelId of touchedChannelIds) {
+      const room = getTempVoiceRoomByChannelId(internalGuildId, channelId);
+      if (!room || room.status !== 'open') continue;
+
+      const channel = guild.channels.cache.get(channelId)
+        || await guild.channels.fetch(channelId).catch(() => null);
+
+      if (!channel) {
+        closeTempVoiceRoom(internalGuildId, room.id);
+        continue;
+      }
+
+      if (configRow.delete_when_empty && (channel.members?.size || 0) === 0) {
+        await this._deleteManagedVoiceRoom(guild, room, 'Vocale temporaire vide').catch(() => {});
+        continue;
+      }
+
+      const refreshed = updateTempVoiceRoom(internalGuildId, room.id, {
+        name: channel.name,
+        user_limit: channel.userLimit || room.user_limit,
+      });
+      await this._syncVoiceRoomControlMessage(guild, refreshed, configRow).catch(() => {});
+    }
   }
 
   async _onMemberRemove(member) {

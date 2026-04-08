@@ -264,6 +264,12 @@ export const captchaAPI = {
   publish: (guildId) => api.post(`/bot/guilds/${guildId}/captcha/publish`, {}, { timeout: 60000 }),
 }
 
+export const voiceGeneratorAPI = {
+  get: (guildId) => api.get(`/bot/guilds/${guildId}/voice-rooms`),
+  save: (guildId, data) => api.put(`/bot/guilds/${guildId}/voice-rooms/config`, data, { timeout: 30000 }),
+  publish: (guildId) => api.post(`/bot/guilds/${guildId}/voice-rooms/publish`, {}, { timeout: 60000 }),
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────────
 export const logsAPI = {
   list:       (guildId, params) => api.get(`/bot/guilds/${guildId}/logs`, { params }),

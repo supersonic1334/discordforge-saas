@@ -27,6 +27,7 @@ import CommandsPage from './pages/CommandsPage'
 import NativeCommandsPage from './pages/NativeCommandsPage'
 import TicketGeneratorPage from './pages/TicketGeneratorPage'
 import CaptchaPage from './pages/CaptchaPage'
+import VoiceGeneratorPage from './pages/VoiceGeneratorPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import IncidentsPage from './pages/IncidentsPage'
 import ReviewsPage from './pages/ReviewsPage'
@@ -682,6 +683,7 @@ function AppRoot() {
           <Route path="commands-ai" element={<PageTransition><CommandsPage /></PageTransition>} />
           <Route path="tickets" element={<PageTransition><TicketGeneratorPage /></PageTransition>} />
           <Route path="captcha" element={<PageTransition><CaptchaPage /></PageTransition>} />
+          <Route path="voice-rooms" element={<PageTransition><VoiceGeneratorPage /></PageTransition>} />
           <Route path="analytics" element={<PageTransition><AnalyticsPage /></PageTransition>} />
           <Route path="reviews" element={<PageTransition><ReviewsPage /></PageTransition>} />
           <Route path="support" element={<PageTransition><SupportPage /></PageTransition>} />

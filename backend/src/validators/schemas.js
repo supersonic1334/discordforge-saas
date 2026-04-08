@@ -527,6 +527,47 @@ const captchaConfigSchema = z.object({
   }
 });
 
+const voiceGeneratorConfigSchema = z.object({
+  enabled: z.boolean().optional().default(true),
+  channel_mode: z.enum(['existing', 'create']).optional().default('create'),
+  creator_channel_id: optionalDiscordSnowflakeSchema,
+  creator_channel_name: z.string().trim().min(1).max(90),
+  creator_category_id: optionalDiscordSnowflakeSchema,
+  control_title: z.string().trim().min(1).max(120),
+  control_description: z.string().trim().max(2000).optional().default(''),
+  panel_color: z.string().trim().regex(/^#?[0-9a-fA-F]{6}$/, 'Invalid color'),
+  panel_thumbnail_url: optionalImageAssetSchema,
+  panel_image_url: optionalImageAssetSchema,
+  room_name_template: z.string().trim().min(1).max(90),
+  default_user_limit: z.number().int().min(0).max(99).optional().default(0),
+  default_region: z.enum([
+    'auto',
+    'brazil',
+    'hongkong',
+    'india',
+    'japan',
+    'rotterdam',
+    'russia',
+    'singapore',
+    'southafrica',
+    'sydney',
+    'us-central',
+    'us-east',
+    'us-south',
+    'us-west',
+  ]).optional().default('auto'),
+  delete_when_empty: z.boolean().optional().default(true),
+  allow_claim: z.boolean().optional().default(true),
+}).superRefine((value, ctx) => {
+  if (value.channel_mode === 'existing' && !String(value.creator_channel_id || '').trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['creator_channel_id'],
+      message: 'Choisis un vocal createur',
+    });
+  }
+});
+
 // ── Site reviews ─────────────────────────────────────────────────────────────
 const siteReviewCreateSchema = z.object({
   rating_half: z.number().int().min(1).max(10),
@@ -589,6 +630,7 @@ module.exports = {
   ticketGeneratorOptionSchema,
   ticketGeneratorConfigSchema,
   captchaConfigSchema,
+  voiceGeneratorConfigSchema,
   siteReviewCreateSchema,
   siteReviewUpdateSchema,
 };

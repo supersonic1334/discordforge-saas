@@ -31,6 +31,7 @@ const translations = {
         dmBranding: 'DM sanctions',
         tickets: 'Tickets',
         captcha: 'CAPTCHA',
+        voiceRooms: 'Vocaux temporaires',
         analytics: 'Analytics',
         reviews: 'Avis',
         aiAssistant: 'Assistant IA',
