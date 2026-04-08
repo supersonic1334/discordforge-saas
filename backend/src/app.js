@@ -158,6 +158,30 @@ function renderBlockedDocument() {
       <h1>Acces au site indisponible.</h1>
       <p>Votre acces a ete bloque. Si vous pensez qu'il s'agit d'une erreur, contactez le support.</p>
     </main>
+    <script>
+      const pollAccessStatus = async () => {
+        try {
+          const response = await fetch('/api/v1/auth/access-status', {
+            method: 'GET',
+            headers: {
+              'X-App-Client': 'discordforger-web',
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            cache: 'no-store',
+            credentials: 'same-origin',
+          });
+
+          if (!response.ok) return;
+          const payload = await response.json();
+          if (payload && payload.blocked === false) {
+            window.location.reload();
+          }
+        } catch {}
+      };
+
+      window.setInterval(pollAccessStatus, 3500);
+      window.addEventListener('focus', pollAccessStatus);
+    </script>
   </body>
 </html>`;
 }

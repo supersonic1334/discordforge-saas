@@ -17,6 +17,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
   AttachmentBuilder,
+  EmbedBuilder,
 } = require('discord.js');
 const EventEmitter = require('events');
 
@@ -221,6 +222,52 @@ function shuffleArray(items = []) {
   return next;
 }
 
+function sanitizeSlashCommandName(value) {
+  const cleaned = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '')
+    .slice(0, 32);
+  return cleaned;
+}
+
+function normalizeSlashDescription(value, fallback = 'Commande DiscordForger') {
+  const cleaned = String(value || fallback || 'Commande DiscordForger').trim().replace(/\s+/g, ' ');
+  return (cleaned || fallback).slice(0, 100);
+}
+
+function isValidSlashCommandPayload(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  const name = sanitizeSlashCommandName(payload.name);
+  const description = normalizeSlashDescription(payload.description);
+  return name.length >= 1 && description.length >= 1;
+}
+
+function buildInfoEmbed({ title, description, color = 0x22d3ee, thumbnail = null, image = null, fields = [], footer = null }) {
+  const embed = new EmbedBuilder().setColor(color).setTitle(title);
+  if (description) embed.setDescription(description);
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  if (image) embed.setImage(image);
+  if (Array.isArray(fields) && fields.length > 0) {
+    embed.addFields(
+      fields
+        .filter((field) => field && field.name && field.value)
+        .map((field) => ({
+          name: String(field.name).slice(0, 256),
+          value: String(field.value).slice(0, 1024),
+          inline: field.inline !== false,
+        }))
+    );
+  }
+  if (footer) {
+    embed.setFooter({ text: String(footer).slice(0, 2048) });
+  }
+  return embed;
+}
+
 const DEFAULT_ACTION_CONFIG_BY_TYPE = new Map(
   DEFAULT_SYSTEM_COMMANDS.map((definition) => [definition.action_type, definition.action_config || {}])
 );
@@ -352,6 +399,20 @@ function normalizeCommandActionConfig(actionType, rawValue = {}) {
         success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
       };
 
+    case COMMAND_ACTION_TYPES.PING_INFO:
+    case COMMAND_ACTION_TYPES.BOT_INFO:
+    case COMMAND_ACTION_TYPES.SERVER_INFO:
+    case COMMAND_ACTION_TYPES.MEMBERCOUNT_INFO:
+    case COMMAND_ACTION_TYPES.USER_INFO:
+    case COMMAND_ACTION_TYPES.AVATAR_INFO:
+    case COMMAND_ACTION_TYPES.BANNER_INFO:
+    case COMMAND_ACTION_TYPES.ROLE_INFO:
+    case COMMAND_ACTION_TYPES.CHANNEL_INFO:
+    case COMMAND_ACTION_TYPES.JOINED_AT_INFO:
+      return {
+        success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
+      };
+
     default:
       return source;
   }
@@ -397,9 +458,10 @@ function getDefaultNativePermission(actionType) {
 
 function buildSlashCommandPayload(command) {
   const actionType = String(command.action_type || '').trim();
+  const commandName = sanitizeSlashCommandName(command.command_name);
   const payload = {
-    name: command.command_name,
-    description: String(command.description || `Commande ${command.command_name}`).slice(0, 100),
+    name: commandName,
+    description: normalizeSlashDescription(command.description, `Commande ${commandName || 'discordforger'}`),
     dm_permission: false,
   };
   const permission = getDefaultNativePermission(actionType);
@@ -721,11 +783,48 @@ function buildSlashCommandPayload(command) {
       ];
       break;
 
+    case COMMAND_ACTION_TYPES.USER_INFO:
+    case COMMAND_ACTION_TYPES.AVATAR_INFO:
+    case COMMAND_ACTION_TYPES.BANNER_INFO:
+    case COMMAND_ACTION_TYPES.JOINED_AT_INFO:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: false,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.ROLE_INFO:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.Role,
+          name: 'role',
+          description: 'Role cible',
+          required: true,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.CHANNEL_INFO:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.Channel,
+          name: 'channel',
+          description: 'Salon cible',
+          required: false,
+        },
+      ];
+      break;
+
     default:
+      payload.options = [];
       break;
   }
 
-  return payload;
+  return isValidSlashCommandPayload(payload) ? payload : null;
 }
 
 function parseDurationToMs(value, fallbackMs = 600000) {
@@ -1126,13 +1225,53 @@ class BotProcess extends EventEmitter {
         const slashCommands = db.raw(
           `SELECT * FROM custom_commands
            WHERE guild_id = ? AND enabled = 1 AND command_type = 'slash'
-           ORDER BY created_at ASC`,
+           ORDER BY is_system DESC, updated_at DESC, created_at DESC`,
           [guildRow.id]
         ).map(normalizeCommandRow);
 
-        const payloads = slashCommands
-          .filter((command) => command.command_name)
-          .map((command) => buildSlashCommandPayload(command));
+        const seenNames = new Set();
+        const payloads = [];
+
+        for (const command of slashCommands) {
+          const sanitizedName = sanitizeSlashCommandName(command.command_name);
+          if (!sanitizedName) {
+            logger.warn(`Skipping invalid slash command without valid name`, {
+              userId: this.userId,
+              guildId: guild.id,
+              commandId: command.id,
+              rawName: command.command_name || null,
+            });
+            continue;
+          }
+
+          if (seenNames.has(sanitizedName)) {
+            logger.warn(`Skipping duplicate slash command`, {
+              userId: this.userId,
+              guildId: guild.id,
+              commandId: command.id,
+              commandName: sanitizedName,
+            });
+            continue;
+          }
+
+          const payload = buildSlashCommandPayload({
+            ...command,
+            command_name: sanitizedName,
+          });
+
+          if (!payload) {
+            logger.warn(`Skipping invalid slash payload`, {
+              userId: this.userId,
+              guildId: guild.id,
+              commandId: command.id,
+              commandName: sanitizedName,
+            });
+            continue;
+          }
+
+          seenNames.add(sanitizedName);
+          payloads.push(payload);
+        }
 
         await guild.commands.set(payloads);
         logger.info(`Slash commands synced for guild ${guild.id}`, {
@@ -1240,6 +1379,27 @@ class BotProcess extends EventEmitter {
 
     if (preferReply && typeof source?.reply === 'function') {
       return source.reply({ ...payload, allowedMentions: { repliedUser: false } });
+    }
+    if (source?.channel?.isTextBased?.()) {
+      return source.channel.send(payload);
+    }
+    return null;
+  }
+
+  async _replyWithEmbedToNativeSource(source, embed, { ephemeral = true, preferReply = true } = {}) {
+    const payload = { embeds: [embed] };
+    if (typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand()) {
+      if (source.deferred && !source.replied && typeof source.editReply === 'function') {
+        return source.editReply(payload);
+      }
+      if (source.replied && typeof source.followUp === 'function') {
+        return source.followUp({ ...payload, ephemeral });
+      }
+      return source.reply({ ...payload, ephemeral });
+    }
+
+    if (preferReply && typeof source?.reply === 'function') {
+      return source.reply(payload);
     }
     if (source?.channel?.isTextBased?.()) {
       return source.channel.send(payload);
@@ -3916,6 +4076,209 @@ class BotProcess extends EventEmitter {
     }
   }
 
+  async _executeNativeInfoCommand(source, command) {
+    if (!(typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand())) {
+      await this._replyToNativeSource(source, 'Cette commande est disponible en slash uniquement.', { preferReply: true });
+      return true;
+    }
+
+    const guild = source.guild;
+    const actionConfig = normalizeCommandActionConfig(command.action_type, command.action_config);
+    const replyOptions = { ephemeral: actionConfig.success_visibility !== 'public' };
+    await this._deferCommandInteraction(source, replyOptions);
+
+    const resolveTargetUser = async () => {
+      const user = source.options.getUser('user') || source.user;
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      return { user, member };
+    };
+
+    const embedColor = this._hexColorToInt(command.embed_color, 0x22d3ee);
+
+    switch (command.action_type) {
+      case COMMAND_ACTION_TYPES.PING_INFO: {
+        const embed = buildInfoEmbed({
+          title: 'Ping du bot',
+          color: embedColor,
+          description: 'Latences actuelles du bot sur Discord.',
+          fields: [
+            { name: 'WebSocket', value: `${Math.max(0, Math.round(this.client?.ws?.ping || 0))} ms` },
+            { name: 'Serveur', value: `${Date.now() - source.createdTimestamp} ms` },
+          ],
+          footer: `Commande ${command.display_trigger}`,
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.BOT_INFO: {
+        const me = guild.members.me;
+        const embed = buildInfoEmbed({
+          title: `${this.client.user?.username || 'Bot'} • Infos`,
+          color: embedColor,
+          description: 'Résumé rapide du bot sur ce serveur.',
+          thumbnail: this.client.user?.displayAvatarURL?.({ size: 256 }) || null,
+          fields: [
+            { name: 'Serveur', value: guild.name },
+            { name: 'Ping', value: `${Math.max(0, Math.round(this.client?.ws?.ping || 0))} ms` },
+            { name: 'Salons visibles', value: `${guild.channels.cache.size}` },
+            { name: 'Membres visibles', value: `${guild.members.cache.size}` },
+            { name: 'Rôle le plus haut', value: me?.roles?.highest ? `<@&${me.roles.highest.id}>` : 'Aucun' },
+            { name: 'ID bot', value: this.client.user?.id || '-' },
+          ],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.SERVER_INFO: {
+        const owner = await guild.fetchOwner().catch(() => null);
+        const embed = buildInfoEmbed({
+          title: `${guild.name} • Infos serveur`,
+          color: embedColor,
+          thumbnail: guild.iconURL?.({ size: 256 }) || null,
+          description: guild.description || 'Aucune description publique.',
+          fields: [
+            { name: 'ID', value: guild.id },
+            { name: 'Propriétaire', value: owner ? `<@${owner.id}>` : 'Inconnu' },
+            { name: 'Membres', value: `${guild.memberCount || guild.members.cache.size}` },
+            { name: 'Salons', value: `${guild.channels.cache.size}` },
+            { name: 'Rôles', value: `${guild.roles.cache.size}` },
+            { name: 'Créé le', value: guild.createdAt ? guild.createdAt.toLocaleString('fr-FR') : '-' },
+          ],
+          image: guild.bannerURL?.({ size: 1024 }) || null,
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.MEMBERCOUNT_INFO: {
+        const humans = guild.members.cache.filter((member) => !member.user?.bot).size;
+        const bots = guild.members.cache.filter((member) => member.user?.bot).size;
+        const embed = buildInfoEmbed({
+          title: `${guild.name} • Membres`,
+          color: embedColor,
+          fields: [
+            { name: 'Total', value: `${guild.memberCount || guild.members.cache.size}` },
+            { name: 'Humains visibles', value: `${humans}` },
+            { name: 'Bots visibles', value: `${bots}` },
+          ],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.USER_INFO: {
+        const { user, member } = await resolveTargetUser();
+        const liveUser = await this.client.users.fetch(user.id, { force: true }).catch(() => user);
+        const roleList = member?.roles?.cache
+          ? member.roles.cache.filter((role) => role.id !== guild.id).map((role) => `<@&${role.id}>`).slice(0, 8)
+          : [];
+        const embed = buildInfoEmbed({
+          title: `${liveUser.displayName || liveUser.username} • Profil`,
+          color: embedColor,
+          thumbnail: liveUser.displayAvatarURL?.({ size: 256 }) || null,
+          fields: [
+            { name: 'ID', value: liveUser.id },
+            { name: 'Pseudo', value: liveUser.username || '-' },
+            { name: 'Nom affiché', value: liveUser.globalName || liveUser.displayName || '-' },
+            { name: 'Compte créé le', value: liveUser.createdAt ? liveUser.createdAt.toLocaleString('fr-FR') : '-' },
+            { name: 'Rejoint le serveur', value: member?.joinedAt ? member.joinedAt.toLocaleString('fr-FR') : 'Non visible' },
+            { name: 'Rôles', value: roleList.length > 0 ? roleList.join(', ') : 'Aucun rôle visible', inline: false },
+          ],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.AVATAR_INFO: {
+        const { user } = await resolveTargetUser();
+        const liveUser = await this.client.users.fetch(user.id, { force: true }).catch(() => user);
+        const avatarUrl = liveUser.displayAvatarURL?.({ size: 1024 }) || null;
+        const embed = buildInfoEmbed({
+          title: `Avatar • ${liveUser.displayName || liveUser.username}`,
+          color: embedColor,
+          image: avatarUrl,
+          fields: avatarUrl ? [{ name: 'Lien', value: avatarUrl, inline: false }] : [],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.BANNER_INFO: {
+        const { user } = await resolveTargetUser();
+        const liveUser = await this.client.users.fetch(user.id, { force: true }).catch(() => user);
+        const bannerUrl = liveUser.bannerURL?.({ size: 1024 }) || null;
+        if (!bannerUrl) {
+          await this._replyToNativeSource(source, 'Aucune banniere publique trouvee pour ce membre.', replyOptions);
+          return true;
+        }
+        const embed = buildInfoEmbed({
+          title: `Banniere • ${liveUser.displayName || liveUser.username}`,
+          color: embedColor,
+          image: bannerUrl,
+          fields: [{ name: 'Lien', value: bannerUrl, inline: false }],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.ROLE_INFO: {
+        const role = source.options.getRole('role', true);
+        const embed = buildInfoEmbed({
+          title: `${role.name} • Role`,
+          color: role.color || embedColor,
+          fields: [
+            { name: 'ID', value: role.id },
+            { name: 'Couleur', value: role.hexColor || '#' + (role.color || embedColor).toString(16).padStart(6, '0') },
+            { name: 'Position', value: `${role.position}` },
+            { name: 'Membres visibles', value: `${role.members?.size || 0}` },
+            { name: 'Mentionnable', value: role.mentionable ? 'Oui' : 'Non' },
+            { name: 'Affiché séparément', value: role.hoist ? 'Oui' : 'Non' },
+          ],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.CHANNEL_INFO: {
+        const channel = source.options.getChannel('channel') || source.channel;
+        const parentName = channel?.parent?.name || 'Aucune catégorie';
+        const embed = buildInfoEmbed({
+          title: `${channel?.name || 'Salon'} • Infos`,
+          color: embedColor,
+          fields: [
+            { name: 'ID', value: channel?.id || '-' },
+            { name: 'Type', value: String(channel?.type ?? 'inconnu') },
+            { name: 'Catégorie', value: parentName },
+            { name: 'NSFW', value: channel?.nsfw ? 'Oui' : 'Non' },
+            { name: 'Créé le', value: channel?.createdAt ? channel.createdAt.toLocaleString('fr-FR') : '-' },
+          ],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.JOINED_AT_INFO: {
+        const { user, member } = await resolveTargetUser();
+        const embed = buildInfoEmbed({
+          title: `${user.displayName || user.username} • Arrivée`,
+          color: embedColor,
+          thumbnail: user.displayAvatarURL?.({ size: 256 }) || null,
+          fields: [
+            { name: 'Compte créé le', value: user.createdAt ? user.createdAt.toLocaleString('fr-FR') : '-' },
+            { name: 'Rejoint le serveur', value: member?.joinedAt ? member.joinedAt.toLocaleString('fr-FR') : 'Non visible' },
+          ],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      default:
+        return false;
+    }
+  }
+
   async _executeNativeCommand(source, command, matchedTrigger = null) {
     switch (command.action_type) {
       case COMMAND_ACTION_TYPES.CLEAR_MESSAGES:
@@ -3942,6 +4305,17 @@ class BotProcess extends EventEmitter {
       case COMMAND_ACTION_TYPES.MOVE_MEMBER:
       case COMMAND_ACTION_TYPES.DISCONNECT_MEMBER:
         return this._executeNativeModeration(source, command);
+      case COMMAND_ACTION_TYPES.PING_INFO:
+      case COMMAND_ACTION_TYPES.BOT_INFO:
+      case COMMAND_ACTION_TYPES.SERVER_INFO:
+      case COMMAND_ACTION_TYPES.MEMBERCOUNT_INFO:
+      case COMMAND_ACTION_TYPES.USER_INFO:
+      case COMMAND_ACTION_TYPES.AVATAR_INFO:
+      case COMMAND_ACTION_TYPES.BANNER_INFO:
+      case COMMAND_ACTION_TYPES.ROLE_INFO:
+      case COMMAND_ACTION_TYPES.CHANNEL_INFO:
+      case COMMAND_ACTION_TYPES.JOINED_AT_INFO:
+        return this._executeNativeInfoCommand(source, command);
       default:
         return handleCustomCommand(source, command, matchedTrigger);
     }

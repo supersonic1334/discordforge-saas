@@ -57,6 +57,59 @@ function parseJson(value, fallback) {
   }
 }
 
+function normalizeActivityDetails(details, metadata = {}) {
+  if (Array.isArray(details)) {
+    return details
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+  }
+  if (typeof details === 'string') {
+    const trimmed = details.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (details && typeof details === 'object') {
+    return details;
+  }
+
+  const fallbackDetails = [];
+  if (metadata.command_trigger) fallbackDetails.push(`Declencheur : ${metadata.command_trigger}`);
+  if (metadata.command_type) fallbackDetails.push(`Mode : ${metadata.command_type}`);
+  return fallbackDetails;
+}
+
+function mapCollabAuditRow(row) {
+  return {
+    id: row.id,
+    source: 'collab',
+    action_type: row.action_type,
+    action_label: null,
+    target: row.target || null,
+    details: parseJson(row.raw_payload, {}),
+    created_at: row.created_at,
+    actor_user_id: row.actor_user_id || null,
+    actor_display_name: row.actor_display_name || 'Inconnu',
+    actor_avatar_url: row.actor_avatar_url || null,
+  };
+}
+
+function mapSiteActionRow(row) {
+  const metadata = parseJson(row.raw_payload, {});
+  const details = normalizeActivityDetails(metadata.details, metadata);
+
+  return {
+    id: `site:${row.id}`,
+    source: 'site_action',
+    action_type: 'site_action',
+    action_label: String(metadata.action_label || metadata.action || 'Action synchronisee').trim(),
+    target: String(metadata.target_label || metadata.command_trigger || row.target || '').trim() || null,
+    details,
+    created_at: row.created_at,
+    actor_user_id: row.actor_user_id || null,
+    actor_display_name: row.actor_display_name || String(metadata.actor_name || 'Inconnu').trim() || 'Inconnu',
+    actor_avatar_url: row.actor_avatar_url || null,
+  };
+}
+
 function getDiscordDisplayName(row = {}) {
   return row.discord_global_name || row.discord_username || row.username || 'Inconnu';
 }
@@ -81,41 +134,64 @@ function logCollabAction({ guildId, actorUserId, actorUsername, actionType, targ
 
 function listCollabAuditLog(guildId, { page = 1, limit = 30, excludeActorUserId = null } = {}) {
   const offset = (page - 1) * limit;
-  const whereSql = excludeActorUserId
+  const collabWhereSql = excludeActorUserId
     ? 'WHERE log.guild_id = ? AND log.actor_user_id != ?'
     : 'WHERE log.guild_id = ?';
-  const countParams = excludeActorUserId ? [guildId, excludeActorUserId] : [guildId];
-  const total = db.db.prepare(`
+  const siteActionWhereSql = excludeActorUserId
+    ? 'WHERE bot.guild_id = ? AND bot.category = ? AND (bot.user_id IS NULL OR bot.user_id != ?)'
+    : 'WHERE bot.guild_id = ? AND bot.category = ?';
+  const collabParams = excludeActorUserId ? [guildId, excludeActorUserId] : [guildId];
+  const siteActionParams = excludeActorUserId ? [guildId, 'site_action', excludeActorUserId] : [guildId, 'site_action'];
+  const collabTotal = db.db.prepare(`
     SELECT COUNT(*) AS cnt
     FROM collaboration_audit_log log
-    ${whereSql}
-  `).get(...countParams)?.cnt || 0;
+    ${collabWhereSql}
+  `).get(...collabParams)?.cnt || 0;
+  const siteActionTotal = db.db.prepare(`
+    SELECT COUNT(*) AS cnt
+    FROM bot_logs bot
+    ${siteActionWhereSql}
+  `).get(...siteActionParams)?.cnt || 0;
+  const total = Number(collabTotal || 0) + Number(siteActionTotal || 0);
   const rows = db.db.prepare(`
-    SELECT
-      log.*,
-      users.avatar_url AS actor_site_avatar_url,
-      users.discord_id AS actor_discord_id,
-      users.discord_username AS actor_discord_username,
-      users.discord_global_name AS actor_discord_global_name,
-      users.discord_avatar_url AS actor_discord_avatar_url
-    FROM collaboration_audit_log log
-    LEFT JOIN users ON users.id = log.actor_user_id
-    ${whereSql}
-    ORDER BY log.created_at DESC
+    SELECT *
+    FROM (
+      SELECT
+        log.id AS id,
+        'collab' AS source,
+        log.action_type AS action_type,
+        log.target AS target,
+        log.details AS raw_payload,
+        log.created_at AS created_at,
+        log.actor_user_id AS actor_user_id,
+        COALESCE(users.discord_global_name, users.discord_username, log.actor_username, 'Inconnu') AS actor_display_name,
+        COALESCE(users.discord_avatar_url, users.avatar_url, NULL) AS actor_avatar_url
+      FROM collaboration_audit_log log
+      LEFT JOIN users ON users.id = log.actor_user_id
+      ${collabWhereSql}
+
+      UNION ALL
+
+      SELECT
+        bot.id AS id,
+        'site_action' AS source,
+        'site_action' AS action_type,
+        bot.message AS target,
+        bot.metadata AS raw_payload,
+        bot.created_at AS created_at,
+        bot.user_id AS actor_user_id,
+        COALESCE(users.discord_global_name, users.discord_username, users.username, 'Inconnu') AS actor_display_name,
+        COALESCE(users.discord_avatar_url, users.avatar_url, NULL) AS actor_avatar_url
+      FROM bot_logs bot
+      LEFT JOIN users ON users.id = bot.user_id
+      ${siteActionWhereSql}
+    ) merged
+    ORDER BY datetime(created_at) DESC, id DESC
     LIMIT ? OFFSET ?
-  `).all(...countParams, limit, offset);
+  `).all(...collabParams, ...siteActionParams, limit, offset);
 
   return {
-    items: rows.map((row) => ({
-      ...row,
-      details: parseJson(row.details, {}),
-      actor_display_name: getDiscordDisplayName({
-        username: row.actor_username,
-        discord_username: row.actor_discord_username,
-        discord_global_name: row.actor_discord_global_name,
-      }),
-      actor_avatar_url: row.actor_discord_avatar_url || row.actor_site_avatar_url || null,
-    })),
+    items: rows.map((row) => (row.source === 'site_action' ? mapSiteActionRow(row) : mapCollabAuditRow(row))),
     total,
     page,
     limit,

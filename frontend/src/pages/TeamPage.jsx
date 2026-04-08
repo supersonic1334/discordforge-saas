@@ -98,6 +98,17 @@ function formatAuditValue(key, value) {
 }
 
 function describeAuditDetails(details = {}) {
+  if (Array.isArray(details)) {
+    return details
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  if (typeof details === 'string') {
+    return String(details || '').trim()
+  }
+
   const entries = Object.entries(details)
     .map(([key, value]) => {
       const label = String(key)
@@ -206,6 +217,7 @@ const AUDIT_ACTION_CONFIG = {
   snapshot_create:  { label: 'Sauvegarde créée',         icon: Save,      bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20',    text: 'text-cyan-400' },
   snapshot_restore: { label: 'Sauvegarde restaurée',     icon: RotateCcw, bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   text: 'text-amber-400' },
   snapshot_delete:  { label: 'Sauvegarde supprimee',     icon: Trash2,    bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
+  site_action:      { label: 'Action synchronisee',      icon: Terminal,  bg: 'bg-neon-cyan/10',   border: 'border-neon-cyan/20',   text: 'text-neon-cyan' },
 }
 
 // â”€â”€ Micro-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -444,7 +456,7 @@ export default function TeamPage() {
   useEffect(() => {
     if (!selectedGuildId) return undefined
 
-    const handleTeamUpdate = (data) => {
+    const handleSharedRefresh = (data) => {
       if (data?.guildId === selectedGuildId || !data?.guildId) {
         loadOverview({ silent: true })
         if (activeTab === 'audit') loadAuditLog(auditData.page)
@@ -461,12 +473,27 @@ export default function TeamPage() {
     const handleConnected = () => setWsConnected(true)
     const handleDisconnected = () => setWsConnected(false)
 
-    const unsub1 = wsService.on('team:updated', handleTeamUpdate)
+    const unsub1 = wsService.on('team:updated', handleSharedRefresh)
     const unsub2 = wsService.on('team:snapshot_restored', handleSnapshotRestored)
     const unsub3 = wsService.on('ws:connected', handleConnected)
     const unsub4 = wsService.on('ws:disconnected', handleDisconnected)
+    const unsub5 = wsService.on('modules:updated', handleSharedRefresh)
+    const unsub6 = wsService.on('commands:updated', handleSharedRefresh)
+    const unsub7 = wsService.on('messages:updated', handleSharedRefresh)
+    const unsub8 = wsService.on('tickets:updated', handleSharedRefresh)
+    const unsub9 = wsService.on('captcha:updated', handleSharedRefresh)
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4() }
+    return () => {
+      unsub1()
+      unsub2()
+      unsub3()
+      unsub4()
+      unsub5()
+      unsub6()
+      unsub7()
+      unsub8()
+      unsub9()
+    }
   }, [selectedGuildId, activeTab, loadOverview, loadAuditLog, auditData.page])
 
   // Polling fallback (5s instead of 8s for better responsiveness)
@@ -474,9 +501,12 @@ export default function TeamPage() {
     if (!selectedGuildId) return undefined
     const intervalId = window.setInterval(() => {
       loadOverview({ silent: true })
+      if (activeTab === 'audit' && isOwner) {
+        loadAuditLog(auditData.page)
+      }
     }, 5000)
     return () => window.clearInterval(intervalId)
-  }, [selectedGuildId, loadOverview])
+  }, [selectedGuildId, loadOverview, activeTab, isOwner, loadAuditLog, auditData.page])
 
   // Auto-load audit on tab switch
   useEffect(() => {
@@ -1027,14 +1057,23 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
                     {ROLE_CONFIG[entry.access_role]?.label || entry.access_role} · {entry.expires_at ? `expire ${formatRelativeTime(entry.expires_at)}` : 'sans expiration'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onRevokeCode(entry.id)}
-                  disabled={saving === `code:revoke:${entry.id}`}
-                  className="inline-flex items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300 transition-all hover:bg-red-500/20 disabled:opacity-40"
-                >
-                  {saving === `code:revoke:${entry.id}` ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => copyText(entry.code, 'Code copie')}
+                    className="inline-flex items-center justify-center rounded-xl border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs font-mono text-neon-cyan transition-all hover:bg-neon-cyan/20"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRevokeCode(entry.id)}
+                    disabled={saving === `code:revoke:${entry.id}`}
+                    className="inline-flex items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300 transition-all hover:bg-red-500/20 disabled:opacity-40"
+                  >
+                    {saving === `code:revoke:${entry.id}` ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/35">
                 <span>Créé {timeAgo(entry.created_at)}</span>
@@ -1113,8 +1152,8 @@ function TeamTab({
               </div>
               <div className="flex items-center gap-3 mt-1 text-xs text-white/30 font-mono">
                 <span>{isOwner ? 'Propriétaire du bot' : 'Espace partagé'}</span>
-                {teamOwner.site_username && <span>Site: {teamOwner.site_username}</span>}
-                {teamOwner.discord_id && <span>Discord: {teamOwner.discord_id}</span>}
+                {teamOwner.discord_username && <span>@{teamOwner.discord_username}</span>}
+                <span>Depuis {timeAgo(teamOwner.accepted_at || teamOwner.created_at)}</span>
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2">
@@ -1264,8 +1303,8 @@ function TeamTab({
                         <StatusDot isSuspended={entry.is_suspended} suspendedUntil={entry.suspended_until} expiresAt={entry.expires_at} />
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-white/25 font-mono">
-                        {entry.site_username && <span>Site: {entry.site_username}</span>}
-                        {entry.discord_id && <span>Discord: {entry.discord_id}</span>}
+                        {entry.discord_username && <span>@{entry.discord_username}</span>}
+                        {entry.discord_id && <span>ID {entry.discord_id}</span>}
                         <span>Depuis {timeAgo(entry.accepted_at || entry.created_at)}</span>
                       </div>
                     </div>
@@ -1403,8 +1442,8 @@ function SimpleTeamTab({ isOwner, collaborators, activeCollabs, suspendedCollabs
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-white/30 font-mono">
                   <span>{isOwner ? 'Espace principal' : 'Espace partagé'}</span>
-                  {teamOwner.site_username && <span>Site: {teamOwner.site_username}</span>}
-                  {teamOwner.discord_id && <span>ID Discord: {teamOwner.discord_id}</span>}
+                  {teamOwner.discord_username && <span>@{teamOwner.discord_username}</span>}
+                  <span>Depuis {timeAgo(teamOwner.accepted_at || teamOwner.created_at)}</span>
                 </div>
               </div>
             </div>
@@ -1473,7 +1512,6 @@ function CollaboratorDetailField({ label, value, mono = false }) {
 
 function CollaboratorDetailsPanel({ entry }) {
   const discordLabel = entry.discord_global_name || entry.discord_username || 'Compte Discord non lié'
-  const siteLabel = entry.site_username || entry.username || 'Compte site'
   const joinedAt = formatDate('fr-FR', entry.accepted_at || entry.created_at)
   const updatedAt = formatDate('fr-FR', entry.updated_at || entry.accepted_at || entry.created_at)
   const suspendedUntil = entry.suspended_until ? formatDate('fr-FR', entry.suspended_until) : null
@@ -1515,19 +1553,18 @@ function CollaboratorDetailsPanel({ entry }) {
         <div className="rounded-2xl border border-neon-cyan/15 bg-neon-cyan/[0.04] p-4">
           <div className="flex items-center gap-4">
             <Avatar
-              src={entry.site_avatar_url || entry.profile_avatar_url || entry.discord_avatar_url}
-              label={siteLabel}
+              src={entry.profile_avatar_url || entry.discord_avatar_url || entry.site_avatar_url}
+              label={discordLabel}
               size="w-16 h-16"
               ring="ring-2 ring-neon-cyan/20"
             />
             <div className="min-w-0">
-              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-neon-cyan/70">Compte site</p>
-              <p className="mt-1 font-display font-700 text-white text-lg truncate">{siteLabel}</p>
-              <p className="mt-1 text-xs text-white/45">Toutes les modifications restent tracées dans l’activité propriétaire.</p>
+              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-neon-cyan/70">Accès partagé</p>
+              <p className="mt-1 font-display font-700 text-white text-lg truncate">{discordLabel}</p>
+              <p className="mt-1 text-xs text-white/45">Toutes les modifications partagées remontent en temps réel dans l’activité.</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <CollaboratorDetailField label="Email" value={entry.email || entry.site_email || 'Aucun email visible'} mono />
             <CollaboratorDetailField label="Rejoint le" value={joinedAt} />
             <CollaboratorDetailField label="Dernière mise à jour" value={updatedAt} />
             <CollaboratorDetailField label="Expiration" value={entry.expires_at ? formatDate('fr-FR', entry.expires_at) : 'Aucune'} />
@@ -1625,10 +1662,8 @@ function CollaboratorsTab({
                         <StatusDot isSuspended={entry.is_suspended} suspendedUntil={entry.suspended_until} expiresAt={entry.expires_at} />
                       </div>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/28 font-mono">
-                        {entry.email && <span>Email: {entry.email}</span>}
-                        {entry.site_username && <span>Site: {entry.site_username}</span>}
-                        {entry.discord_username && <span>Discord: {entry.discord_username}</span>}
-                        {entry.discord_id && <span>ID Discord: {entry.discord_id}</span>}
+                        {entry.discord_username && <span>@{entry.discord_username}</span>}
+                        {entry.discord_id && <span>ID {entry.discord_id}</span>}
                         <span>Depuis {timeAgo(entry.accepted_at || entry.created_at)}</span>
                       </div>
                     </div>
@@ -1989,7 +2024,7 @@ function AuditTab({ auditData, locale, onPageChange }) {
       <div className="spotlight-card p-5 space-y-4">
         <SectionTitle
           icon={ScrollText}
-          title={`Historique des actions${total > 0 ? ` (${total})` : ''}`}
+          title={`Activité${total > 0 ? ` (${total})` : ''}`}
           subtitle="Toutes les modifications de l'équipe, en temps réel"
           tone="cyan"
           action={
@@ -2030,6 +2065,7 @@ function AuditTab({ auditData, locale, onPageChange }) {
                 text: 'text-white/50',
               }
               const Icon = config.icon
+              const actionLabel = logEntry.action_label || config.label
 
               return (
                 <motion.div
@@ -2051,20 +2087,23 @@ function AuditTab({ auditData, locale, onPageChange }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-display font-600 text-white text-[13px]">{logEntry.actor_display_name || logEntry.actor_username || 'Inconnu'}</span>
-                      <span className={`text-[11px] font-mono ${config.text}`}>{config.label}</span>
+                      <span className={`text-[11px] font-mono ${config.text}`}>{actionLabel}</span>
                       {logEntry.target && (
                         <span className="text-[11px] text-white/30 font-mono truncate max-w-[200px]">→ {logEntry.target}</span>
                       )}
                     </div>
-                    {logEntry.details && Object.keys(logEntry.details).length > 0 && (
+                    {Boolean(describeAuditDetails(logEntry.details)) && (
                       <p className="text-[11px] text-white/20 font-mono mt-0.5 truncate">
                         {describeAuditDetails(logEntry.details)}
                       </p>
                     )}
                   </div>
 
-                  <span className="text-[11px] text-white/20 font-mono whitespace-nowrap shrink-0 group-hover:text-white/35 transition-colors">
-                    {timeAgo(logEntry.created_at)}
+                  <span
+                    title={timeAgo(logEntry.created_at)}
+                    className="text-[11px] text-white/20 font-mono whitespace-nowrap shrink-0 group-hover:text-white/35 transition-colors"
+                  >
+                    {formatDate(locale, logEntry.created_at)}
                   </span>
                 </motion.div>
               )
