@@ -125,14 +125,13 @@ router.post('/team/join-code/redeem', requireAuth, validate(guildAccessCodeRedee
       data: { guildId: redeemed.guild.id },
     });
 
-    res.status(201).json({
-      message: 'Demande envoyee',
-      guild: {
-        id: redeemed.guild.id,
-        guild_id: redeemed.guild.guild_id,
-        name: redeemed.guild.name,
+    res.status(202).json({
+      message: 'Demande en attente',
+      request: {
+        id: redeemed.request?.id || null,
+        guild_id: redeemed.guild.id,
+        status: redeemed.request?.request_status || 'pending',
       },
-      request: redeemed.request,
     });
   } catch (error) {
     next(error);

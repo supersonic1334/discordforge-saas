@@ -36,6 +36,14 @@ function notifyProfileRefresh(userId, reason = 'guild_access_updated') {
   });
 }
 
+function notifyJoinRequestState(userId, status, data = {}) {
+  if (!userId) return;
+  wsServer.broadcastToUser(String(userId), {
+    event: `team:join-request-${status}`,
+    data,
+  });
+}
+
 function notifyAllCollaborators(guildId, event, data, excludeUserId) {
   const collaborators = guildAccessService.listGuildCollaborators(guildId);
   for (const collab of collaborators) {
@@ -179,6 +187,15 @@ router.post('/requests/:requestId/approve', requireGuildPrimaryOwner, (req, res,
       actorUserId: req.user.id,
     });
 
+    notifyJoinRequestState(
+      approved.requester?.id || approved.requester?.user_id || approved.request?.requested_by_user_id,
+      'approved',
+      {
+        guildId: req.guild.id,
+        guildName: req.guild.name,
+        requestId: req.params.requestId,
+      }
+    );
     notifyProfileRefresh(approved.requester?.id || approved.requester?.user_id || approved.request?.requested_by_user_id, 'guild_access_join_request_approved');
     notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, null);
 
@@ -200,7 +217,15 @@ router.post('/requests/:requestId/reject', requireGuildPrimaryOwner, (req, res, 
       actorUserId: req.user.id,
     });
 
-    notifyProfileRefresh(rejected.requester?.id || rejected.requester?.user_id || rejected.request?.requested_by_user_id, 'guild_access_join_request_rejected');
+    notifyJoinRequestState(
+      rejected.requester?.id || rejected.requester?.user_id || rejected.request?.requested_by_user_id,
+      'rejected',
+      {
+        guildId: req.guild.id,
+        guildName: req.guild.name,
+        requestId: req.params.requestId,
+      }
+    );
     notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, null);
 
     res.json({

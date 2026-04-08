@@ -517,6 +517,40 @@ export default function TeamPage() {
     if (activeTab === 'audit' && isOwner) loadAuditLog(1)
   }, [activeTab, isOwner, selectedGuildId, loadAuditLog])
 
+  useEffect(() => {
+    const handleJoinApproved = async (payload = {}) => {
+      const ok = await fetchMe()
+      if (!ok) return
+
+      const guilds = await useGuildStore.getState().fetchGuilds({ force: true }).catch(() => [])
+      if (payload?.guildId && guilds.some((entry) => entry.id === payload.guildId)) {
+        useGuildStore.getState().selectGuild(payload.guildId)
+      }
+
+      toast.success(
+        payload?.guildName
+          ? `Demande acceptée — ${payload.guildName}`
+          : 'Demande acceptée'
+      )
+    }
+
+    const handleJoinRejected = (payload = {}) => {
+      toast.error(
+        payload?.guildName
+          ? `Demande refusée — ${payload.guildName}`
+          : 'Demande refusée'
+      )
+    }
+
+    const unsubApproved = wsService.on('team:join-request-approved', handleJoinApproved)
+    const unsubRejected = wsService.on('team:join-request-rejected', handleJoinRejected)
+
+    return () => {
+      unsubApproved()
+      unsubRejected()
+    }
+  }, [fetchMe])
+
   // â”€â”€ Action handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleCreateCode = async () => {
@@ -556,7 +590,7 @@ export default function TeamPage() {
     try {
       await teamAPI.redeemCode({ code: joinCode.trim() })
       setJoinCode('')
-      toast.success('Demande envoyée')
+      toast.success('Demande en attente')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -1033,7 +1067,7 @@ function JoinTeamCard({ user, joinCode, setJoinCode, saving, onRedeem, onConnect
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-5 py-3 text-sm font-mono text-emerald-300 transition-all hover:bg-emerald-400/20 disabled:opacity-40"
         >
           {saving === 'code:redeem' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-          {saving === 'code:redeem' ? 'Connexion...' : 'Rejoindre'}
+          {saving === 'code:redeem' ? 'Envoi...' : 'Envoyer la demande'}
         </button>
       </div>
     </div>
