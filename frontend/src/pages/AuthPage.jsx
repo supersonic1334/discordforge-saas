@@ -254,7 +254,6 @@ export default function AuthPage() {
   const pointerY = useMotionValue(24)
   const isRegister = mode === 'register'
   const registerCaptchaReady = !isRegister || (!!registerCaptcha?.token && !captchaLoading)
-  const authModeTransition = { type: 'spring', stiffness: 420, damping: 36, mass: 0.82 }
   const [registerCardMaxHeight, setRegisterCardMaxHeight] = useState(null)
 
   const featureCards = [
@@ -410,7 +409,7 @@ export default function AuthPage() {
   }, [])
 
   useEffect(() => {
-    if (!isRegister) {
+    if (!isRegister && !compactAuthMode) {
       setRegisterCardMaxHeight(null)
       return undefined
     }
@@ -451,7 +450,7 @@ export default function AuthPage() {
       window.removeEventListener('resize', updateRegisterCardHeight)
       window.visualViewport?.removeEventListener?.('resize', updateRegisterCardHeight)
     }
-  }, [isRegister])
+  }, [compactAuthMode, isRegister])
 
   const submit = async (event) => {
     event.preventDefault()
@@ -543,7 +542,7 @@ export default function AuthPage() {
     <div
       ref={shellRef}
       className={`auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8 ${compactAuthMode ? 'is-compact-auth' : ''}`}
-      data-scrollable={isRegister || compactAuthMode ? 'true' : 'false'}
+      data-scrollable={isRegister ? 'true' : 'false'}
       data-auth-mode={mode}
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
@@ -629,19 +628,16 @@ export default function AuthPage() {
             </motion.div>
           ) : (
           <motion.div
-            layout
             ref={cardRef}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ y: -6, scale: 1.006 }}
-            className={`auth-mobile-card gradient-border ${isRegister ? 'is-register' : ''}`}
-            style={isRegister && registerCardMaxHeight ? { '--auth-register-card-max': `${registerCardMaxHeight}px` } : undefined}
+            className={`auth-mobile-card gradient-border ${(isRegister || compactAuthMode) ? 'is-scrollable' : ''}`}
+            style={(isRegister || compactAuthMode) && registerCardMaxHeight ? { '--auth-register-card-max': `${registerCardMaxHeight}px` } : undefined}
           >
-            <motion.div
-              layout
-              transition={authModeTransition}
-              className={`auth-card-surface bg-surface-1 rounded-2xl p-5 sm:p-8 ${isRegister ? 'is-register' : ''}`}
+            <div
+              className={`auth-card-surface bg-surface-1 rounded-2xl p-5 sm:p-8 ${(isRegister || compactAuthMode) ? 'is-scrollable' : ''}`}
             >
               {/* Tab switcher */}
               <div className="flex bg-white/[0.04] rounded-xl p-1 mb-5 sm:mb-6 border border-white/[0.06]">
@@ -665,23 +661,26 @@ export default function AuthPage() {
 
               <div
                 ref={cardScrollRef}
-                className={`auth-card-scrollzone w-full ${isRegister ? 'is-register' : ''}`}
-                data-scrollable={isRegister ? 'true' : 'false'}
+                className={`auth-card-scrollzone w-full ${(isRegister || compactAuthMode) ? 'is-scrollable' : ''}`}
+                data-scrollable={(isRegister || compactAuthMode) ? 'true' : 'false'}
               >
                 {/* Auth form */}
                 <motion.form
-                  layout
                   ref={formRef}
                   onSubmit={submit}
                   className="auth-form-stack w-full space-y-4"
                   autoComplete="on"
                 >
-                  <motion.div
-                    layout
-                    transition={authModeTransition}
-                    className="w-full space-y-4"
-                    style={{ transformOrigin: '50% 0%' }}
-                  >
+                  <AnimatePresence initial={false} mode="wait">
+                    <motion.div
+                      key={mode}
+                      initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, y: -8, filter: 'blur(6px)' }}
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      className="w-full space-y-4"
+                      style={{ transformOrigin: '50% 0%' }}
+                    >
                       {isRegister && (
                         <div className="space-y-4 overflow-hidden">
                           <div>
@@ -860,7 +859,8 @@ export default function AuthPage() {
                           </div>
                         </div>
                       )}
-                  </motion.div>
+                    </motion.div>
+                  </AnimatePresence>
                 </motion.form>
 
                 {/* Feature cards */}
@@ -923,7 +923,7 @@ export default function AuthPage() {
                 </AnimatePresence>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </motion.div>
           )}
         </motion.div>

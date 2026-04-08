@@ -465,10 +465,15 @@
     padding-top: clamp(0.5rem, 1.2vh, 1rem);
     padding-bottom: clamp(0.5rem, 1.2vh, 1rem);
   }
-  .auth-page-shell.is-compact-auth {
+  .auth-page-shell.is-compact-auth[data-auth-mode="register"] {
     align-items: flex-start;
     justify-content: flex-start;
     overflow-y: auto !important;
+  }
+  .auth-page-shell.is-compact-auth[data-auth-mode="login"] {
+    align-items: center;
+    justify-content: center;
+    overflow: hidden !important;
   }
   .auth-page-frame.is-compact-auth {
     justify-content: flex-start;
@@ -513,7 +518,7 @@
   .auth-mobile-card.gradient-border {
     background: transparent;
   }
-  .auth-mobile-card.is-register {
+  .auth-mobile-card.is-scrollable {
     flex: 0 1 auto;
     min-height: 0;
     display: block;
@@ -525,14 +530,14 @@
     max-width: min(480px, 88vw) !important;
   }
   .auth-mobile-panel.is-compact .auth-mobile-logo-shell {
-    max-width: min(360px, 58vw) !important;
+    max-width: min(440px, 72vw) !important;
     margin-bottom: 0.35rem !important;
   }
   .auth-mobile-logo {
     max-height: min(236px, 24vh);
   }
   .auth-mobile-panel.is-compact .auth-mobile-logo {
-    max-height: min(152px, 19vh);
+    max-height: min(188px, 23vh);
   }
   .auth-card-surface {
     min-height: auto;
@@ -543,7 +548,7 @@
   .auth-mobile-panel.is-compact .auth-card-surface {
     padding: 0.95rem !important;
   }
-  .auth-card-surface.is-register {
+  .auth-card-surface.is-scrollable {
     flex: 0 1 auto;
     min-height: 0;
     display: block;
@@ -556,7 +561,7 @@
     width: 100%;
     overflow: hidden;
   }
-  .auth-card-scrollzone.is-register {
+  .auth-card-scrollzone.is-scrollable {
     flex: 0 1 auto;
     max-height: calc(var(--auth-register-card-max, calc(var(--app-height) * 0.7)) - clamp(2rem, 5vh, 4rem));
     overflow-y: auto;
@@ -566,7 +571,7 @@
     padding-right: 2px;
     scrollbar-width: none;
   }
-  .auth-card-scrollzone.is-register::-webkit-scrollbar {
+  .auth-card-scrollzone.is-scrollable::-webkit-scrollbar {
     display: none;
   }
   .auth-form-stack {
@@ -581,9 +586,6 @@
   .auth-mobile-features {
     margin-top: clamp(0.95rem, 2vh, 1.4rem) !important;
     padding-top: 0;
-  }
-  .auth-mobile-panel.is-compact .auth-mobile-features {
-    display: none !important;
   }
   .auth-feature-detail {
     padding: 0.85rem 1rem !important;
@@ -992,7 +994,7 @@
 
   .auth-mobile-logo-shell {
     margin-bottom: 0.7rem !important;
-    max-width: min(360px, 68vw) !important;
+    max-width: min(420px, 72vw) !important;
   }
 
   .auth-mobile-logo {
@@ -1027,11 +1029,11 @@
   }
 
   .auth-mobile-logo-shell {
-    max-width: min(300px, 62vw) !important;
+    max-width: min(340px, 68vw) !important;
   }
 
   .auth-mobile-logo {
-    max-height: 132px;
+    max-height: 150px;
   }
 
   .auth-mobile-hero p {
@@ -1044,7 +1046,7 @@
 }
 
 @media (max-height: 760px) {
-  .auth-mobile-features {
+  .auth-feature-detail {
     display: none !important;
   }
 }
@@ -1123,7 +1125,6 @@
   }
 
   body[data-keyboard-open="true"] .auth-mobile-panel.is-register .auth-mobile-hero,
-  body[data-keyboard-open="true"] .auth-mobile-panel.is-register .auth-mobile-features,
   body[data-keyboard-open="true"] .setup-mobile-guide {
     display: none !important;
   }
@@ -1634,7 +1635,7 @@ html {
   }
 
   .auth-mobile-logo {
-    max-height: min(168px, 16vh);
+    max-height: min(184px, 18vh);
   }
 
   .auth-card-surface {
