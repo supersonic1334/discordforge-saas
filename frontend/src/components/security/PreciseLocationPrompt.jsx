@@ -217,7 +217,6 @@ export default function PreciseLocationPrompt() {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-display font-700 text-white">Securiser l'acces du site ?</p>
-            <p className="mt-0.5 text-xs text-white/45">Une seule fois sur cet appareil.</p>
           </div>
         </div>
 
