@@ -185,7 +185,7 @@ export default function PreciseLocationPrompt() {
       })
       setConfirmDeny(false)
       setVisible(false)
-      toast.success('Localisation precise activee')
+      toast.success("Autorisation d'acces activee")
     } catch (error) {
       const reason = mapGeoError(error)
       await authAPI.savePreciseLocation({
@@ -199,7 +199,7 @@ export default function PreciseLocationPrompt() {
         updated_at: Date.now(),
       })
       setConfirmDeny(false)
-      toast.error('Localisation precise refusee ou indisponible')
+      toast.error("Autorisation d'acces refusee ou indisponible")
       setVisible(false)
     }
     setSaving(false)
@@ -216,7 +216,7 @@ export default function PreciseLocationPrompt() {
             <MapPin className="h-4 w-4 text-neon-cyan" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-display font-700 text-white">Securiser l acces du site ?</p>
+            <p className="text-sm font-display font-700 text-white">Securiser l'acces du site ?</p>
             <p className="mt-0.5 text-xs text-white/45">Une seule fois sur cet appareil.</p>
           </div>
         </div>
