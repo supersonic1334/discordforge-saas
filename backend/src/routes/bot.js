@@ -119,23 +119,19 @@ router.post('/team/join-code/redeem', requireAuth, validate(guildAccessCodeRedee
       code: req.body.code,
     });
 
-    wsServer.broadcastToUser(String(req.user.id), {
-      event: 'account:profileUpdated',
-      data: { reason: 'guild_access_joined' },
-    });
     wsServer.broadcastToUser(String(redeemed.guild.user_id), {
       event: 'team:updated',
       data: { guildId: redeemed.guild.id },
     });
 
     res.status(201).json({
-      message: 'Equipe rejointe',
+      message: 'Demande envoyee',
       guild: {
         id: redeemed.guild.id,
         guild_id: redeemed.guild.guild_id,
         name: redeemed.guild.name,
       },
-      access: redeemed.access,
+      request: redeemed.request,
     });
   } catch (error) {
     next(error);

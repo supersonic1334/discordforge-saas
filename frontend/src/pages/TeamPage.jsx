@@ -210,6 +210,9 @@ const AUDIT_ACTION_CONFIG = {
   code_create:      { label: 'Code généré',              icon: Plus,      bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20',    text: 'text-cyan-400' },
   code_redeem:      { label: 'Équipe rejointe',          icon: UserCheck, bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
   code_revoke:      { label: 'Code révoqué',             icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
+  join_request_create:  { label: 'Demande envoyée',      icon: UserPlus,  bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   text: 'text-amber-300' },
+  join_request_approve: { label: 'Demande acceptée',     icon: UserCheck, bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
+  join_request_reject:  { label: 'Demande refusée',      icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
   revoke:           { label: 'Accès retiré',             icon: UserMinus, bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
   role_change:      { label: 'Rôle modifié',             icon: Shield,    bg: 'bg-violet-500/10',  border: 'border-violet-500/20',  text: 'text-violet-400' },
   suspend:          { label: 'Compte suspendu',          icon: Pause,     bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   text: 'text-amber-400' },
@@ -373,7 +376,7 @@ export default function TeamPage() {
   const { guilds, selectedGuildId, selectGuild } = useGuildStore()
   const location = useLocation()
   const guild = guilds.find((entry) => entry.id === selectedGuildId)
-  const [overview, setOverview] = useState({ access: null, collaborators: [], snapshots: [] })
+  const [overview, setOverview] = useState({ access: null, collaborators: [], pending_requests: [], snapshots: [] })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
   const [codeForm, setCodeForm] = useState({ expires_in_hours: 1 })
@@ -387,6 +390,7 @@ export default function TeamPage() {
   const locale = typeof navigator !== 'undefined' ? navigator.language || 'fr-FR' : 'fr-FR'
   const isOwner = !!overview.access?.is_owner
   const collaborators = overview.collaborators || []
+  const pendingRequests = overview.pending_requests || []
   const joinCodes = overview.join_codes || []
   const snapshots = overview.snapshots || []
   const nonOwnerCollabs = useMemo(() => collaborators.filter((c) => !c.is_owner), [collaborators])
@@ -403,7 +407,7 @@ export default function TeamPage() {
     if (!silent) setLoading(true)
     try {
       const response = await teamAPI.overview(selectedGuildId)
-      setOverview(response.data || { access: null, collaborators: [], snapshots: [] })
+      setOverview(response.data || { access: null, collaborators: [], pending_requests: [], snapshots: [] })
       lastSyncRef.current = Date.now()
     } catch (error) {
       if (!silent) toast.error(getErrorMessage(error))
@@ -440,7 +444,7 @@ export default function TeamPage() {
     setCodeForm({ expires_in_hours: 1 })
     setJoinCode('')
     setSnapshotLabel('')
-    setOverview({ access: null, collaborators: [], snapshots: [] })
+    setOverview({ access: null, collaborators: [], pending_requests: [], snapshots: [] })
     setActiveTab('team')
     setAuditData({ items: [], total: 0, page: 1 })
     setLoading(true)
@@ -550,14 +554,37 @@ export default function TeamPage() {
     if (!joinCode.trim()) return
     setSaving('code:redeem')
     try {
-      const response = await teamAPI.redeemCode({ code: joinCode.trim() })
-      await fetchMe()
-      await useGuildStore.getState().fetchGuilds({ force: true })
-      if (response?.data?.guild?.id) {
-        selectGuild(response.data.guild.id)
-      }
+      await teamAPI.redeemCode({ code: joinCode.trim() })
       setJoinCode('')
-      toast.success('Équipe rejointe')
+      toast.success('Demande envoyée')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSaving('')
+    }
+  }
+
+  const handleApproveJoinRequest = async (requestId, displayName) => {
+    if (!selectedGuildId || !requestId) return
+    setSaving(`request:approve:${requestId}`)
+    try {
+      const response = await teamAPI.approveJoinRequest(selectedGuildId, requestId)
+      setOverview(response.data)
+      toast.success(`${displayName || 'Demande'} accepté`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSaving('')
+    }
+  }
+
+  const handleRejectJoinRequest = async (requestId, displayName) => {
+    if (!selectedGuildId || !requestId) return
+    setSaving(`request:reject:${requestId}`)
+    try {
+      const response = await teamAPI.rejectJoinRequest(selectedGuildId, requestId)
+      setOverview(response.data)
+      toast.success(`${displayName || 'Demande'} refusé`)
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -816,6 +843,7 @@ export default function TeamPage() {
               user={user}
               isOwner={isOwner}
               nonOwnerCollabs={nonOwnerCollabs}
+              pendingRequests={pendingRequests}
               codeForm={codeForm}
               setCodeForm={setCodeForm}
               joinCode={joinCode}
@@ -826,6 +854,8 @@ export default function TeamPage() {
               onRevokeCode={handleRevokeCode}
               onRedeemCode={handleRedeemCode}
               onConnectDiscord={handleConnectDiscord}
+              onApproveJoinRequest={handleApproveJoinRequest}
+              onRejectJoinRequest={handleRejectJoinRequest}
               onSuspend={handleSuspend}
               onRemoveMember={handleRemoveMember}
             />
@@ -963,14 +993,14 @@ function JoinTeamCard({ user, joinCode, setJoinCode, saving, onRedeem, onConnect
       <SectionTitle
         icon={UserPlus}
         title="Rejoindre une équipe"
-        subtitle="Le code est à usage unique. Un compte Discord lié est obligatoire avant validation."
+        subtitle="Le code est à usage unique. Il envoie une demande d’accès au propriétaire."
         tone="emerald"
       />
       {!linked ? (
         <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-display font-600 text-amber-100">Compte Discord requis</p>
-            <p className="mt-1 text-sm text-amber-100/70">Lie ton compte Discord une fois, puis les codes équipe marcheront instantanément.</p>
+            <p className="mt-1 text-sm text-amber-100/70">Lie ton compte Discord une fois, puis la demande sera envoyée avec ton profil Discord.</p>
           </div>
           <button
             type="button"
@@ -1084,6 +1114,68 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function PendingJoinRequestsCard({ pendingRequests, saving, onApproveJoinRequest, onRejectJoinRequest }) {
+  if (!pendingRequests?.length) return null
+
+  return (
+    <div className="spotlight-card p-5 space-y-4">
+      <SectionTitle
+        icon={Clock3}
+        title={`Demandes en attente (${pendingRequests.length})`}
+        subtitle="Chaque code est gelé dès la demande. Accepte ou refuse la personne exacte."
+        tone="amber"
+      />
+      <div className="space-y-3">
+        {pendingRequests.map((entry) => {
+          const displayName = entry.requester?.display_name || entry.requester?.discord_username || entry.requester?.username || 'Inconnu'
+          const requestKey = entry.id
+          return (
+            <div key={entry.id} className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.05] p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar src={entry.requester?.avatar_url} label={displayName} ring="ring-1 ring-amber-400/25" />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-display font-700 text-white text-sm truncate">{displayName}</span>
+                      <RoleBadge role={entry.access_role} />
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/30 font-mono">
+                      {entry.requester?.discord_username && <span>@{entry.requester.discord_username}</span>}
+                      {entry.requester?.discord_id && <span>ID {entry.requester.discord_id}</span>}
+                      {entry.code_masked && <span>Code {entry.code_masked}</span>}
+                      <span>{timeAgo(entry.requested_at)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onApproveJoinRequest(entry.id, displayName)}
+                    disabled={saving === `request:approve:${requestKey}` || saving === `request:reject:${requestKey}`}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-2.5 text-xs font-mono text-emerald-300 transition-all hover:bg-emerald-400/20 disabled:opacity-40"
+                  >
+                    {saving === `request:approve:${requestKey}` ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                    Accepter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRejectJoinRequest(entry.id, displayName)}
+                    disabled={saving === `request:approve:${requestKey}` || saving === `request:reject:${requestKey}`}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-xs font-mono text-red-300 transition-all hover:bg-red-500/20 disabled:opacity-40"
+                  >
+                    {saving === `request:reject:${requestKey}` ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <UserMinus className="w-3.5 h-3.5" />}
+                    Refuser
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1580,6 +1672,7 @@ function CollaboratorsTab({
   user,
   isOwner,
   nonOwnerCollabs,
+  pendingRequests,
   codeForm,
   setCodeForm,
   joinCode,
@@ -1590,6 +1683,8 @@ function CollaboratorsTab({
   onRevokeCode,
   onRedeemCode,
   onConnectDiscord,
+  onApproveJoinRequest,
+  onRejectJoinRequest,
   onSuspend,
   onRemoveMember,
 }) {
@@ -1614,6 +1709,15 @@ function CollaboratorsTab({
           joinCodes={joinCodes}
           onCreateCode={onCreateCode}
           onRevokeCode={onRevokeCode}
+        />
+      )}
+
+      {isOwner && (
+        <PendingJoinRequestsCard
+          pendingRequests={pendingRequests}
+          saving={saving}
+          onApproveJoinRequest={onApproveJoinRequest}
+          onRejectJoinRequest={onRejectJoinRequest}
         />
       )}
 

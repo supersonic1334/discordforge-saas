@@ -99,6 +99,7 @@ function buildOverview(req) {
       updated_at: entry.updated_at || null,
     })),
     join_codes: access?.is_owner ? guildAccessService.listGuildJoinCodes(req.guild.id) : [],
+    pending_requests: access?.is_owner ? guildAccessService.listGuildJoinRequests(req.guild.id) : [],
     snapshots: access?.is_owner ? guildAccessService.listGuildSnapshots(req.guild.id) : [],
   };
 }
@@ -162,6 +163,48 @@ router.delete('/codes/:codeId', requireGuildPrimaryOwner, (req, res, next) => {
 
     res.json({
       message: 'Code revoque',
+      ...buildOverview(req),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/requests/:requestId/approve', requireGuildPrimaryOwner, (req, res, next) => {
+  try {
+    const approved = guildAccessService.approveGuildJoinRequest({
+      guildId: req.guild.id,
+      ownerUserId: req.guild.user_id,
+      requestId: req.params.requestId,
+      actorUserId: req.user.id,
+    });
+
+    notifyProfileRefresh(approved.requester?.id || approved.requester?.user_id || approved.request?.requested_by_user_id, 'guild_access_join_request_approved');
+    notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, null);
+
+    res.json({
+      message: 'Demande acceptee',
+      ...buildOverview(req),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/requests/:requestId/reject', requireGuildPrimaryOwner, (req, res, next) => {
+  try {
+    const rejected = guildAccessService.rejectGuildJoinRequest({
+      guildId: req.guild.id,
+      ownerUserId: req.guild.user_id,
+      requestId: req.params.requestId,
+      actorUserId: req.user.id,
+    });
+
+    notifyProfileRefresh(rejected.requester?.id || rejected.requester?.user_id || rejected.request?.requested_by_user_id, 'guild_access_join_request_rejected');
+    notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, null);
+
+    res.json({
+      message: 'Demande refusee',
       ...buildOverview(req),
     });
   } catch (error) {

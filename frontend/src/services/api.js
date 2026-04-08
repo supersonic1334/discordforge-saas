@@ -207,6 +207,8 @@ export const teamAPI = {
   createCode:     (guildId, data) => api.post(`/bot/guilds/${guildId}/team/codes`, data),
   revokeCode:     (guildId, codeId) => api.delete(`/bot/guilds/${guildId}/team/codes/${codeId}`),
   redeemCode:     (data) => api.post('/bot/team/join-code/redeem', data),
+  approveJoinRequest: (guildId, requestId) => postNoBody(`/bot/guilds/${guildId}/team/requests/${requestId}/approve`),
+  rejectJoinRequest:  (guildId, requestId) => postNoBody(`/bot/guilds/${guildId}/team/requests/${requestId}/reject`),
   updateMember:   (guildId, userId, data) => api.patch(`/bot/guilds/${guildId}/team/members/${userId}`, data),
   suspendMember:  (guildId, userId, data) => api.patch(`/bot/guilds/${guildId}/team/members/${userId}/suspend`, data),
   removeMember:   (guildId, userId) => api.delete(`/bot/guilds/${guildId}/team/members/${userId}`),
@@ -283,11 +285,11 @@ export const aiAPI = {
 export const osintAPI = {
   status: () => api.get('/osint/status'),
   scanUsername: (username) => api.post('/osint/username', { username }, { timeout: 70000 }),
-  lookupDiscord: (identity) => api.post('/osint/discord', { identity }, { timeout: 30000 }),
+  lookupDiscord: (identity) => api.post('/osint/discord', { identity }, { timeout: 45000 }),
   geolocate: (imageBase64, mimeType) => api.post('/osint/geolocate', {
     image_base64: imageBase64,
     mime_type: mimeType,
-  }, { timeout: 90000 }),
+  }, { timeout: 120000 }),
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────

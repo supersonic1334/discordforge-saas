@@ -481,6 +481,66 @@ function listGuildJoinCodes(guildId) {
   }));
 }
 
+function listGuildJoinRequests(guildId, { status = 'pending' } = {}) {
+  const params = [guildId];
+  let statusSql = '';
+  if (status) {
+    statusSql = 'AND req.request_status = ?';
+    params.push(String(status).trim().toLowerCase());
+  }
+
+  return db.db.prepare(`
+    SELECT
+      req.*,
+      requester.username AS requester_username,
+      requester.avatar_url AS requester_site_avatar_url,
+      requester.discord_id AS requester_discord_id,
+      requester.discord_username AS requester_discord_username,
+      requester.discord_global_name AS requester_discord_global_name,
+      requester.discord_avatar_url AS requester_discord_avatar_url,
+      requester.email AS requester_email,
+      decider.username AS decided_by_username,
+      decider.discord_username AS decided_by_discord_username,
+      decider.discord_global_name AS decided_by_discord_global_name
+    FROM guild_join_requests req
+    JOIN users requester ON requester.id = req.requested_by_user_id
+    LEFT JOIN users decider ON decider.id = req.decided_by_user_id
+    WHERE req.guild_id = ?
+      ${statusSql}
+    ORDER BY datetime(req.requested_at) DESC, req.id DESC
+  `).all(...params).map((row) => ({
+    id: row.id,
+    guild_id: row.guild_id,
+    code_id: row.code_id || null,
+    code_masked: row.code_masked || null,
+    access_role: normalizeAccessRole(row.access_role),
+    request_status: row.request_status || 'pending',
+    requested_at: row.requested_at || row.created_at,
+    decided_at: row.decided_at || null,
+    decided_by_display_name: row.decided_by_user_id
+      ? getDiscordDisplayName({
+        username: row.decided_by_username,
+        discord_username: row.decided_by_discord_username,
+        discord_global_name: row.decided_by_discord_global_name,
+      })
+      : null,
+    requester: {
+      user_id: row.requested_by_user_id,
+      username: row.requester_username,
+      email: row.requester_email || null,
+      discord_id: row.requester_discord_id || null,
+      discord_username: row.requester_discord_username || null,
+      discord_global_name: row.requester_discord_global_name || null,
+      display_name: getDiscordDisplayName({
+        username: row.requester_username,
+        discord_username: row.requester_discord_username,
+        discord_global_name: row.requester_discord_global_name,
+      }),
+      avatar_url: row.requester_discord_avatar_url || row.requester_site_avatar_url || null,
+    },
+  }));
+}
+
 function resolveUserForInvite(target) {
   const normalized = normalizeLookup(target);
   if (!normalized) return null;
@@ -631,6 +691,19 @@ function redeemGuildJoinCode({ userId, code }) {
     throw Object.assign(new Error('Tu es deja proprietaire de cet espace'), { status: 400 });
   }
 
+  const existingPending = db.db.prepare(`
+    SELECT id
+    FROM guild_join_requests
+    WHERE guild_id = ?
+      AND requested_by_user_id = ?
+      AND request_status = 'pending'
+    LIMIT 1
+  `).get(guild.id, userId);
+
+  if (existingPending) {
+    throw Object.assign(new Error('Une demande est deja en attente pour cet espace'), { status: 409 });
+  }
+
   ensureAutoBackupOnFirstInvite(guild.id, guild.user_id);
 
   const now = new Date().toISOString();
@@ -642,47 +715,188 @@ function redeemGuildJoinCode({ userId, code }) {
   `).get(guild.id, userId);
 
   if (existing) {
+    throw Object.assign(new Error('Tu as deja acces a cet espace'), { status: 400 });
+  }
+
+  const requestId = db.transaction(() => {
     db.db.prepare(`
-      UPDATE guild_access_members
-      SET access_role = ?, invited_by_user_id = ?, is_suspended = 0, suspended_until = NULL, expires_at = NULL, accepted_at = ?, updated_at = ?
+      UPDATE guild_access_codes
+      SET used_by_user_id = ?, used_at = ?, updated_at = ?
       WHERE id = ?
-    `).run(normalizeAccessRole(codeRow.access_role), codeRow.created_by_user_id, now, now, existing.id);
-  } else {
-    db.insert('guild_access_members', {
+    `).run(userId, now, now, codeRow.id);
+
+    const request = db.insert('guild_join_requests', {
       guild_id: guild.id,
-      user_id: userId,
+      code_id: codeRow.id,
+      requested_by_user_id: userId,
+      inviter_user_id: codeRow.created_by_user_id || null,
       access_role: normalizeAccessRole(codeRow.access_role),
-      invited_by_user_id: codeRow.created_by_user_id,
-      is_suspended: 0,
-      expires_at: null,
-      accepted_at: now,
+      code_masked: maskAccessCode(codeRow.code),
+      request_status: 'pending',
+      decided_by_user_id: null,
+      decided_at: null,
+      requested_at: now,
       created_at: now,
       updated_at: now,
     });
-  }
 
-  db.db.prepare(`
-    UPDATE guild_access_codes
-    SET used_by_user_id = ?, used_at = ?, updated_at = ?
-    WHERE id = ?
-  `).run(userId, now, now, codeRow.id);
+    return request.id;
+  });
 
   logCollabAction({
     guildId: guild.id,
     actorUserId: userId,
     actorUsername: user.username,
-    actionType: 'code_redeem',
-    target: user.username,
+    actionType: 'join_request_create',
+    target: getDiscordDisplayName(user),
     details: {
       role: normalizeAccessRole(codeRow.access_role),
       code: maskAccessCode(codeRow.code),
-      source: 'join_code',
+      source: 'join_code_request',
+    },
+  });
+
+  const request = db.findOne('guild_join_requests', { id: requestId });
+
+  return {
+    guild,
+    request,
+  };
+}
+
+function approveGuildJoinRequest({ guildId, ownerUserId, requestId, actorUserId = ownerUserId }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const requestRow = db.db.prepare(`
+    SELECT req.*, requester.username AS requester_username
+    FROM guild_join_requests req
+    JOIN users requester ON requester.id = req.requested_by_user_id
+    WHERE req.id = ? AND req.guild_id = ?
+    LIMIT 1
+  `).get(requestId, guildId);
+
+  if (!requestRow || requestRow.request_status !== 'pending') {
+    throw Object.assign(new Error('Demande introuvable'), { status: 404 });
+  }
+
+  const requester = db.findOne('users', { id: requestRow.requested_by_user_id });
+  if (!requester || !requester.is_active) {
+    throw Object.assign(new Error('Compte demandeur introuvable'), { status: 404 });
+  }
+
+  const existing = db.db.prepare(`
+    SELECT id
+    FROM guild_access_members
+    WHERE guild_id = ? AND user_id = ?
+    LIMIT 1
+  `).get(guildId, requester.id);
+
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    if (existing) {
+      db.db.prepare(`
+        UPDATE guild_access_members
+        SET access_role = ?, invited_by_user_id = ?, is_suspended = 0, suspended_until = NULL, expires_at = NULL, accepted_at = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        normalizeAccessRole(requestRow.access_role),
+        requestRow.inviter_user_id || actorUserId,
+        now,
+        now,
+        existing.id
+      );
+    } else {
+      db.insert('guild_access_members', {
+        guild_id: guildId,
+        user_id: requester.id,
+        access_role: normalizeAccessRole(requestRow.access_role),
+        invited_by_user_id: requestRow.inviter_user_id || actorUserId,
+        is_suspended: 0,
+        suspended_until: null,
+        expires_at: null,
+        accepted_at: now,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+
+    db.db.prepare(`
+      UPDATE guild_join_requests
+      SET request_status = 'approved', decided_by_user_id = ?, decided_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(actorUserId, now, now, requestId);
+  });
+
+  const actor = db.findOne('users', { id: actorUserId });
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: actor?.username,
+    actionType: 'join_request_approve',
+    target: getDiscordDisplayName(requester),
+    details: {
+      role: normalizeAccessRole(requestRow.access_role),
+      code: requestRow.code_masked || null,
     },
   });
 
   return {
-    guild,
-    access: getGuildAccess(userId, guild.id),
+    request: db.findOne('guild_join_requests', { id: requestId }),
+    collaborator: db.db.prepare(`
+      SELECT *
+      FROM guild_access_members
+      WHERE guild_id = ? AND user_id = ?
+      LIMIT 1
+    `).get(guildId, requester.id),
+    requester,
+  };
+}
+
+function rejectGuildJoinRequest({ guildId, ownerUserId, requestId, actorUserId = ownerUserId }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+
+  const requestRow = db.db.prepare(`
+    SELECT req.*, requester.username AS requester_username
+    FROM guild_join_requests req
+    JOIN users requester ON requester.id = req.requested_by_user_id
+    WHERE req.id = ? AND req.guild_id = ?
+    LIMIT 1
+  `).get(requestId, guildId);
+
+  if (!requestRow || requestRow.request_status !== 'pending') {
+    throw Object.assign(new Error('Demande introuvable'), { status: 404 });
+  }
+
+  const now = new Date().toISOString();
+  db.db.prepare(`
+    UPDATE guild_join_requests
+    SET request_status = 'rejected', decided_by_user_id = ?, decided_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(actorUserId, now, now, requestId);
+
+  const requester = db.findOne('users', { id: requestRow.requested_by_user_id });
+  const actor = db.findOne('users', { id: actorUserId });
+  logCollabAction({
+    guildId,
+    actorUserId,
+    actorUsername: actor?.username,
+    actionType: 'join_request_reject',
+    target: requester ? getDiscordDisplayName(requester) : requestRow.requester_username,
+    details: {
+      role: normalizeAccessRole(requestRow.access_role),
+      code: requestRow.code_masked || null,
+    },
+  });
+
+  return {
+    request: db.findOne('guild_join_requests', { id: requestId }),
+    requester,
   };
 }
 
@@ -1213,10 +1427,13 @@ module.exports = {
   listAccessibleGuilds,
   listGuildCollaborators,
   listGuildJoinCodes,
+  listGuildJoinRequests,
   inviteGuildCollaborator,
   createGuildJoinCode,
   revokeGuildJoinCode,
   redeemGuildJoinCode,
+  approveGuildJoinRequest,
+  rejectGuildJoinRequest,
   updateGuildCollaboratorRole,
   suspendGuildCollaborator,
   removeGuildCollaborator,

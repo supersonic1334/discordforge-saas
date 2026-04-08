@@ -240,6 +240,26 @@ const SCHEMA = [
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  `CREATE TABLE IF NOT EXISTS guild_join_requests (
+    id                TEXT PRIMARY KEY,
+    guild_id          TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    code_id           TEXT REFERENCES guild_access_codes(id) ON DELETE SET NULL,
+    requested_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    inviter_user_id   TEXT REFERENCES users(id) ON DELETE SET NULL,
+    access_role       TEXT NOT NULL DEFAULT 'admin' CHECK(access_role IN ('admin','moderator','viewer')),
+    code_masked       TEXT NOT NULL DEFAULT '',
+    request_status    TEXT NOT NULL DEFAULT 'pending' CHECK(request_status IN ('pending','approved','rejected')),
+    decided_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    decided_at        TEXT,
+    requested_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(code_id)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_guild_join_requests_guild_status
+    ON guild_join_requests(guild_id, request_status, requested_at DESC)`,
+
   `CREATE TABLE IF NOT EXISTS collaboration_audit_log (
     id              TEXT PRIMARY KEY,
     guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
