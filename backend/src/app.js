@@ -155,8 +155,8 @@ function renderBlockedDocument() {
   <body>
     <main class="card">
       <div class="badge">Acces bloque</div>
-      <h1>Cette machine n'a plus acces au site.</h1>
-      <p>La protection est appliquee avant le chargement du site. Tant que le blocage n'est pas retire, aucune page ni ressource privee n'est accessible.</p>
+      <h1>Acces au site indisponible.</h1>
+      <p>Votre acces a ete bloque. Si vous pensez qu'il s'agit d'une erreur, contactez le support.</p>
     </main>
   </body>
 </html>`;
