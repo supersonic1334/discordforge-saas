@@ -406,6 +406,27 @@ function normalizeActionConfig(actionType, value = {}, fallbackValue = {}) {
   if (actionType === COMMAND_ACTION_TYPES.ANNOUNCE_MESSAGE) {
     return normalizeAnnounceActionConfig(value, fallbackValue);
   }
+  if (
+    actionType === COMMAND_ACTION_TYPES.PING_INFO
+    || actionType === COMMAND_ACTION_TYPES.BOT_INFO
+    || actionType === COMMAND_ACTION_TYPES.SERVER_INFO
+    || actionType === COMMAND_ACTION_TYPES.MEMBERCOUNT_INFO
+    || actionType === COMMAND_ACTION_TYPES.USER_INFO
+    || actionType === COMMAND_ACTION_TYPES.AVATAR_INFO
+    || actionType === COMMAND_ACTION_TYPES.BANNER_INFO
+    || actionType === COMMAND_ACTION_TYPES.ROLE_INFO
+    || actionType === COMMAND_ACTION_TYPES.CHANNEL_INFO
+    || actionType === COMMAND_ACTION_TYPES.JOINED_AT_INFO
+    || actionType === COMMAND_ACTION_TYPES.SERVER_ICON_INFO
+    || actionType === COMMAND_ACTION_TYPES.BOOSTS_INFO
+    || actionType === COMMAND_ACTION_TYPES.PERMISSIONS_INFO
+    || actionType === COMMAND_ACTION_TYPES.ID_INFO
+    || actionType === COMMAND_ACTION_TYPES.EMOJI_INFO
+  ) {
+    return {
+      success_visibility: normalizeVisibility(value?.success_visibility, fallbackValue?.success_visibility),
+    };
+  }
   return {};
 }
 

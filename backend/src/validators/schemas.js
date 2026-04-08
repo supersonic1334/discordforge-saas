@@ -250,6 +250,21 @@ const nativeActionTypeSchema = z.enum([
   'announce_message',
   'move_member',
   'disconnect_member',
+  'ping_info',
+  'bot_info',
+  'server_info',
+  'membercount_info',
+  'user_info',
+  'avatar_info',
+  'banner_info',
+  'role_info',
+  'channel_info',
+  'joined_at_info',
+  'server_icon_info',
+  'boosts_info',
+  'permissions_info',
+  'id_info',
+  'emoji_info',
 ]);
 
 const customCommandSchema = z.object({

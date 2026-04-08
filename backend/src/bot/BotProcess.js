@@ -441,6 +441,11 @@ function normalizeCommandActionConfig(actionType, rawValue = {}) {
     case COMMAND_ACTION_TYPES.ROLE_INFO:
     case COMMAND_ACTION_TYPES.CHANNEL_INFO:
     case COMMAND_ACTION_TYPES.JOINED_AT_INFO:
+    case COMMAND_ACTION_TYPES.SERVER_ICON_INFO:
+    case COMMAND_ACTION_TYPES.BOOSTS_INFO:
+    case COMMAND_ACTION_TYPES.PERMISSIONS_INFO:
+    case COMMAND_ACTION_TYPES.ID_INFO:
+    case COMMAND_ACTION_TYPES.EMOJI_INFO:
       return {
         success_visibility: normalizeVisibility(source.success_visibility, fallback.success_visibility),
       };
@@ -670,10 +675,6 @@ function buildSlashCommandPayload(command) {
           name: 'channel',
           description: 'Salon texte cible',
           required: false,
-          channel_types: [
-            ChannelType.GuildText,
-            ChannelType.GuildAnnouncement,
-          ],
         },
         {
           type: ApplicationCommandOptionType.String,
@@ -692,13 +693,6 @@ function buildSlashCommandPayload(command) {
           name: 'channel',
           description: 'Salon texte cible',
           required: false,
-          channel_types: [
-            ChannelType.GuildText,
-            ChannelType.GuildAnnouncement,
-            ChannelType.PublicThread,
-            ChannelType.PrivateThread,
-            ChannelType.AnnouncementThread,
-          ],
         },
         {
           type: ApplicationCommandOptionType.Integer,
@@ -725,13 +719,6 @@ function buildSlashCommandPayload(command) {
           name: 'channel',
           description: 'Salon de destination',
           required: false,
-          channel_types: [
-            ChannelType.GuildText,
-            ChannelType.GuildAnnouncement,
-            ChannelType.PublicThread,
-            ChannelType.PrivateThread,
-            ChannelType.AnnouncementThread,
-          ],
         },
         {
           type: ApplicationCommandOptionType.String,
@@ -756,13 +743,6 @@ function buildSlashCommandPayload(command) {
           name: 'channel',
           description: 'Salon de destination',
           required: false,
-          channel_types: [
-            ChannelType.GuildText,
-            ChannelType.GuildAnnouncement,
-            ChannelType.PublicThread,
-            ChannelType.PrivateThread,
-            ChannelType.AnnouncementThread,
-          ],
         },
         {
           type: ApplicationCommandOptionType.String,
@@ -800,10 +780,6 @@ function buildSlashCommandPayload(command) {
           name: 'channel',
           description: 'Salon vocal de destination',
           required: true,
-          channel_types: [
-            ChannelType.GuildVoice,
-            ChannelType.GuildStageVoice,
-          ],
         },
         {
           type: ApplicationCommandOptionType.String,
@@ -847,6 +823,52 @@ function buildSlashCommandPayload(command) {
           name: 'channel',
           description: 'Salon cible',
           required: false,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.PERMISSIONS_INFO:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: false,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.ID_INFO:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.User,
+          name: 'user',
+          description: 'Membre cible',
+          required: false,
+        },
+        {
+          type: ApplicationCommandOptionType.Role,
+          name: 'role',
+          description: 'Role cible',
+          required: false,
+        },
+        {
+          type: ApplicationCommandOptionType.Channel,
+          name: 'channel',
+          description: 'Salon cible',
+          required: false,
+        },
+      ];
+      break;
+
+    case COMMAND_ACTION_TYPES.EMOJI_INFO:
+      payload.options = [
+        {
+          type: ApplicationCommandOptionType.String,
+          name: 'emoji',
+          description: 'Emoji du serveur',
+          required: true,
+          max_length: 100,
         },
       ];
       break;
@@ -1308,13 +1330,63 @@ class BotProcess extends EventEmitter {
           payloads.push(payload);
         }
 
-        await guild.commands.set(payloads);
-        logger.info(`Slash commands synced for guild ${guild.id}`, {
-          userId: this.userId,
-          guildId: guild.id,
-          count: payloads.length,
-        });
-        return { guildId: guild.id, synced: payloads.length };
+        try {
+          await guild.commands.set(payloads);
+          logger.info(`Slash commands synced for guild ${guild.id}`, {
+            userId: this.userId,
+            guildId: guild.id,
+            count: payloads.length,
+            mode: 'bulk',
+          });
+          return { guildId: guild.id, synced: payloads.length };
+        } catch (bulkError) {
+          logger.warn(`Bulk slash sync failed for guild ${guild.id}, fallback to individual sync: ${bulkError.message}`, {
+            userId: this.userId,
+            guildId: guild.id,
+            count: payloads.length,
+          });
+
+          const existingCommands = await guild.commands.fetch().catch(() => null);
+          const existingByName = new Map(
+            [...(existingCommands?.values?.() || [])].map((entry) => [sanitizeSlashCommandName(entry.name), entry])
+          );
+          const syncedNames = new Set();
+          let syncedCount = 0;
+
+          for (const payload of payloads) {
+            try {
+              const existing = existingByName.get(payload.name) || null;
+              if (existing) {
+                await guild.commands.edit(existing.id, payload);
+              } else {
+                await guild.commands.create(payload);
+              }
+              syncedNames.add(payload.name);
+              syncedCount += 1;
+            } catch (singleError) {
+              logger.error(`Slash command sync failed for ${payload.name} in guild ${guild.id}: ${singleError.message}`, {
+                userId: this.userId,
+                guildId: guild.id,
+                commandName: payload.name,
+              });
+            }
+          }
+
+          for (const [name, existing] of existingByName.entries()) {
+            if (!syncedNames.has(name)) {
+              await guild.commands.delete(existing.id).catch(() => {});
+            }
+          }
+
+          logger.info(`Slash commands synced for guild ${guild.id}`, {
+            userId: this.userId,
+            guildId: guild.id,
+            count: syncedCount,
+            expected: payloads.length,
+            mode: 'fallback',
+          });
+          return { guildId: guild.id, synced: syncedCount };
+        }
       } catch (error) {
         logger.error(`Slash command sync failed for guild ${guild.id}: ${error.message}`, {
           userId: this.userId,
@@ -2497,13 +2569,13 @@ class BotProcess extends EventEmitter {
 
     const permissionsMenu = new StringSelectMenuBuilder()
       .setCustomId(this._buildVoiceGeneratorCustomId('permissions', room.id))
-      .setPlaceholder('Gerer l acces')
+      .setPlaceholder("Gerer l'acces")
       .setMinValues(1)
       .setMaxValues(1)
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('Inviter').setValue('invite').setDescription('Autoriser un membre dans la vocale'),
-        new StringSelectMenuOptionBuilder().setLabel('Reject').setValue('reject').setDescription('Bloquer ou expulser un membre'),
-        new StringSelectMenuOptionBuilder().setLabel('Transfer').setValue('transfer').setDescription('Transmettre la propriete')
+        new StringSelectMenuOptionBuilder().setLabel('Refuser').setValue('reject').setDescription('Bloquer ou expulser un membre'),
+        new StringSelectMenuOptionBuilder().setLabel('Transferer').setValue('transfer').setDescription('Transmettre la propriete')
       );
 
     const regionMenu = new StringSelectMenuBuilder()
@@ -2544,12 +2616,12 @@ class BotProcess extends EventEmitter {
         name: guild?.name ? `${guild.name} • Controle vocal` : 'Controle vocal',
         icon_url: guild?.iconURL?.({ size: 128 }) || undefined,
       },
-      title: String(configRow?.control_title || 'Ta vocale temporaire').slice(0, 256),
-      description: `${String(configRow?.control_description || 'Utilise les menus ci-dessous pour gerer ta vocale temporaire.').slice(0, 3600)}\n\nSeul le proprietaire de la vocale peut utiliser ces menus.`,
+      title: String(configRow?.control_title || 'Bienvenue dans ton salon vocal').slice(0, 256),
+      description: `${String(configRow?.control_description || 'Utilise les menus ci-dessous pour personnaliser et gerer ta vocale.').slice(0, 3600)}\n\nUtilise les menus ci-dessous pour ajuster ta vocale rapidement.`,
       color: this._hexColorToInt(configRow?.panel_color, 0x22c55e),
       fields: [
         {
-          name: 'Proprietaire',
+          name: 'Createur',
           value: ownerMention,
           inline: true,
         },
@@ -2559,7 +2631,7 @@ class BotProcess extends EventEmitter {
           inline: true,
         },
         {
-          name: 'Acces',
+          name: 'Statut',
           value: [
             room.is_locked ? 'Verrouille' : 'Ouvert',
             room.is_hidden ? 'Ghost' : 'Visible',
@@ -2571,10 +2643,6 @@ class BotProcess extends EventEmitter {
           name: 'Salon',
           value: channel?.id ? `<#${channel.id}>` : (room.name || 'Vocale temporaire'),
           inline: true,
-        },
-        {
-          name: 'Actions rapides',
-          value: 'Renommer, limite, verrouiller, ghost, inviter, refuser, transferer et supprimer.',
         },
       ],
       timestamp: new Date().toISOString(),
@@ -5104,6 +5172,117 @@ class BotProcess extends EventEmitter {
         return true;
       }
 
+      case COMMAND_ACTION_TYPES.SERVER_ICON_INFO: {
+        const iconUrl = guild.iconURL?.({ size: 1024 }) || null;
+        if (!iconUrl) {
+          await this._replyToNativeSource(source, 'Aucune icone publique trouvee pour ce serveur.', replyOptions);
+          return true;
+        }
+        const embed = buildInfoEmbed({
+          title: `${guild.name} • Icône`,
+          color: embedColor,
+          image: iconUrl,
+          fields: [{ name: 'Lien', value: iconUrl, inline: false }],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.BOOSTS_INFO: {
+        const embed = buildInfoEmbed({
+          title: `${guild.name} • Boosts`,
+          color: embedColor,
+          thumbnail: guild.iconURL?.({ size: 256 }) || null,
+          fields: [
+            { name: 'Niveau', value: String(guild.premiumTier || 0) },
+            { name: 'Boosts actifs', value: `${guild.premiumSubscriptionCount || 0}` },
+            { name: 'Limite audio', value: guild.maximumBitrate ? `${Math.round(guild.maximumBitrate / 1000)} kbps` : '-' },
+          ],
+          image: guild.bannerURL?.({ size: 1024 }) || null,
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.PERMISSIONS_INFO: {
+        const { user, member } = await resolveTargetUser();
+        const permissions = member?.permissions?.toArray?.() || [];
+        const visiblePermissions = permissions.length > 0 ? permissions.slice(0, 15).map((entry) => `\`${entry}\``) : ['Aucune permission visible'];
+        const embed = buildInfoEmbed({
+          title: `${user.displayName || user.username} • Permissions`,
+          color: embedColor,
+          thumbnail: user.displayAvatarURL?.({ size: 256 }) || null,
+          fields: [
+            { name: 'ID', value: user.id },
+            { name: 'Administrateur', value: member?.permissions?.has?.(PermissionFlagsBits.Administrator) ? 'Oui' : 'Non' },
+            { name: 'Type', value: member ? 'Membre du serveur' : 'Utilisateur non visible' },
+            { name: 'Permissions visibles', value: visiblePermissions.join(', '), inline: false },
+          ],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.ID_INFO: {
+        const user = source.options.getUser('user');
+        const role = source.options.getRole('role');
+        const channel = source.options.getChannel('channel');
+        const fields = [];
+
+        if (user) {
+          fields.push({ name: 'Utilisateur', value: `${user.displayName || user.username}\n\`${user.id}\``, inline: false });
+        }
+        if (role) {
+          fields.push({ name: 'Rôle', value: `${role.name}\n\`${role.id}\``, inline: false });
+        }
+        if (channel) {
+          fields.push({ name: 'Salon', value: `${channel.name || 'Salon'}\n\`${channel.id}\``, inline: false });
+        }
+        if (fields.length === 0) {
+          fields.push({ name: 'Ton compte', value: `${source.user.displayName || source.user.username}\n\`${source.user.id}\``, inline: false });
+          if (source.channel?.id) {
+            fields.push({ name: 'Salon actuel', value: `${source.channel.name || 'Salon'}\n\`${source.channel.id}\``, inline: false });
+          }
+        }
+
+        const embed = buildInfoEmbed({
+          title: 'Identifiants Discord',
+          color: embedColor,
+          fields,
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
+      case COMMAND_ACTION_TYPES.EMOJI_INFO: {
+        const rawEmoji = String(source.options.getString('emoji', true) || '').trim();
+        const customMatch = rawEmoji.match(/^<a?:[\w~]+:(\d+)>$/);
+        const emojiId = customMatch?.[1] || (/^\d+$/.test(rawEmoji) ? rawEmoji : null);
+        const emoji = emojiId
+          ? guild.emojis.cache.get(emojiId)
+          : guild.emojis.cache.find((entry) => entry.name?.toLowerCase() === rawEmoji.replace(/:/g, '').toLowerCase());
+
+        if (!emoji) {
+          await this._replyToNativeSource(source, 'Emoji introuvable sur ce serveur.', replyOptions);
+          return true;
+        }
+
+        const imageUrl = emoji.imageURL?.({ size: 512 }) || null;
+        const embed = buildInfoEmbed({
+          title: `${emoji.name} • Emoji`,
+          color: embedColor,
+          thumbnail: imageUrl,
+          fields: [
+            { name: 'ID', value: emoji.id },
+            { name: 'Animé', value: emoji.animated ? 'Oui' : 'Non' },
+            { name: 'Créé le', value: emoji.createdAt ? emoji.createdAt.toLocaleString('fr-FR') : '-' },
+            ...(imageUrl ? [{ name: 'Lien', value: imageUrl, inline: false }] : []),
+          ],
+        });
+        await this._replyWithEmbedToNativeSource(source, embed, replyOptions);
+        return true;
+      }
+
       default:
         return false;
     }
@@ -5145,6 +5324,11 @@ class BotProcess extends EventEmitter {
       case COMMAND_ACTION_TYPES.ROLE_INFO:
       case COMMAND_ACTION_TYPES.CHANNEL_INFO:
       case COMMAND_ACTION_TYPES.JOINED_AT_INFO:
+      case COMMAND_ACTION_TYPES.SERVER_ICON_INFO:
+      case COMMAND_ACTION_TYPES.BOOSTS_INFO:
+      case COMMAND_ACTION_TYPES.PERMISSIONS_INFO:
+      case COMMAND_ACTION_TYPES.ID_INFO:
+      case COMMAND_ACTION_TYPES.EMOJI_INFO:
         return this._executeNativeInfoCommand(source, command);
       default:
         return handleCustomCommand(source, command, matchedTrigger);
