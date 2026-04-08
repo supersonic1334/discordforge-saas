@@ -759,6 +759,9 @@ router.delete('/discord', async (req, res, next) => {
   try {
     const clearedBefore = new Date().toISOString();
     db.update('guilds', { discord_logs_cleared_before: clearedBefore }, { id: req.guild.id });
+    db.db.prepare(
+      'DELETE FROM bot_logs WHERE guild_id = ? AND category = ? AND datetime(created_at) <= datetime(?)'
+    ).run(req.guild.id, 'discord_event', clearedBefore);
     res.json({
       message: 'Discord logs cleared',
       cleared_before: clearedBefore,

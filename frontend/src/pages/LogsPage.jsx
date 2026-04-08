@@ -136,6 +136,7 @@ export default function LogsPage() {
   const [filterDate, setFilterDate] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [clearingDiscord, setClearingDiscord] = useState(false)
+  const [showClearDiscordDialog, setShowClearDiscordDialog] = useState(false)
   const [expandedDetails, setExpandedDetails] = useState({})
 
   async function loadSiteLogs({ silent = false } = {}) {
@@ -186,14 +187,15 @@ export default function LogsPage() {
 
   async function handleClearDiscordLogs() {
     if (!selectedGuildId || clearingDiscord) return
-    if (!window.confirm('Vider les logs Discord affiches ? Les anciens logs ne reviendront plus apres refresh.')) return
 
+    setShowClearDiscordDialog(false)
     setClearingDiscord(true)
     try {
-      await logsAPI.clearDiscord(selectedGuildId)
+      const response = await logsAPI.clearDiscord(selectedGuildId)
       setDiscordLogs([])
       toast.success('Logs Discord vides')
       await loadDiscordLogs({ silent: true })
+      return response
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -335,7 +337,7 @@ export default function LogsPage() {
             </button>
             {activeTab === 'discord' && (
               <button
-                onClick={handleClearDiscordLogs}
+                onClick={() => setShowClearDiscordDialog(true)}
                 disabled={clearingDiscord}
                 className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-mono text-red-300 transition-all hover:bg-red-500/15 disabled:opacity-50"
               >
@@ -754,6 +756,58 @@ export default function LogsPage() {
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+        {showClearDiscordDialog && activeTab === 'discord' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 14, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.18 }}
+              className="w-full max-w-lg rounded-[28px] border border-red-500/15 bg-[#0c0f16] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-300">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div>
+                    <p className="text-[11px] font-mono uppercase tracking-[0.26em] text-red-300/80">Logs Discord</p>
+                    <h3 className="mt-2 font-display text-2xl font-800 text-white">Vider les logs affiches ?</h3>
+                  </div>
+                  <p className="text-sm leading-6 text-white/60">
+                    Les logs Discord disparaissent du site et restent vides apres refresh, jusqu'a l'arrivee de nouveaux evenements.
+                  </p>
+                  <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowClearDiscordDialog(false)}
+                      disabled={clearingDiscord}
+                      className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-mono text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearDiscordLogs}
+                      disabled={clearingDiscord}
+                      className="rounded-2xl border border-red-500/25 bg-red-500/12 px-4 py-3 text-sm font-mono text-red-200 transition-all hover:bg-red-500/18 disabled:opacity-50"
+                    >
+                      {clearingDiscord ? 'Vidage...' : 'Vider les logs'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -310,6 +310,7 @@ function getGuildAccess(userId, guildId) {
       is_active: row.is_active,
       bot_joined_at: row.bot_joined_at,
       last_synced_at: row.last_synced_at,
+      discord_logs_cleared_before: row.discord_logs_cleared_before || null,
       created_at: row.created_at,
       updated_at: row.updated_at,
     },
