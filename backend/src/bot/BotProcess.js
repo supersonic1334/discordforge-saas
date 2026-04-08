@@ -965,6 +965,7 @@ class BotProcess extends EventEmitter {
     this._stopping     = false;
     this._restartTimer = null;
     this._heartbeatInterval = null;
+    this._voiceRoomControlSyncs = new Map();
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -2466,26 +2467,37 @@ class BotProcess extends EventEmitter {
         .setDescription(value === 'auto' ? 'Laisser Discord choisir automatiquement' : `Basculer la vocale sur ${label}`));
   }
 
+  _getVoiceBrandAssetUrls(configRow) {
+    const frontendBaseUrl = String(config.FRONTEND_URL || '').replace(/\/+$/, '');
+    return {
+      thumbnailUrl: String(configRow?.panel_thumbnail_url || '').trim() || `${frontendBaseUrl}/discordforger-icon.png`,
+      imageUrl: String(configRow?.panel_image_url || '').trim() || `${frontendBaseUrl}/discordforger-logo-full.png`,
+      siteUrl: frontendBaseUrl || null,
+      siteButtonLabel: String(configRow?.site_button_label || 'Ouvrir DiscordForger').trim().slice(0, 80) || 'Ouvrir DiscordForger',
+      showSiteLink: typeof configRow?.show_site_link === 'boolean' ? configRow.show_site_link : true,
+    };
+  }
+
   _buildVoiceControlComponents(room, configRow) {
     const settingsMenu = new StringSelectMenuBuilder()
       .setCustomId(this._buildVoiceGeneratorCustomId('settings', room.id))
-      .setPlaceholder('Regler la vocale')
+      .setPlaceholder('Parametres de la vocale')
       .setMinValues(1)
       .setMaxValues(1)
       .addOptions(
-        new StringSelectMenuOptionBuilder().setLabel('Renommer').setValue('rename').setDescription('Changer le nom de la vocale'),
+        new StringSelectMenuOptionBuilder().setLabel('Renommer').setValue('rename').setDescription('Changer le nom de ta vocale'),
         new StringSelectMenuOptionBuilder().setLabel('Limite').setValue('limit').setDescription('Modifier la limite de membres'),
-        new StringSelectMenuOptionBuilder().setLabel('Lock').setValue('lock').setDescription('Fermer la connexion publique'),
-        new StringSelectMenuOptionBuilder().setLabel('Unlock').setValue('unlock').setDescription('Rouvrir la connexion publique'),
+        new StringSelectMenuOptionBuilder().setLabel('Verrouiller').setValue('lock').setDescription('Bloquer l acces libre'),
+        new StringSelectMenuOptionBuilder().setLabel('Deverrouiller').setValue('unlock').setDescription('Rouvrir l acces libre'),
         new StringSelectMenuOptionBuilder().setLabel('Ghost').setValue('ghost').setDescription('Masquer la vocale aux autres'),
         new StringSelectMenuOptionBuilder().setLabel('Unghost').setValue('unghost').setDescription('Rendre la vocale visible'),
         new StringSelectMenuOptionBuilder().setLabel('Supprimer').setValue('delete').setDescription('Supprimer la vocale maintenant'),
-        ...(configRow?.allow_claim ? [new StringSelectMenuOptionBuilder().setLabel('Claim').setValue('claim').setDescription('Recuperer la vocale si le createur est parti')] : [])
+        ...(configRow?.allow_claim ? [new StringSelectMenuOptionBuilder().setLabel('Recuperer').setValue('claim').setDescription('Recuperer la vocale si le createur est parti')] : [])
       );
 
     const permissionsMenu = new StringSelectMenuBuilder()
       .setCustomId(this._buildVoiceGeneratorCustomId('permissions', room.id))
-      .setPlaceholder('Gerer les permissions')
+      .setPlaceholder('Gerer l acces')
       .setMinValues(1)
       .setMaxValues(1)
       .addOptions(
@@ -2496,33 +2508,48 @@ class BotProcess extends EventEmitter {
 
     const regionMenu = new StringSelectMenuBuilder()
       .setCustomId(this._buildVoiceGeneratorCustomId('region', room.id))
-      .setPlaceholder(`Region active: ${VOICE_REGION_LABELS[room?.rtc_region || 'auto'] || 'Auto'}`)
+      .setPlaceholder(`Region active : ${VOICE_REGION_LABELS[room?.rtc_region || 'auto'] || 'Auto'}`)
       .setMinValues(1)
       .setMaxValues(1)
       .addOptions(this._buildVoiceRegionOptions());
 
-    return [
+    const rows = [
       new ActionRowBuilder().addComponents(settingsMenu),
       new ActionRowBuilder().addComponents(permissionsMenu),
       new ActionRowBuilder().addComponents(regionMenu),
     ];
+
+    const assets = this._getVoiceBrandAssetUrls(configRow);
+    if (assets.showSiteLink && assets.siteUrl) {
+      rows.push(
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel(assets.siteButtonLabel)
+            .setURL(assets.siteUrl)
+        )
+      );
+    }
+
+    return rows;
   }
 
   _buildVoiceRoomControlPayload(room, configRow, guild, channel) {
     const assets = this._buildVoiceGeneratorAssets(configRow, `voice-room-${room.id}`);
+    const brandAssets = this._getVoiceBrandAssetUrls(configRow);
     const ownerMention = room.owner_discord_user_id ? `<@${room.owner_discord_user_id}>` : 'Inconnu';
     const memberCount = channel?.members?.size || 0;
     const embed = {
       author: {
-        name: guild?.name ? `${guild.name} • Vocal temporaire` : 'Vocal temporaire',
+        name: guild?.name ? `${guild.name} • Controle vocal` : 'Controle vocal',
         icon_url: guild?.iconURL?.({ size: 128 }) || undefined,
       },
       title: String(configRow?.control_title || 'Ta vocale temporaire').slice(0, 256),
-      description: String(configRow?.control_description || 'Utilise les menus ci-dessous pour gerer ta vocale temporaire.').slice(0, 4000),
+      description: `${String(configRow?.control_description || 'Utilise les menus ci-dessous pour gerer ta vocale temporaire.').slice(0, 3600)}\n\nSeul le proprietaire de la vocale peut utiliser ces menus.`,
       color: this._hexColorToInt(configRow?.panel_color, 0x22c55e),
       fields: [
         {
-          name: 'Owner',
+          name: 'Proprietaire',
           value: ownerMention,
           inline: true,
         },
@@ -2532,27 +2559,29 @@ class BotProcess extends EventEmitter {
           inline: true,
         },
         {
-          name: 'Etat',
+          name: 'Acces',
           value: [
-            room.is_locked ? 'Lock' : 'Ouvert',
+            room.is_locked ? 'Verrouille' : 'Ouvert',
             room.is_hidden ? 'Ghost' : 'Visible',
             VOICE_REGION_LABELS[room.rtc_region || 'auto'] || 'Auto',
           ].join(' • '),
           inline: true,
         },
         {
-          name: 'Controles',
-          value: 'Rename, limit, lock, unlock, ghost, unghost, invite, reject, transfer et claim sont disponibles ci-dessous.',
+          name: 'Salon',
+          value: channel?.id ? `<#${channel.id}>` : (room.name || 'Vocale temporaire'),
+          inline: true,
+        },
+        {
+          name: 'Actions rapides',
+          value: 'Renommer, limite, verrouiller, ghost, inviter, refuser, transferer et supprimer.',
         },
       ],
-      footer: {
-        text: 'Les controles directs passent par le bot, pas par les reglages Discord natifs.',
-      },
       timestamp: new Date().toISOString(),
     };
 
-    if (assets.thumbnailUrl) embed.thumbnail = { url: assets.thumbnailUrl };
-    if (assets.imageUrl) embed.image = { url: assets.imageUrl };
+    if (assets.thumbnailUrl || brandAssets.thumbnailUrl) embed.thumbnail = { url: assets.thumbnailUrl || brandAssets.thumbnailUrl };
+    if (assets.imageUrl || brandAssets.imageUrl) embed.image = { url: assets.imageUrl || brandAssets.imageUrl };
 
     return {
       embeds: [embed],
@@ -2757,43 +2786,95 @@ class BotProcess extends EventEmitter {
   }
 
   async _syncVoiceRoomControlMessage(guild, room, configRow) {
-    const channel = await this._syncVoiceRoomPermissions(guild, room);
-    if (!channel || typeof channel.send !== 'function') {
-      return room;
-    }
+    return this._withVoiceRoomControlSync(room?.id, async () => {
+      const channel = await this._syncVoiceRoomPermissions(guild, room);
+      if (!channel || typeof channel.send !== 'function') {
+        return room;
+      }
 
-    const payload = this._buildVoiceRoomControlPayload(room, configRow, guild, channel);
-    let message = null;
+      const payload = this._buildVoiceRoomControlPayload(room, configRow, guild, channel);
+      const matchedMessages = await this._findVoiceRoomControlMessages(channel, room.id);
+      let message = null;
 
-    if (room.control_message_id && channel.messages?.fetch) {
-      message = await channel.messages.fetch(room.control_message_id).catch(() => null);
-      if (message?.editable) {
+      if (room.control_message_id && channel.messages?.fetch) {
+        message = await channel.messages.fetch(room.control_message_id).catch(() => null);
+      }
+
+      if (!message) {
+        message = matchedMessages[0] || null;
+      }
+
+      if (message?.author?.id === this.client?.user?.id) {
         message = await message.edit({
+          content: null,
           ...payload,
-          attachments: payload.files?.length ? [] : undefined,
+          attachments: [],
         }).catch(() => null);
       }
-    }
 
-    if (!message) {
-      message = await channel.send(payload).catch(() => null);
-    }
+      if (!message) {
+        message = await channel.send({
+          content: room.owner_discord_user_id ? `<@${room.owner_discord_user_id}> ton panneau vocal est pret juste ici.` : undefined,
+          allowedMentions: room.owner_discord_user_id ? { users: [room.owner_discord_user_id] } : undefined,
+          ...payload,
+        }).catch(() => null);
+      }
 
-    if (!message?.id) return room;
-    return updateTempVoiceRoom(room.guild_id, room.id, {
-      control_message_id: message.id,
-      channel_id: channel.id,
-      name: channel.name,
-      user_limit: channel.userLimit || room.user_limit,
+      if (!message?.id) return room;
+
+      for (const duplicate of matchedMessages) {
+        if (duplicate.id !== message.id && duplicate.deletable) {
+          await duplicate.delete().catch(() => {});
+        }
+      }
+
+      return updateTempVoiceRoom(room.guild_id, room.id, {
+        control_message_id: message.id,
+        channel_id: channel.id,
+        name: channel.name,
+        user_limit: channel.userLimit || room.user_limit,
+      });
     });
   }
 
   _canManageVoiceRoom(member, room) {
     if (!member || !room) return false;
-    if (member.id === room.owner_discord_user_id) return true;
-    if (member.permissions?.has(PermissionFlagsBits.Administrator)) return true;
-    if (member.permissions?.has(PermissionFlagsBits.ManageChannels)) return true;
-    return false;
+    return member.id === room.owner_discord_user_id;
+  }
+
+  async _findVoiceRoomControlMessages(channel, roomId) {
+    if (!channel?.messages?.fetch || !roomId) return [];
+    const recentMessages = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+    if (!recentMessages) return [];
+
+    return [...recentMessages.values()]
+      .filter((message) => (
+        message?.author?.id === this.client?.user?.id
+        && Array.isArray(message.components)
+        && message.components.some((row) => row.components?.some((component) => {
+          const customId = String(component?.customId || '');
+          return customId.startsWith(`${VOICE_GENERATOR_PREFIX}:`) && customId.includes(`:${roomId}`);
+        }))
+      ))
+      .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+  }
+
+  async _withVoiceRoomControlSync(roomId, executor) {
+    const key = String(roomId || '');
+    const previous = this._voiceRoomControlSyncs.get(key) || Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(() => executor());
+
+    this._voiceRoomControlSyncs.set(key, next);
+
+    try {
+      return await next;
+    } finally {
+      if (this._voiceRoomControlSyncs.get(key) === next) {
+        this._voiceRoomControlSyncs.delete(key);
+      }
+    }
   }
 
   async _createManagedVoiceRoom(member, internalGuildId, configRow, creatorChannel) {

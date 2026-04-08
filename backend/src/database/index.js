@@ -339,6 +339,8 @@ function runMigrations() {
   ensureColumn('guild_ticket_generators', 'panel_thumbnail_url', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('guild_ticket_generators', 'panel_image_url', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('guild_ticket_generators', 'transcript_channel_id', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('guild_voice_generators', 'site_button_label', "TEXT NOT NULL DEFAULT 'Ouvrir DiscordForger'");
+  ensureColumn('guild_voice_generators', 'show_site_link', 'INTEGER NOT NULL DEFAULT 1');
   ensureColumn('user_security_access_log', 'browser_name', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_security_access_log', 'os_name', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_security_access_log', 'device_type', "TEXT NOT NULL DEFAULT ''");

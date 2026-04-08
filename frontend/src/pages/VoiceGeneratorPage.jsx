@@ -11,6 +11,9 @@ const CATEGORY_CHANNEL_TYPES = new Set([4])
 const AUTO_REFRESH_MS = 12000
 const MAX_ASSET_LENGTH = 280000
 const MAX_REQUEST_LENGTH = 700000
+const DEFAULT_SITE_ICON = '/discordforger-icon.png'
+const DEFAULT_SITE_BANNER = '/discordforger-logo-full.png'
+const DEFAULT_SITE_BUTTON_LABEL = 'Ouvrir DiscordForger'
 
 const DEFAULT_CONFIG = {
   enabled: true,
@@ -23,6 +26,8 @@ const DEFAULT_CONFIG = {
   panel_color: '#22c55e',
   panel_thumbnail_url: '',
   panel_image_url: '',
+  site_button_label: DEFAULT_SITE_BUTTON_LABEL,
+  show_site_link: true,
   room_name_template: 'Vocal de {username}',
   default_user_limit: 0,
   default_region: 'auto',
@@ -69,6 +74,8 @@ function normalizeConfig(value = {}) {
     control_title: String(value?.control_title || DEFAULT_CONFIG.control_title).trim() || DEFAULT_CONFIG.control_title,
     control_description: String(value?.control_description || DEFAULT_CONFIG.control_description).trim() || DEFAULT_CONFIG.control_description,
     room_name_template: String(value?.room_name_template || DEFAULT_CONFIG.room_name_template).trim() || DEFAULT_CONFIG.room_name_template,
+    site_button_label: String(value?.site_button_label || DEFAULT_CONFIG.site_button_label).trim() || DEFAULT_CONFIG.site_button_label,
+    show_site_link: typeof value?.show_site_link === 'boolean' ? value.show_site_link : DEFAULT_CONFIG.show_site_link,
     default_user_limit: Math.max(0, Math.min(Number(value?.default_user_limit ?? DEFAULT_CONFIG.default_user_limit) || 0, 99)),
     default_region: String(value?.default_region || DEFAULT_CONFIG.default_region).trim() || DEFAULT_CONFIG.default_region,
   }
@@ -87,6 +94,8 @@ function buildSavePayload(value = {}) {
     panel_color: String(source.panel_color || DEFAULT_CONFIG.panel_color).trim(),
     panel_thumbnail_url: String(source.panel_thumbnail_url || '').trim(),
     panel_image_url: String(source.panel_image_url || '').trim(),
+    site_button_label: String(source.site_button_label || DEFAULT_CONFIG.site_button_label).trim() || DEFAULT_CONFIG.site_button_label,
+    show_site_link: Boolean(source.show_site_link),
     room_name_template: String(source.room_name_template || DEFAULT_CONFIG.room_name_template).trim(),
     default_user_limit: Math.max(0, Math.min(Number(source.default_user_limit || 0), 99)),
     default_region: String(source.default_region || DEFAULT_CONFIG.default_region).trim(),
@@ -274,6 +283,9 @@ export default function VoiceGeneratorPage() {
   const normalizedConfig = config ? normalizeConfig(config) : null
   const normalizedDraft = draft ? normalizeConfig(draft) : null
   const draftDirty = JSON.stringify(buildSavePayload(normalizedConfig || {})) !== JSON.stringify(buildSavePayload(normalizedDraft || {}))
+  const previewThumbnail = normalizedDraft?.panel_thumbnail_url || DEFAULT_SITE_ICON
+  const previewBanner = normalizedDraft?.panel_image_url || DEFAULT_SITE_BANNER
+  const previewSiteButtonLabel = normalizedDraft?.site_button_label || DEFAULT_SITE_BUTTON_LABEL
 
   const applyOverview = (payload = {}, preserveDraft = false) => {
     const nextConfig = normalizeConfig(payload.config || {})
@@ -488,13 +500,22 @@ export default function VoiceGeneratorPage() {
                   />
                 )}
 
-                <SelectField
-                  label="Categorie parent"
-                  value={normalizedDraft.creator_category_id}
-                  onChange={(value) => updateDraft({ creator_category_id: value })}
-                  options={categoryChannels}
-                  emptyLabel="Aucune categorie"
-                />
+                {normalizedDraft.channel_mode === 'create' ? (
+                  <div className="space-y-2">
+                    <SelectField
+                      label="Ranger les vocaux crees dans"
+                      value={normalizedDraft.creator_category_id}
+                      onChange={(value) => updateDraft({ creator_category_id: value })}
+                      options={categoryChannels}
+                      emptyLabel="Aucune categorie"
+                    />
+                    <p className="text-xs text-white/35">Optionnel. Le bot rangera le vocal createur et les vocaux ouverts dans cette categorie.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/45">
+                    Le salon existant garde sa categorie actuelle.
+                  </div>
+                )}
 
                 <InputField
                   label="Nom des vocaux"
@@ -541,6 +562,13 @@ export default function VoiceGeneratorPage() {
                 <InputField label="Message du chat vocal" value={normalizedDraft.control_description} onChange={(value) => updateDraft({ control_description: value })} multiline rows={4} placeholder="Utilise les menus ci-dessous pour gerer ta vocale temporaire." />
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white">
+                  <input type="checkbox" checked={!!normalizedDraft.show_site_link} onChange={(event) => updateDraft({ show_site_link: event.target.checked })} className="h-4 w-4 rounded border-white/15 bg-transparent text-cyan-400 focus:ring-cyan-400/30" />
+                  Afficher le bouton du site en bas du panel
+                </label>
+                <InputField label="Texte du bouton site" value={normalizedDraft.site_button_label} onChange={(value) => updateDraft({ site_button_label: value })} placeholder="Ouvrir DiscordForger" />
+              </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <AssetBox label="Miniature" value={normalizedDraft.panel_thumbnail_url} onValue={(value) => updateDraft({ panel_thumbnail_url: value })} onUpload={(file) => uploadAsset('panel_thumbnail_url', file)} onClear={() => updateDraft({ panel_thumbnail_url: '' })} inputRef={thumbnailRef} />
                 <AssetBox label="Banniere" value={normalizedDraft.panel_image_url} onValue={(value) => updateDraft({ panel_image_url: value })} onUpload={(file) => uploadAsset('panel_image_url', file)} onClear={() => updateDraft({ panel_image_url: '' })} inputRef={imageRef} />
               </div>
@@ -554,22 +582,50 @@ export default function VoiceGeneratorPage() {
                 Apercu Discord
               </div>
               <div className="mt-4 overflow-hidden rounded-[26px] border border-white/10 bg-[#0b111b]">
-                <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-medium text-white/80">
-                  {normalizedDraft.control_title}
+                <div className="border-b border-white/10 bg-[linear-gradient(135deg,rgba(34,197,94,0.12),rgba(34,211,238,0.08),rgba(15,23,42,0.25))] px-4 py-3 text-sm font-medium text-white/80">
+                  Panneau vocal Discord
                 </div>
                 <div className="space-y-4 p-4">
-                  <div className="flex items-start gap-3">
-                    {normalizedDraft.panel_thumbnail_url ? <img src={normalizedDraft.panel_thumbnail_url} alt="" className="h-14 w-14 rounded-2xl border border-white/10 object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/25"><Mic className="h-5 w-5" /></div>}
-                    <div className="space-y-2">
-                      <p className="text-sm text-white/80">{normalizedDraft.control_description}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {['Renommer', 'Limite', 'Lock', 'Unlock', 'Ghost', 'Invite', 'Transfer'].map((label) => (
-                          <span key={label} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono uppercase tracking-[0.14em] text-white/55">{label}</span>
-                        ))}
+                  <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-4">
+                    <div className="flex items-start gap-3">
+                      <img src={previewThumbnail} alt="" className="h-14 w-14 rounded-2xl border border-white/10 object-cover shadow-[0_10px_30px_rgba(0,0,0,0.25)]" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-display text-lg font-700 text-white">{normalizedDraft.control_title}</p>
+                          <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-emerald-200">owner only</span>
+                        </div>
+                        <p className="text-sm leading-6 text-white/72">{normalizedDraft.control_description}</p>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
+                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Nom</p>
+                            <p className="mt-1 text-sm text-white">Vocal de Supersonic</p>
+                          </div>
+                          <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
+                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Acces</p>
+                            <p className="mt-1 text-sm text-white">Ouvert - Visible</p>
+                          </div>
+                          <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
+                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Region</p>
+                            <p className="mt-1 text-sm text-white">{REGION_OPTIONS.find((option) => option.value === normalizedDraft.default_region)?.label || 'Region auto'}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {['Renommer', 'Limite', 'Lock', 'Ghost', 'Invite', 'Transfer'].map((label) => (
+                        <span key={label} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono uppercase tracking-[0.14em] text-white/55">{label}</span>
+                      ))}
+                    </div>
                   </div>
-                  {normalizedDraft.panel_image_url && <img src={normalizedDraft.panel_image_url} alt="" className="max-h-52 w-full rounded-2xl border border-white/10 object-cover" />}
+                  <img src={previewBanner} alt="" className="max-h-52 w-full rounded-2xl border border-white/10 object-cover" />
+                  {normalizedDraft.show_site_link && (
+                    <div className="rounded-2xl border border-cyan-400/15 bg-cyan-500/[0.06] p-3">
+                      <button type="button" className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-cyan-100">
+                        {previewSiteButtonLabel}
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </section>

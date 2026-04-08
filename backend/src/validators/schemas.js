@@ -538,6 +538,8 @@ const voiceGeneratorConfigSchema = z.object({
   panel_color: z.string().trim().regex(/^#?[0-9a-fA-F]{6}$/, 'Invalid color'),
   panel_thumbnail_url: optionalImageAssetSchema,
   panel_image_url: optionalImageAssetSchema,
+  site_button_label: z.string().trim().max(80).optional().default(''),
+  show_site_link: z.boolean().optional().default(true),
   room_name_template: z.string().trim().min(1).max(90),
   default_user_limit: z.number().int().min(0).max(99).optional().default(0),
   default_region: z.enum([

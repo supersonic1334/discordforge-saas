@@ -9,6 +9,7 @@ const DEFAULT_CREATOR_CHANNEL_NAME = 'Creer ta voc';
 const DEFAULT_ROOM_NAME_TEMPLATE = 'Vocal de {username}';
 const DEFAULT_CONTROL_TITLE = 'Ta vocale temporaire';
 const DEFAULT_CONTROL_DESCRIPTION = 'Utilise les menus ci-dessous pour gerer ta vocale temporaire.';
+const DEFAULT_SITE_BUTTON_LABEL = 'Ouvrir DiscordForger';
 
 const SUPPORTED_REGIONS = new Set([
   'auto',
@@ -38,6 +39,8 @@ const DEFAULT_CONFIG = Object.freeze({
   panel_color: DEFAULT_COLOR,
   panel_thumbnail_url: '',
   panel_image_url: '',
+  site_button_label: DEFAULT_SITE_BUTTON_LABEL,
+  show_site_link: true,
   room_name_template: DEFAULT_ROOM_NAME_TEMPLATE,
   default_user_limit: 0,
   default_region: DEFAULT_REGION,
@@ -147,6 +150,8 @@ function ensureVoiceGeneratorRow(internalGuildId) {
     panel_color: DEFAULT_CONFIG.panel_color,
     panel_thumbnail_url: '',
     panel_image_url: '',
+    site_button_label: DEFAULT_CONFIG.site_button_label,
+    show_site_link: 1,
     room_name_template: DEFAULT_CONFIG.room_name_template,
     default_user_limit: DEFAULT_CONFIG.default_user_limit,
     default_region: DEFAULT_CONFIG.default_region,
@@ -172,6 +177,8 @@ function mapVoiceGeneratorRow(row) {
     panel_color: normalizeColor(source.panel_color, DEFAULT_CONFIG.panel_color),
     panel_thumbnail_url: normalizeAssetUrl(source.panel_thumbnail_url),
     panel_image_url: normalizeAssetUrl(source.panel_image_url),
+    site_button_label: normalizeText(source.site_button_label, 80, DEFAULT_CONFIG.site_button_label) || DEFAULT_CONFIG.site_button_label,
+    show_site_link: !!source.show_site_link,
     room_name_template: normalizeText(source.room_name_template, 90, DEFAULT_CONFIG.room_name_template) || DEFAULT_CONFIG.room_name_template,
     default_user_limit: normalizeUserLimit(source.default_user_limit, DEFAULT_CONFIG.default_user_limit),
     default_region: normalizeRegion(source.default_region, DEFAULT_CONFIG.default_region),
@@ -243,6 +250,8 @@ function saveGuildVoiceGenerator(internalGuildId, payload = {}) {
     panel_color: normalizeColor(payload.panel_color, current.panel_color),
     panel_thumbnail_url: normalizeAssetUrl(payload.panel_thumbnail_url, current.panel_thumbnail_url),
     panel_image_url: normalizeAssetUrl(payload.panel_image_url, current.panel_image_url),
+    site_button_label: normalizeText(payload.site_button_label, 80, current.site_button_label) || current.site_button_label,
+    show_site_link: normalizeBoolean(payload.show_site_link, current.show_site_link),
     room_name_template: normalizeText(payload.room_name_template, 90, current.room_name_template) || current.room_name_template,
     default_user_limit: normalizeUserLimit(payload.default_user_limit, current.default_user_limit),
     default_region: normalizeRegion(payload.default_region, current.default_region),
@@ -261,6 +270,8 @@ function saveGuildVoiceGenerator(internalGuildId, payload = {}) {
     panel_color: nextConfig.panel_color,
     panel_thumbnail_url: nextConfig.panel_thumbnail_url,
     panel_image_url: nextConfig.panel_image_url,
+    site_button_label: nextConfig.site_button_label,
+    show_site_link: nextConfig.show_site_link ? 1 : 0,
     room_name_template: nextConfig.room_name_template,
     default_user_limit: nextConfig.default_user_limit,
     default_region: nextConfig.default_region,
