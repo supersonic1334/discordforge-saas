@@ -102,6 +102,53 @@ function readFileAsDataUrl(file) {
   })
 }
 
+function ResolvedProfileImage({ src, alt, size = 'h-16 w-16 rounded-[22px]' }) {
+  const [resolvedSrc, setResolvedSrc] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    if (!src) {
+      setResolvedSrc('')
+      return undefined
+    }
+
+    const probe = new window.Image()
+    probe.referrerPolicy = 'no-referrer'
+    probe.onload = () => {
+      if (active) setResolvedSrc(src)
+    }
+    probe.onerror = () => {
+      if (active) setResolvedSrc('')
+    }
+    probe.src = src
+
+    return () => {
+      active = false
+    }
+  }, [src])
+
+  const canRender = !!resolvedSrc
+
+  if (canRender) {
+    return (
+      <img
+        src={resolvedSrc}
+        alt={alt}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        className={`${size} border border-white/10 object-cover shadow-[0_18px_36px_rgba(0,0,0,0.28)]`}
+      />
+    )
+  }
+
+  return (
+    <div className={`flex ${size} items-center justify-center border border-white/10 bg-white/[0.04]`}>
+      <Fingerprint className="h-6 w-6 text-neon-cyan/80" />
+    </div>
+  )
+}
+
 function UsernameProfileCard({ profile }) {
   const [open, setOpen] = useState(false)
 
@@ -109,17 +156,10 @@ function UsernameProfileCard({ profile }) {
     <div className="spotlight-card border-neon-cyan/18 bg-neon-cyan/[0.05] p-5">
       <div className="relative z-[1] flex h-full flex-col gap-4">
         <div className="flex items-start gap-4">
-          {profile.imageUrl ? (
-            <img
-              src={profile.imageUrl}
-              alt={profile.headline || profile.siteName}
-              className="h-16 w-16 rounded-[22px] border border-white/10 object-cover shadow-[0_18px_36px_rgba(0,0,0,0.28)]"
-            />
-          ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/[0.04]">
-              <Fingerprint className="h-6 w-6 text-neon-cyan/80" />
-            </div>
-          )}
+          <ResolvedProfileImage
+            src={profile.imageUrl}
+            alt={profile.headline || profile.siteName}
+          />
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">

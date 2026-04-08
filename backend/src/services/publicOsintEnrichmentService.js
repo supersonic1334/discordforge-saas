@@ -13,12 +13,92 @@ const USER_AGENT = [
   'DiscordForgerOSINT/2.0',
 ].join(' ');
 
+const GENERIC_DESCRIPTION_PATTERNS = [
+  'share your videos with friends, family, and the world',
+  'watch the latest video from',
+  'join telegram',
+  'steam community',
+  'see what ',
+  'has discovered on pinterest',
+  'biggest collection of ideas',
+  'if you have telegram',
+  'you can contact',
+  'view more info about',
+  'view my complete profile on steam',
+  'official profile',
+  'official account',
+  'listen to music from',
+  'view the profile',
+  'watch popular videos',
+  'discover more creators',
+];
+
+const MISSING_PROFILE_PATTERNS = [
+  'page not found',
+  'profile not found',
+  'user not found',
+  'channel does not exist',
+  'this account does not exist',
+  'sorry, this page is not available',
+  'sorry, this page isn\'t available',
+  '404',
+];
+
+const GENERIC_IMAGE_PATTERNS = [
+  /favicon/i,
+  /apple-touch/i,
+  /touch-icon/i,
+  /placeholder/i,
+  /default/i,
+  /logo/i,
+  /brand/i,
+  /\/assets\//i,
+  /\/static\//i,
+  /telegram\.org\/img\//i,
+  /steamcommunity\.com\/public\/images\//i,
+];
+
+const SIGNAL_RULES = [
+  { kind: 'theme', label: 'Gaming', keywords: ['gaming', 'gameplay', 'jeu video', 'jeux video', 'gamer'] },
+  { kind: 'theme', label: 'Roblox', keywords: ['roblox', 'blox fruits', 'brookhaven', 'dress to impress', 'blade ball', 'adopt me'] },
+  { kind: 'theme', label: 'Minecraft', keywords: ['minecraft'] },
+  { kind: 'theme', label: 'GTA', keywords: ['gta', 'grand theft auto'] },
+  { kind: 'theme', label: 'Call of Duty', keywords: ['call of duty', 'warzone', 'cod '] },
+  { kind: 'theme', label: 'ASMR', keywords: ['asmr'] },
+  { kind: 'theme', label: 'Musique', keywords: ['music', 'musique', 'beat', 'song', 'spotify', 'soundcloud'] },
+  { kind: 'theme', label: 'Sport', keywords: ['sport', 'fitness', 'musculation', 'football', 'soccer', 'nba'] },
+  { kind: 'theme', label: 'Tech', keywords: ['tech', 'coding', 'developer', 'developpeur', 'programming', 'javascript', 'python'] },
+  { kind: 'theme', label: 'Mode de vie', keywords: ['vlog', 'lifestyle', 'daily', 'voyage', 'travel'] },
+  { kind: 'theme', label: 'Humour', keywords: ['meme', 'humour', 'funny', 'comedie', 'comedy'] },
+  { kind: 'theme', label: 'Education', keywords: ['education', 'tutorial', 'tutoriel', 'apprendre', 'cours'] },
+  { kind: 'game', label: 'Blox Fruits', keywords: ['blox fruits'] },
+  { kind: 'game', label: 'Brookhaven', keywords: ['brookhaven'] },
+  { kind: 'game', label: 'Adopt Me!', keywords: ['adopt me'] },
+  { kind: 'game', label: 'Blade Ball', keywords: ['blade ball'] },
+  { kind: 'game', label: 'Minecraft', keywords: ['minecraft'] },
+  { kind: 'game', label: 'GTA', keywords: ['gta', 'grand theft auto'] },
+  { kind: 'game', label: 'Call of Duty', keywords: ['call of duty', 'warzone'] },
+  { kind: 'activity', label: 'PvP', keywords: ['pvp', 'ranked', 'combat', 'duel'] },
+  { kind: 'activity', label: 'Trade', keywords: ['trade', 'trading', 'echange', 'market'] },
+  { kind: 'activity', label: 'Roleplay', keywords: ['roleplay', 'rp'] },
+  { kind: 'activity', label: 'Shorts / clips', keywords: ['shorts', 'clips', 'tiktok', 'reels'] },
+  { kind: 'activity', label: 'Live', keywords: ['live', 'stream', 'streaming', 'twitch'] },
+];
+
 function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
 function decodeHtmlEntities(value) {
   return String(value || '')
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : _;
+    })
+    .replace(/&#([0-9]+);/gi, (_, dec) => {
+      const code = Number.parseInt(dec, 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : _;
+    })
     .replace(/&amp;/gi, '&')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, '\'')
@@ -31,7 +111,7 @@ function truncate(value, maxLength = 220) {
   const normalized = normalizeWhitespace(value);
   if (!normalized) return '';
   if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
 function safeArray(value) {
@@ -107,6 +187,19 @@ function extractTitle(html) {
   return truncate(decodeHtmlEntities(match?.[1] || ''), 160);
 }
 
+function extractMetaKeywords(html) {
+  const raw = decodeHtmlEntities(
+    extractMetaContent(html, 'name', 'keywords')
+    || extractMetaContent(html, 'property', 'og:keywords')
+  );
+
+  return raw
+    .split(',')
+    .map((entry) => truncate(entry, 40))
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
 function buildFact(label, value) {
   const normalized = truncate(value, 120);
   return normalized ? { label, value: normalized } : null;
@@ -133,6 +226,174 @@ function compactSection(title, items) {
   return { title, items: normalizedItems };
 }
 
+function isGenericDescription(value, siteName = '') {
+  const normalized = normalizeWhitespace(value).toLowerCase();
+  if (!normalized) return true;
+
+  if (GENERIC_DESCRIPTION_PATTERNS.some((pattern) => normalized.includes(pattern))) {
+    return true;
+  }
+
+  const loweredSite = normalizeWhitespace(siteName).toLowerCase();
+  return loweredSite ? normalized === loweredSite : false;
+}
+
+function looksLikeMissingProfile(siteName, title, description, finalUrl) {
+  const haystack = [siteName, title, description, finalUrl]
+    .map((entry) => normalizeWhitespace(entry).toLowerCase())
+    .join(' ');
+
+  return MISSING_PROFILE_PATTERNS.some((pattern) => haystack.includes(pattern));
+}
+
+function sanitizeImageUrl(url, baseUrl = '') {
+  const rawValue = normalizeWhitespace(url);
+  if (!rawValue) return null;
+
+  let value = rawValue;
+  if (/^\/\//.test(value)) {
+    value = `https:${value}`;
+  } else if (!/^https?:\/\//i.test(value)) {
+    try {
+      value = new URL(value, baseUrl || 'https://discordforger.local').href;
+    } catch {
+      return null;
+    }
+  }
+
+  const lowered = value.toLowerCase();
+  if (GENERIC_IMAGE_PATTERNS.some((pattern) => pattern.test(lowered))) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (!parsed.hostname) return null;
+  } catch {
+    return null;
+  }
+
+  return value;
+}
+
+function extractHandleFromUrl(url) {
+  try {
+    const parsed = new URL(String(url || ''));
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    const candidates = parts
+      .map((entry) => entry.replace(/^@/, ''))
+      .filter((entry) => entry && !['users', 'user', 'profile', 'channel', 'c'].includes(entry.toLowerCase()));
+    return truncate(candidates[candidates.length - 1] || '', 60);
+  } catch {
+    return '';
+  }
+}
+
+function collectSignals(values) {
+  const haystack = values
+    .map((entry) => normalizeWhitespace(entry).toLowerCase())
+    .filter(Boolean)
+    .join(' ');
+
+  const themes = [];
+  const games = [];
+  const activities = [];
+
+  for (const rule of SIGNAL_RULES) {
+    if (!rule.keywords.some((keyword) => haystack.includes(keyword))) continue;
+
+    if (rule.kind === 'theme' && !themes.includes(rule.label)) {
+      themes.push(rule.label);
+    }
+    if (rule.kind === 'game' && !games.includes(rule.label)) {
+      games.push(rule.label);
+    }
+    if (rule.kind === 'activity' && !activities.includes(rule.label)) {
+      activities.push(rule.label);
+    }
+  }
+
+  return {
+    themes: themes.slice(0, 6),
+    games: games.slice(0, 6),
+    activities: activities.slice(0, 6),
+  };
+}
+
+function buildSignalInsights(signals) {
+  const items = [];
+
+  if (signals.themes.length) {
+    items.push(`Themes publics detectes: ${signals.themes.join(', ')}.`);
+  }
+
+  if (signals.games.length) {
+    items.push(`Jeux ou univers cites publiquement: ${signals.games.join(', ')}.`);
+  }
+
+  if (signals.activities.length) {
+    items.push(`Activites visibles dans les indices publics: ${signals.activities.join(', ')}.`);
+  }
+
+  return items;
+}
+
+function buildSignalSections(signals, keywords) {
+  return [
+    compactSection('Themes publics', signals.themes),
+    compactSection('Jeux cites', signals.games),
+    compactSection('Activites visibles', signals.activities),
+    compactSection('Mots cles publics', safeArray(keywords).slice(0, 6)),
+  ].filter(Boolean);
+}
+
+function buildFrenchSummary(siteName, description, signals) {
+  const cleanedDescription = isGenericDescription(description, siteName) ? '' : truncate(description, 220);
+  if (cleanedDescription) return cleanedDescription;
+
+  const parts = [];
+  if (signals.themes.length) parts.push(`themes publics: ${signals.themes.join(', ')}`);
+  if (signals.games.length) parts.push(`jeux cites: ${signals.games.join(', ')}`);
+  if (signals.activities.length) parts.push(`activites visibles: ${signals.activities.join(', ')}`);
+
+  if (parts.length) {
+    return truncate(`Profil public detecte sur ${siteName}. ${parts.join(' - ')}.`, 240);
+  }
+
+  return `Profil public detecte sur ${siteName}.`;
+}
+
+function buildSiteIntro(siteName, username, headline = '') {
+  const displayName = truncate(headline || username || '', 80);
+  const namedSite = String(siteName || '').trim();
+
+  if (/pinterest/i.test(namedSite)) {
+    return displayName
+      ? `${displayName} possede un profil Pinterest public.`
+      : 'Profil Pinterest public detecte.';
+  }
+
+  if (/telegram/i.test(namedSite)) {
+    return displayName
+      ? `${displayName} possede un compte Telegram public.`
+      : 'Compte Telegram public detecte.';
+  }
+
+  if (/steam/i.test(namedSite)) {
+    return displayName
+      ? `${displayName} possede un profil Steam public.`
+      : 'Profil Steam public detecte.';
+  }
+
+  if (/youtube/i.test(namedSite)) {
+    return displayName
+      ? `${displayName} possede une chaine YouTube publique.`
+      : 'Chaine YouTube publique detectee.';
+  }
+
+  return `Profil public detecte sur ${namedSite || 'ce site'}.`;
+}
+
 async function enrichGenericPage(profileUrl, siteName) {
   const { text, finalUrl } = await fetchText(profileUrl);
   const title = extractTitle(text);
@@ -141,25 +402,44 @@ async function enrichGenericPage(profileUrl, siteName) {
     || extractMetaContent(text, 'name', 'description'),
     240
   );
-  const imageUrl = extractMetaContent(text, 'property', 'og:image');
+  const imageUrl = (
+    sanitizeImageUrl(extractMetaContent(text, 'property', 'og:image'), finalUrl)
+    || sanitizeImageUrl(extractMetaContent(text, 'name', 'twitter:image'), finalUrl)
+    || sanitizeImageUrl(extractMetaContent(text, 'property', 'twitter:image'), finalUrl)
+  );
+  const keywords = extractMetaKeywords(text);
+  const handle = extractHandleFromUrl(finalUrl);
+  const signals = collectSignals([title, description, keywords.join(' '), handle, finalUrl]);
+
+  if (looksLikeMissingProfile(siteName, title, description, finalUrl)) {
+    return { invalid: true };
+  }
+
   const headline = truncate(
     extractMetaContent(text, 'property', 'og:title')
     || title
-    || `Profil public verifie sur ${siteName}.`,
+    || buildSiteIntro(siteName, handle, ''),
     120
   );
+  const summarySource = isGenericDescription(description, siteName)
+    ? buildSiteIntro(siteName, handle, headline)
+    : description;
 
   return {
     openUrl: finalUrl,
-    summary: description || `Profil public verifie sur ${siteName}.`,
+    summary: buildFrenchSummary(siteName, summarySource, signals),
     headline,
     imageUrl: imageUrl || null,
     facts: compactFacts([
       buildFact('Page', siteName),
       buildFact('Titre', title || ''),
+      buildFact('Handle', handle),
     ]),
-    insights: compactInsights(description ? [description] : []),
-    sections: [],
+    insights: compactInsights([
+      ...buildSignalInsights(signals),
+      !isGenericDescription(description, siteName) ? `Bio publique: ${truncate(description, 180)}` : '',
+    ]),
+    sections: buildSignalSections(signals, keywords),
   };
 }
 
@@ -169,12 +449,17 @@ async function enrichGitHub(username) {
     fetchJson(`https://api.github.com/users/${login}`),
     fetchJson(`https://api.github.com/users/${login}/repos?per_page=3&sort=updated`),
   ]);
+  const signals = collectSignals([
+    user.bio,
+    user.name,
+    safeArray(repos).map((repo) => `${repo.name} ${repo.description || ''} ${repo.language || ''}`).join(' '),
+  ]);
 
   return {
     openUrl: user.html_url || `https://github.com/${username}`,
-    summary: truncate(user.bio || `${user.login} possede un profil GitHub public actif.`),
+    summary: buildFrenchSummary('GitHub', user.bio, signals),
     headline: truncate(user.name || user.login || username, 80),
-    imageUrl: user.avatar_url || null,
+    imageUrl: sanitizeImageUrl(user.avatar_url) || null,
     facts: compactFacts([
       buildFact('Repos', user.public_repos),
       buildFact('Followers', user.followers),
@@ -184,14 +469,16 @@ async function enrichGitHub(username) {
       buildFact('Cree le', user.created_at ? new Date(user.created_at).toLocaleDateString('fr-FR') : ''),
     ]),
     insights: compactInsights([
-      user.bio,
-      user.blog ? `Site: ${user.blog}` : '',
+      ...buildSignalInsights(signals),
+      user.blog ? `Site public: ${user.blog}` : '',
+      !isGenericDescription(user.bio, 'GitHub') ? `Bio publique: ${truncate(user.bio, 180)}` : '',
     ]),
     sections: [
       compactSection(
         'Repos recents',
-        safeArray(repos).slice(0, 3).map((repo) => `${repo.name}${repo.language ? ` · ${repo.language}` : ''}`)
+        safeArray(repos).slice(0, 3).map((repo) => `${repo.name}${repo.language ? ` - ${repo.language}` : ''}`)
       ),
+      ...buildSignalSections(signals, []),
     ].filter(Boolean),
   };
 }
@@ -200,15 +487,17 @@ async function enrichReddit(username) {
   const payload = await fetchJson(`https://www.reddit.com/user/${encodeURIComponent(username)}/about.json`);
   const profile = payload?.data || {};
   const subreddit = profile.subreddit || {};
+  const signals = collectSignals([subreddit.public_description, subreddit.title, profile.name]);
 
   return {
     openUrl: `https://www.reddit.com/user/${profile.name || username}`,
-    summary: truncate(
-      subreddit.public_description
-      || `Profil Reddit public avec ${Number(profile.total_karma || 0).toLocaleString('fr-FR')} de karma.`
+    summary: buildFrenchSummary(
+      'Reddit',
+      subreddit.public_description || `Profil Reddit public avec ${Number(profile.total_karma || 0).toLocaleString('fr-FR')} de karma.`,
+      signals
     ),
     headline: truncate(subreddit.title || profile.name || username, 90),
-    imageUrl: subreddit.icon_img || subreddit.banner_img || null,
+    imageUrl: sanitizeImageUrl(subreddit.icon_img || subreddit.banner_img) || null,
     facts: compactFacts([
       buildFact('Karma total', Number(profile.total_karma || 0).toLocaleString('fr-FR')),
       buildFact('Karma posts', Number(profile.link_karma || 0).toLocaleString('fr-FR')),
@@ -217,10 +506,10 @@ async function enrichReddit(username) {
       buildFact('NSFW', profile.over_18 ? 'Oui' : 'Non'),
     ]),
     insights: compactInsights([
-      subreddit.public_description,
-      subreddit.title ? `Sous-profil: ${subreddit.title}` : '',
+      ...buildSignalInsights(signals),
+      subreddit.title ? `Sous-profil public: ${subreddit.title}` : '',
     ]),
-    sections: [],
+    sections: buildSignalSections(signals, []),
   };
 }
 
@@ -252,35 +541,44 @@ async function enrichRoblox(username) {
     fetchJson(`https://accountinformation.roblox.com/v1/users/${userId}/roblox-badges`),
   ]);
 
-  const avatarUrl = safeArray(avatarPayload?.data)[0]?.imageUrl || null;
+  const avatarUrl = sanitizeImageUrl(safeArray(avatarPayload?.data)[0]?.imageUrl) || null;
   const favoriteGameItems = safeArray(favoriteGames?.data).slice(0, 5);
   const groupItems = safeArray(groupRoles?.data).slice(0, 4);
   const badgeItems = safeArray(badges).slice(0, 4);
+  const signals = collectSignals([
+    profile.description,
+    favoriteGameItems.map((game) => game.name).join(' '),
+    groupItems.map((entry) => `${entry.group?.name || ''} ${entry.role?.name || ''}`).join(' '),
+    badgeItems.map((badge) => badge.name).join(' '),
+  ]);
 
   return {
     openUrl: `https://www.roblox.com/users/${userId}/profile`,
-    summary: truncate(
-      profile.description
-      || `${profile.displayName || profile.name || username} possede un profil Roblox public.`
+    summary: buildFrenchSummary(
+      'Roblox',
+      profile.description || `${profile.displayName || profile.name || username} possede un profil Roblox public.`,
+      signals
     ),
     headline: truncate(profile.displayName || profile.name || username, 90),
     imageUrl: avatarUrl,
     facts: compactFacts([
       buildFact('Compte', profile.name),
-      buildFact('Display name', profile.displayName),
+      buildFact('Pseudo affiche', profile.displayName),
       buildFact('Badge verifie', resolved.hasVerifiedBadge ? 'Oui' : 'Non'),
       buildFact('Cree le', profile.created ? new Date(profile.created).toLocaleDateString('fr-FR') : ''),
       buildFact('Banni', profile.isBanned ? 'Oui' : 'Non'),
     ]),
     insights: compactInsights([
-      profile.description,
+      ...buildSignalInsights(signals),
+      !isGenericDescription(profile.description, 'Roblox') ? `Bio publique: ${truncate(profile.description, 180)}` : '',
       favoriteGameItems.length ? `${favoriteGameItems.length} jeu(x) favori(s) public(s) visible(s).` : '',
-      groupItems.length ? `${groupItems.length} groupe(s) public(s) remonte(s).` : '',
+      groupItems.length ? `${groupItems.length} groupe(s) public(s) remontes.` : '',
     ]),
     sections: [
       compactSection('Jeux favoris publics', favoriteGameItems.map((game) => game.name)),
-      compactSection('Groupes', groupItems.map((entry) => `${entry.group?.name || 'Groupe'}${entry.role?.name ? ` · ${entry.role.name}` : ''}`)),
+      compactSection('Groupes', groupItems.map((entry) => `${entry.group?.name || 'Groupe'}${entry.role?.name ? ` - ${entry.role.name}` : ''}`)),
       compactSection('Badges publics', badgeItems.map((badge) => badge.name)),
+      ...buildSignalSections(signals, []),
     ].filter(Boolean),
   };
 }
@@ -289,14 +587,14 @@ function buildFallbackProfile(entry) {
   return {
     id: entry.id,
     platformId: entry.featuredPlatformId || entry.id,
-    platformName: entry.featuredPlatformId ? entry.siteName : entry.siteName,
+    platformName: entry.siteName,
     siteName: entry.siteName,
     category: entry.category || 'Extended',
     domain: entry.domain || '',
     openUrl: entry.profileUrl || entry.probeUrl || entry.mainUrl || '',
     imageUrl: null,
     headline: truncate(entry.siteName || entry.domain || 'Profil public'),
-    summary: `Profil public verifie sur ${entry.siteName || entry.domain || 'le site'}.`,
+    summary: `Profil public detecte sur ${entry.siteName || entry.domain || 'le site'}.`,
     facts: compactFacts([
       buildFact('Source', entry.siteName),
       buildFact('Domaine', entry.domain),
@@ -305,6 +603,68 @@ function buildFallbackProfile(entry) {
     sections: [],
     verified: true,
   };
+}
+
+async function buildManualProfile(platformId, username) {
+  if (platformId === 'github') {
+    const enrichment = await enrichGitHub(username);
+    return {
+      id: `manual-${platformId}-${username}`,
+      platformId: 'github',
+      platformName: 'GitHub',
+      siteName: 'GitHub',
+      category: 'Dev',
+      domain: 'github.com',
+      verified: true,
+      ...enrichment,
+    };
+  }
+
+  if (platformId === 'reddit') {
+    const enrichment = await enrichReddit(username);
+    return {
+      id: `manual-${platformId}-${username}`,
+      platformId: 'reddit',
+      platformName: 'Reddit',
+      siteName: 'Reddit',
+      category: 'Social',
+      domain: 'reddit.com',
+      verified: true,
+      ...enrichment,
+    };
+  }
+
+  if (platformId === 'roblox') {
+    const enrichment = await enrichRoblox(username);
+    return {
+      id: `manual-${platformId}-${username}`,
+      platformId: 'roblox',
+      platformName: 'Roblox',
+      siteName: 'Roblox',
+      category: 'Gaming',
+      domain: 'roblox.com',
+      verified: true,
+      ...enrichment,
+    };
+  }
+
+  return null;
+}
+
+async function appendManualProfiles(profiles, username) {
+  const existingIds = new Set(safeArray(profiles).map((entry) => String(entry?.platformId || '').toLowerCase()).filter(Boolean));
+  const manualPlatforms = ['roblox', 'github', 'reddit'];
+  const additions = [];
+
+  for (const platformId of manualPlatforms) {
+    if (existingIds.has(platformId)) continue;
+    try {
+      const profile = await buildManualProfile(platformId, username);
+      if (profile) additions.push(profile);
+    } catch {}
+  }
+
+  return [...safeArray(profiles), ...additions];
 }
 
 async function enrichEntry(entry, username) {
@@ -323,6 +683,10 @@ async function enrichEntry(entry, username) {
       enrichment = await enrichGenericPage(fallback.openUrl, entry.siteName);
     }
 
+    if (enrichment?.invalid) {
+      return null;
+    }
+
     return {
       ...fallback,
       openUrl: enrichment.openUrl || fallback.openUrl,
@@ -334,6 +698,14 @@ async function enrichEntry(entry, username) {
       sections: safeArray(enrichment.sections).filter(Boolean),
     };
   } catch (error) {
+    if (
+      error?.status === 404
+      || error?.message === 'roblox_user_not_found'
+      || String(error?.message || '').toLowerCase().includes('not found')
+    ) {
+      return null;
+    }
+
     logger.debug?.('Public profile enrichment failed', {
       site: entry.siteName,
       platform: entry.featuredPlatformId,
@@ -361,8 +733,10 @@ async function runLimited(items, limit, iterator) {
 
 async function enrichUsernameProfiles(foundEntries, username) {
   const limitedEntries = safeArray(foundEntries).slice(0, 80);
-  if (!limitedEntries.length) return [];
-  return runLimited(limitedEntries, ENRICHMENT_CONCURRENCY, (entry) => enrichEntry(entry, username));
+  const results = limitedEntries.length
+    ? await runLimited(limitedEntries, ENRICHMENT_CONCURRENCY, (entry) => enrichEntry(entry, username))
+    : [];
+  return appendManualProfiles(results.filter(Boolean), username);
 }
 
 module.exports = {
