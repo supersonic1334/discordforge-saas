@@ -493,7 +493,7 @@
     max-height: none;
   }
   .auth-mobile-panel.is-compact {
-    width: min(100%, clamp(20rem, 90vw, 46rem));
+    width: min(100%, clamp(20rem, 92vw, 46rem));
     max-height: none;
     gap: 0.7rem;
   }
@@ -525,14 +525,14 @@
     max-width: min(480px, 88vw) !important;
   }
   .auth-mobile-panel.is-compact .auth-mobile-logo-shell {
-    max-width: min(320px, 46vw) !important;
+    max-width: min(360px, 58vw) !important;
     margin-bottom: 0.35rem !important;
   }
   .auth-mobile-logo {
     max-height: min(236px, 24vh);
   }
   .auth-mobile-panel.is-compact .auth-mobile-logo {
-    max-height: min(126px, 16vh);
+    max-height: min(152px, 19vh);
   }
   .auth-card-surface {
     min-height: auto;
@@ -554,6 +554,7 @@
     flex-direction: column;
     min-height: 0;
     width: 100%;
+    overflow: hidden;
   }
   .auth-card-scrollzone.is-register {
     flex: 0 1 auto;
@@ -1089,11 +1090,22 @@
     opacity: 0.7;
   }
 
-  body[data-keyboard-open="true"] .auth-page-shell[data-scrollable="true"] .auth-mobile-shell,
+  body[data-keyboard-open="true"] .auth-page-shell[data-auth-mode="register"] .auth-mobile-shell,
   body[data-keyboard-open="true"] .setup-mobile-shell {
     align-items: center !important;
     justify-content: flex-start !important;
     gap: 0.75rem !important;
+    padding-top: max(env(safe-area-inset-top), 10px) !important;
+  }
+
+  body[data-keyboard-open="true"] .auth-page-shell[data-auth-mode="login"] {
+    overflow-y: hidden !important;
+    padding-bottom: max(env(safe-area-inset-bottom), 6px) !important;
+  }
+
+  body[data-keyboard-open="true"] .auth-page-shell[data-auth-mode="login"] .auth-mobile-shell {
+    align-items: center !important;
+    justify-content: center !important;
     padding-top: max(env(safe-area-inset-top), 10px) !important;
   }
 
@@ -1622,7 +1634,7 @@ html {
   }
 
   .auth-mobile-logo {
-    max-height: min(144px, 12vh);
+    max-height: min(168px, 16vh);
   }
 
   .auth-card-surface {
@@ -1652,7 +1664,7 @@ html {
   }
 
   .auth-mobile-logo {
-    max-height: min(116px, 10vh);
+    max-height: min(132px, 14vh);
   }
 
   .auth-feature-detail {

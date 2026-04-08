@@ -254,7 +254,7 @@ export default function AuthPage() {
   const pointerY = useMotionValue(24)
   const isRegister = mode === 'register'
   const registerCaptchaReady = !isRegister || (!!registerCaptcha?.token && !captchaLoading)
-  const authModeTransition = { duration: 0.2, ease: [0.22, 1, 0.36, 1] }
+  const authModeTransition = { type: 'spring', stiffness: 420, damping: 36, mass: 0.82 }
   const [registerCardMaxHeight, setRegisterCardMaxHeight] = useState(null)
 
   const featureCards = [
@@ -379,10 +379,10 @@ export default function AuthPage() {
   }
 
   useEffect(() => {
-    if (isRegister && !registerCaptcha && !captchaLoading) {
+    if (!registerCaptcha && !captchaLoading) {
       loadRegisterCaptcha({ force: true })
     }
-  }, [isRegister, registerCaptcha, captchaLoading])
+  }, [registerCaptcha, captchaLoading])
 
   useEffect(() => {
     shellRef.current?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' })
@@ -544,6 +544,7 @@ export default function AuthPage() {
       ref={shellRef}
       className={`auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8 ${compactAuthMode ? 'is-compact-auth' : ''}`}
       data-scrollable={isRegister || compactAuthMode ? 'true' : 'false'}
+      data-auth-mode={mode}
       onMouseMove={handleAuthPointerMove}
       onMouseLeave={resetAuthPointer}
     >
@@ -628,6 +629,7 @@ export default function AuthPage() {
             </motion.div>
           ) : (
           <motion.div
+            layout
             ref={cardRef}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -636,7 +638,11 @@ export default function AuthPage() {
             className={`auth-mobile-card gradient-border ${isRegister ? 'is-register' : ''}`}
             style={isRegister && registerCardMaxHeight ? { '--auth-register-card-max': `${registerCardMaxHeight}px` } : undefined}
           >
-            <div className={`auth-card-surface bg-surface-1 rounded-2xl p-5 sm:p-8 ${isRegister ? 'is-register' : ''}`}>
+            <motion.div
+              layout
+              transition={authModeTransition}
+              className={`auth-card-surface bg-surface-1 rounded-2xl p-5 sm:p-8 ${isRegister ? 'is-register' : ''}`}
+            >
               {/* Tab switcher */}
               <div className="flex bg-white/[0.04] rounded-xl p-1 mb-5 sm:mb-6 border border-white/[0.06]">
                 {[
@@ -664,21 +670,20 @@ export default function AuthPage() {
               >
                 {/* Auth form */}
                 <motion.form
+                  layout
                   ref={formRef}
                   onSubmit={submit}
                   className="auth-form-stack w-full space-y-4"
                   autoComplete="on"
                 >
                   <motion.div
-                    key={mode}
-                    initial={{ opacity: 0, scale: 0.992, y: 4 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    layout
                     transition={authModeTransition}
                     className="w-full space-y-4"
                     style={{ transformOrigin: '50% 0%' }}
                   >
                       {isRegister && (
-                        <>
+                        <div className="space-y-4 overflow-hidden">
                           <div>
                             <label className="block text-xs font-mono text-white/40 mb-1.5 uppercase tracking-wider">{t('auth.username')}</label>
                             <input
@@ -692,6 +697,9 @@ export default function AuthPage() {
                               name="username"
                               autoComplete="nickname"
                               inputMode="text"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
                             />
                           </div>
 
@@ -748,7 +756,7 @@ export default function AuthPage() {
                               />
                             </div>
                           </div>
-                        </>
+                        </div>
                       )}
 
                       <div>
@@ -760,9 +768,12 @@ export default function AuthPage() {
                           value={form.email}
                           onChange={(event) => set('email', event.target.value)}
                           required
-                          name="email"
+                          name={mode === 'login' ? 'username' : 'email'}
                           autoComplete={mode === 'login' ? 'username' : 'email'}
                           inputMode="email"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
                         />
                       </div>
 
@@ -776,7 +787,7 @@ export default function AuthPage() {
                             value={form.password}
                             onChange={(event) => set('password', event.target.value)}
                             required
-                            name={mode === 'login' ? 'account-password' : 'new-account-password'}
+                            name={mode === 'login' ? 'password' : 'new-password'}
                             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                           />
                           <button
@@ -912,7 +923,7 @@ export default function AuthPage() {
                 </AnimatePresence>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </motion.div>
           )}
         </motion.div>

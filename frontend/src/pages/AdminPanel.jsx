@@ -764,9 +764,9 @@ export default function AdminPanel() {
             </div>
           )}
 
-          <div className="flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 w-fit">
+          <div className="grid w-full grid-cols-1 gap-1 rounded-xl border border-white/[0.06] bg-white/[0.03] p-1 sm:w-fit sm:grid-cols-2 xl:flex">
             {tabs.map(([id, label]) => (
-              <button key={id} onClick={() => setTab(id)} className={`px-4 py-1.5 rounded-lg text-sm font-mono transition-all ${tab === id ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-white/40 hover:text-white'}`}>
+              <button key={id} onClick={() => setTab(id)} className={`w-full rounded-lg px-4 py-2 text-center text-xs font-mono transition-all sm:text-sm xl:w-auto ${tab === id ? 'border border-amber-500/20 bg-amber-500/10 text-amber-400' : 'text-white/40 hover:text-white'}`}>
                 {label}
               </button>
             ))}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { MapPin, ShieldCheck, X } from 'lucide-react'
+import { MapPin, ShieldCheck } from 'lucide-react'
 
 import { authAPI } from '../../services/api'
 import { useAuthStore } from '../../stores'
@@ -75,6 +75,7 @@ export default function PreciseLocationPrompt() {
   const userId = user?.id
   const [visible, setVisible] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmDeny, setConfirmDeny] = useState(false)
   const refreshTimerRef = useRef(null)
 
   const storedState = useMemo(() => readStoredState(userId), [userId])
@@ -93,6 +94,7 @@ export default function PreciseLocationPrompt() {
     }
 
     const timerId = window.setTimeout(() => {
+      setConfirmDeny(false)
       setVisible(true)
     }, 1600)
 
@@ -158,6 +160,7 @@ export default function PreciseLocationPrompt() {
         status: 'denied',
         updated_at: Date.now(),
       })
+      setConfirmDeny(false)
       setVisible(false)
     } catch (error) {
       toast.error(error?.response?.data?.error || 'Refus non enregistre')
@@ -180,6 +183,7 @@ export default function PreciseLocationPrompt() {
         status: 'granted',
         updated_at: Date.now(),
       })
+      setConfirmDeny(false)
       setVisible(false)
       toast.success('Localisation precise activee')
     } catch (error) {
@@ -194,6 +198,7 @@ export default function PreciseLocationPrompt() {
         status: reason === 'permission_denied' ? 'denied' : 'dismissed',
         updated_at: Date.now(),
       })
+      setConfirmDeny(false)
       toast.error('Localisation precise refusee ou indisponible')
       setVisible(false)
     }
@@ -203,50 +208,59 @@ export default function PreciseLocationPrompt() {
   if (!visible || !token || !userId) return null
 
   return (
-    <div className="fixed bottom-5 right-5 z-[120] w-[min(92vw,420px)] rounded-3xl border border-neon-cyan/20 bg-[#0a0e16]/95 backdrop-blur-xl shadow-[0_22px_80px_rgba(0,0,0,0.45)] overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.14),transparent_52%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.16),transparent_40%)] pointer-events-none" />
-      <div className="relative p-5 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 flex items-center justify-center">
-              <MapPin className="w-5 h-5 text-neon-cyan" />
-            </div>
-            <div>
-              <p className="text-sm font-mono uppercase tracking-[0.22em] text-neon-cyan/85">Localisation precise</p>
-              <p className="mt-1 text-sm text-white/70">Autorise le GPS pour une protection plus fiable du compte.</p>
-            </div>
+    <div className="fixed bottom-5 right-5 z-[120] w-[min(92vw,320px)] overflow-hidden rounded-2xl border border-neon-cyan/18 bg-[#0a0e16]/94 shadow-[0_22px_60px_rgba(0,0,0,0.42)] backdrop-blur-xl">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_58%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.12),transparent_42%)]" />
+      <div className="relative space-y-3 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neon-cyan/20 bg-neon-cyan/10">
+            <MapPin className="h-4 w-4 text-neon-cyan" />
           </div>
-          <button
-            type="button"
-            onClick={() => setVisible(false)}
-            className="w-8 h-8 rounded-xl border border-white/10 bg-white/[0.04] flex items-center justify-center text-white/45 hover:text-white hover:bg-white/[0.08] transition-all"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="min-w-0">
+            <p className="text-sm font-display font-700 text-white">Securiser l acces du site ?</p>
+            <p className="mt-0.5 text-xs text-white/45">Une seule fois sur cet appareil.</p>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-xs text-white/55 leading-6">
-          Si tu acceptes, le site enregistre des coordonnees GPS precises, la precision en metres et un libelle d’adresse. Si tu refuses, le site garde seulement l’IP et la localisation approximative.
-        </div>
+        {confirmDeny && (
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/70">
+            Etes-vous sur ?
+          </div>
+        )}
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleAllow}
             disabled={saving}
-            className="flex-1 min-w-[160px] inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 bg-gradient-to-r from-neon-cyan to-neon-violet text-white font-display font-700 shadow-[0_18px_46px_rgba(34,211,238,0.24)] disabled:opacity-60"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-neon-cyan to-neon-violet px-4 py-2.5 font-display font-700 text-white shadow-[0_16px_34px_rgba(34,211,238,0.22)] disabled:opacity-60"
           >
-            <ShieldCheck className="w-4 h-4" />
-            {saving ? 'Activation...' : 'Autoriser'}
+            <ShieldCheck className="h-4 w-4" />
+            {saving ? 'Activation...' : 'Oui'}
           </button>
           <button
             type="button"
-            onClick={handleDeny}
+            onClick={() => {
+              if (confirmDeny) {
+                handleDeny()
+                return
+              }
+              setConfirmDeny(true)
+            }}
             disabled={saving}
-            className="min-w-[120px] inline-flex items-center justify-center rounded-2xl px-4 py-3 border border-white/10 bg-white/[0.04] text-white/72 hover:text-white hover:bg-white/[0.08] transition-all disabled:opacity-60"
+            className="inline-flex min-w-[84px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-white/72 transition-all hover:bg-white/[0.08] hover:text-white disabled:opacity-60"
           >
-            Refuser
+            {confirmDeny ? 'Confirmer' : 'Non'}
           </button>
+          {confirmDeny && (
+            <button
+              type="button"
+              onClick={() => setConfirmDeny(false)}
+              disabled={saving}
+              className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-transparent px-3 py-2.5 text-white/45 transition-all hover:text-white disabled:opacity-60"
+            >
+              Retour
+            </button>
+          )}
         </div>
       </div>
     </div>
