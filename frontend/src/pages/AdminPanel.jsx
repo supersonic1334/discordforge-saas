@@ -174,10 +174,14 @@ export default function AdminPanel() {
     }
   }, [canManageUsers])
 
-  const currentPanelUser = useMemo(
-    () => users.find((user) => user.id === currentUserId) || null,
-    [users, currentUserId]
-  )
+  const currentPanelUser = useMemo(() => {
+    const normalizedCurrentUserId = currentUserId == null ? '' : String(currentUserId)
+    const fallbackPrimaryFounder = currentUser?.is_primary_founder
+      ? users.find((user) => !!user.is_primary_founder)
+      : null
+
+    return users.find((user) => String(user.id) === normalizedCurrentUserId) || fallbackPrimaryFounder || null
+  }, [users, currentUserId, currentUser?.is_primary_founder])
   const canDeleteUsers = !!currentPanelUser?.is_primary_founder
   const canManageProviderPool = !!(currentUser?.is_primary_founder || currentPanelUser?.is_primary_founder)
   const canViewSecurityIntel = !!(currentUser?.is_primary_founder || currentPanelUser?.is_primary_founder)
@@ -777,8 +781,8 @@ export default function AdminPanel() {
       {tab === 'users' && canManageUsers && (
         <div className="space-y-2">
           {users.map((user) => {
-            const isCurrentFounder = user.id === currentUserId && user.role === 'founder'
-            const isCurrentUser = user.id === currentUserId
+            const isCurrentUser = String(user.id) === String(currentUserId)
+            const isCurrentFounder = isCurrentUser && user.role === 'founder'
             const isPrimaryFounder = !!user.is_primary_founder
             const isUpdatingThisUser = updatingUserId === user.id
             const isAdvancedOpen = openAdvancedUserId === user.id
