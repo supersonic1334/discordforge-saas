@@ -1570,6 +1570,20 @@ html {
     padding: clamp(0.875rem, 3.5vw, 1.25rem);
   }
 
+  .auth-mobile-features {
+    display: none !important;
+  }
+
+  .auth-mobile-panel,
+  .auth-mobile-panel.is-register,
+  .auth-mobile-panel.is-compact {
+    gap: 0.5rem;
+  }
+
+  .auth-mobile-card {
+    margin-bottom: 0 !important;
+  }
+
   /* Stack grid layouts */
   .grid {
     gap: clamp(0.5rem, 2vw, 1rem);

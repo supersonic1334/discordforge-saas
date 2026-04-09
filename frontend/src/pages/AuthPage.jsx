@@ -917,7 +917,7 @@ export default function AuthPage() {
                         type="submit"
                         disabled={isLoading || !registerCaptchaReady}
                         whileTap={{ scale: 0.97 }}
-                        className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 hover:shadow-[0_0_28px_rgba(0,229,255,0.3),0_0_56px_rgba(0,229,255,0.1)]"
+                        className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-[0_10px_22px_rgba(0,229,255,0.12)] disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-95 hover:shadow-[0_12px_24px_rgba(0,229,255,0.18)]"
                       >
                         {isLoading ? (
                           <span className="flex items-center justify-center gap-2">
