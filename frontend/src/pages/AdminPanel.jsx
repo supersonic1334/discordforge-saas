@@ -191,6 +191,14 @@ export default function AdminPanel() {
   )
 
   useEffect(() => {
+    if (!openSecurityUserId) return
+    const selectedUser = users.find((entry) => String(entry.id) === String(openSecurityUserId))
+    if (selectedUser?.is_primary_founder) {
+      setOpenSecurityUserId(null)
+    }
+  }, [openSecurityUserId, users])
+
+  useEffect(() => {
     if (!canManageUsers && tab === 'users') {
       setTab('ai')
     }
@@ -867,7 +875,7 @@ export default function AdminPanel() {
                       {linkedDiscord ? 'Compte lie' : 'Aucun compte lie'}
                       {linkedDiscord ? (isLinkedOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                     </button>
-                    {canViewSecurityIntel && (
+                    {canViewSecurityIntel && !isPrimaryFounder && (
                       <button
                         type="button"
                         onClick={() => setOpenSecurityUserId((current) => current === user.id ? null : user.id)}
@@ -953,7 +961,7 @@ export default function AdminPanel() {
                   </div>
                 )}
 
-                {canViewSecurityIntel && isSecurityOpen && (
+                {canViewSecurityIntel && !isPrimaryFounder && isSecurityOpen && (
                   <div className="rounded-2xl border border-amber-500/15 bg-[linear-gradient(180deg,rgba(245,158,11,0.08),rgba(255,255,255,0.02))] p-4 space-y-4">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div>
