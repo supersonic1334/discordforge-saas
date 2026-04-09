@@ -16,6 +16,7 @@ const USER_AGENT = [
 const GENERIC_DESCRIPTION_PATTERNS = [
   'share your videos with friends, family, and the world',
   'watch the latest video from',
+  'make your day',
   'join telegram',
   'steam community',
   'see what ',
@@ -27,6 +28,9 @@ const GENERIC_DESCRIPTION_PATTERNS = [
   'view my complete profile on steam',
   'official profile',
   'official account',
+  'internet archive: digital library',
+  'digital library of free & borrowable books',
+  'digital library of free and borrowable books',
   'listen to music from',
   'view the profile',
   'watch popular videos',
@@ -78,11 +82,16 @@ const SIGNAL_RULES = [
   { kind: 'game', label: 'Minecraft', keywords: ['minecraft'] },
   { kind: 'game', label: 'GTA', keywords: ['gta', 'grand theft auto'] },
   { kind: 'game', label: 'Call of Duty', keywords: ['call of duty', 'warzone'] },
+  { kind: 'game', label: 'Fortnite', keywords: ['fortnite'] },
+  { kind: 'game', label: 'Valorant', keywords: ['valorant'] },
+  { kind: 'game', label: 'League of Legends', keywords: ['league of legends', 'lol '] },
+  { kind: 'game', label: 'Counter-Strike', keywords: ['counter-strike', 'cs2', 'csgo'] },
   { kind: 'activity', label: 'PvP', keywords: ['pvp', 'ranked', 'combat', 'duel'] },
   { kind: 'activity', label: 'Trade', keywords: ['trade', 'trading', 'echange', 'market'] },
   { kind: 'activity', label: 'Roleplay', keywords: ['roleplay', 'rp'] },
   { kind: 'activity', label: 'Shorts / clips', keywords: ['shorts', 'clips', 'tiktok', 'reels'] },
   { kind: 'activity', label: 'Live', keywords: ['live', 'stream', 'streaming', 'twitch'] },
+  { kind: 'activity', label: 'Trend / viral', keywords: ['trend', 'viral', 'challenge', 'pour toi', 'fyp'] },
 ];
 
 function normalizeWhitespace(value) {
@@ -198,6 +207,14 @@ function extractMetaKeywords(html) {
     .map((entry) => truncate(entry, 40))
     .filter(Boolean)
     .slice(0, 10);
+}
+
+function extractHeadingSnippets(html) {
+  const matches = Array.from(String(html || '').matchAll(/<(h1|h2)[^>]*>([\s\S]*?)<\/\1>/gi));
+  return matches
+    .map((match) => truncate(decodeHtmlEntities(String(match?.[2] || '').replace(/<[^>]+>/g, '')), 90))
+    .filter(Boolean)
+    .slice(0, 6);
 }
 
 function buildFact(label, value) {
@@ -324,15 +341,15 @@ function buildSignalInsights(signals) {
   const items = [];
 
   if (signals.themes.length) {
-    items.push(`Themes publics detectes: ${signals.themes.join(', ')}.`);
+    items.push(`Univers reperes: ${signals.themes.join(', ')}.`);
   }
 
   if (signals.games.length) {
-    items.push(`Jeux ou univers cites publiquement: ${signals.games.join(', ')}.`);
+    items.push(`Jeux reperes: ${signals.games.join(', ')}.`);
   }
 
   if (signals.activities.length) {
-    items.push(`Activites visibles dans les indices publics: ${signals.activities.join(', ')}.`);
+    items.push(`Styles ou activites reperes: ${signals.activities.join(', ')}.`);
   }
 
   return items;
@@ -340,10 +357,10 @@ function buildSignalInsights(signals) {
 
 function buildSignalSections(signals, keywords) {
   return [
-    compactSection('Themes publics', signals.themes),
-    compactSection('Jeux cites', signals.games),
-    compactSection('Activites visibles', signals.activities),
-    compactSection('Mots cles publics', safeArray(keywords).slice(0, 6)),
+    compactSection('Univers reperes', signals.themes),
+    compactSection('Jeux reperes', signals.games),
+    compactSection('Styles reperes', signals.activities),
+    compactSection('Mots reperes', safeArray(keywords).slice(0, 6)),
   ].filter(Boolean);
 }
 
@@ -352,9 +369,9 @@ function buildFrenchSummary(siteName, description, signals) {
   if (cleanedDescription) return cleanedDescription;
 
   const parts = [];
-  if (signals.themes.length) parts.push(`themes publics: ${signals.themes.join(', ')}`);
-  if (signals.games.length) parts.push(`jeux cites: ${signals.games.join(', ')}`);
-  if (signals.activities.length) parts.push(`activites visibles: ${signals.activities.join(', ')}`);
+  if (signals.themes.length) parts.push(`univers reperes: ${signals.themes.join(', ')}`);
+  if (signals.games.length) parts.push(`jeux reperes: ${signals.games.join(', ')}`);
+  if (signals.activities.length) parts.push(`styles reperes: ${signals.activities.join(', ')}`);
 
   if (parts.length) {
     return truncate(`Profil public detecte sur ${siteName}. ${parts.join(' - ')}.`, 240);
@@ -391,25 +408,47 @@ function buildSiteIntro(siteName, username, headline = '') {
       : 'Chaine YouTube publique detectee.';
   }
 
+  if (/tiktok/i.test(namedSite)) {
+    return displayName
+      ? `${displayName} possede un profil TikTok public.`
+      : 'Profil TikTok public detecte.';
+  }
+
+  if (/twitch/i.test(namedSite)) {
+    return displayName
+      ? `${displayName} possede une chaine Twitch publique.`
+      : 'Chaine Twitch publique detectee.';
+  }
+
+  if (/archive/i.test(namedSite)) {
+    return displayName
+      ? `${displayName} possede une page Archive.org publique.`
+      : 'Page Archive.org publique detectee.';
+  }
+
   return `Profil public detecte sur ${namedSite || 'ce site'}.`;
 }
 
 async function enrichGenericPage(profileUrl, siteName) {
   const { text, finalUrl } = await fetchText(profileUrl);
   const title = extractTitle(text);
+  const headings = extractHeadingSnippets(text);
   const description = truncate(
     extractMetaContent(text, 'property', 'og:description')
     || extractMetaContent(text, 'name', 'description'),
     240
   );
   const imageUrl = (
-    sanitizeImageUrl(extractMetaContent(text, 'property', 'og:image'), finalUrl)
+    sanitizeImageUrl(extractMetaContent(text, 'property', 'og:image:secure_url'), finalUrl)
+    || sanitizeImageUrl(extractMetaContent(text, 'name', 'twitter:image:src'), finalUrl)
+    || sanitizeImageUrl(extractMetaContent(text, 'name', 'image'), finalUrl)
+    || sanitizeImageUrl(extractMetaContent(text, 'property', 'og:image'), finalUrl)
     || sanitizeImageUrl(extractMetaContent(text, 'name', 'twitter:image'), finalUrl)
     || sanitizeImageUrl(extractMetaContent(text, 'property', 'twitter:image'), finalUrl)
   );
   const keywords = extractMetaKeywords(text);
   const handle = extractHandleFromUrl(finalUrl);
-  const signals = collectSignals([title, description, keywords.join(' '), handle, finalUrl]);
+  const signals = collectSignals([title, description, keywords.join(' '), headings.join(' '), handle, finalUrl]);
 
   if (looksLikeMissingProfile(siteName, title, description, finalUrl)) {
     return { invalid: true };
@@ -430,16 +469,15 @@ async function enrichGenericPage(profileUrl, siteName) {
     summary: buildFrenchSummary(siteName, summarySource, signals),
     headline,
     imageUrl: imageUrl || null,
-    facts: compactFacts([
-      buildFact('Page', siteName),
-      buildFact('Titre', title || ''),
-      buildFact('Handle', handle),
-    ]),
+    facts: [],
     insights: compactInsights([
       ...buildSignalInsights(signals),
       !isGenericDescription(description, siteName) ? `Bio publique: ${truncate(description, 180)}` : '',
     ]),
-    sections: buildSignalSections(signals, keywords),
+    sections: [
+      ...buildSignalSections(signals, [...keywords, ...headings]),
+      compactSection('Elements visibles', headings),
+    ].filter(Boolean),
   };
 }
 
@@ -595,10 +633,7 @@ function buildFallbackProfile(entry) {
     imageUrl: null,
     headline: truncate(entry.siteName || entry.domain || 'Profil public'),
     summary: `Profil public detecte sur ${entry.siteName || entry.domain || 'le site'}.`,
-    facts: compactFacts([
-      buildFact('Source', entry.siteName),
-      buildFact('Domaine', entry.domain),
-    ]),
+    facts: [],
     insights: [],
     sections: [],
     verified: true,
