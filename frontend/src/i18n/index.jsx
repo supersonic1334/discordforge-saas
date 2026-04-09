@@ -955,8 +955,8 @@ const extraTranslations = {
       features: {
         secure: 'Sécurisé',
         secureDesc: 'Connexion protégée et accès verrouillé en toute sécurité.',
-        realtime: 'Temps réel',
-        realtimeDesc: 'Statuts, synchronisation et actions instantanées sur ton bot.',
+        realtime: 'Hébergé gratuitement',
+        realtimeDesc: 'Bot hébergé gratuitement sur le site, sans configuration compliquée.',
         ai: 'IA intégrée',
         aiDesc: 'Assistant intégré pour configurer et piloter ton site plus vite.',
       },
@@ -1191,8 +1191,8 @@ const extraTranslations = {
       features: {
         secure: 'Secure',
         secureDesc: 'Protected sign-in and locked-down access for your workspace.',
-        realtime: 'Real-time',
-        realtimeDesc: 'Live status, sync, and instant actions on your bot.',
+        realtime: 'Hosted for free',
+        realtimeDesc: 'Bot hosting included on the site with a simple setup.',
         ai: 'Built-in AI',
         aiDesc: 'Built-in assistant to configure and run your site faster.',
       },
@@ -1427,8 +1427,8 @@ const extraTranslations = {
       features: {
         secure: 'Seguro',
         secureDesc: 'Conexion protegida y acceso bloqueado de forma segura.',
-        realtime: 'Tiempo real',
-        realtimeDesc: 'Estado, sincronizacion y acciones instantaneas sobre tu bot.',
+        realtime: 'Alojado gratis',
+        realtimeDesc: 'Bot alojado gratis en el sitio con una configuracion simple.',
         ai: 'IA integrada',
         aiDesc: 'Asistente integrado para configurar y gestionar tu sitio mas rapido.',
       },
