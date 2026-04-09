@@ -917,7 +917,7 @@ export default function AuthPage() {
                         type="submit"
                         disabled={isLoading || !registerCaptchaReady}
                         whileTap={{ scale: 0.97 }}
-                        className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-[0_10px_22px_rgba(0,229,255,0.12)] disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-95 hover:shadow-[0_12px_24px_rgba(0,229,255,0.18)]"
+                        className="w-full py-3 rounded-xl font-display font-600 text-sm bg-gradient-to-r from-neon-cyan to-neon-violet text-white transition-all duration-250 shadow-[0_8px_18px_rgba(0,0,0,0.26)] disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-95 hover:shadow-[0_10px_22px_rgba(0,0,0,0.32)]"
                       >
                         {isLoading ? (
                           <span className="flex items-center justify-center gap-2">
@@ -964,7 +964,6 @@ export default function AuthPage() {
                 </motion.form>
 
                 {/* Feature cards */}
-                {!authLiteMode && (
                 <div className="auth-mobile-features mt-5 sm:mt-6 space-y-3">
                 <div className="grid grid-cols-3 gap-2">
                   {featureCards.map((feature) => {
@@ -1023,7 +1022,6 @@ export default function AuthPage() {
                   </motion.div>
                 </AnimatePresence>
                 </div>
-                )}
               </div>
             </div>
           </motion.div>
