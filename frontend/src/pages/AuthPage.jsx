@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion'
-import { Eye, EyeOff, Bot, Shield, Zap, AlertCircle, Ban } from 'lucide-react'
+import { Eye, EyeOff, Bot, Shield, Server, AlertCircle, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { authAPI } from '../services/api'
 import { useAuthStore } from '../stores'
@@ -272,6 +272,7 @@ export default function AuthPage() {
   const [mode, setMode] = useState('login')
   const [showPass, setShowPass] = useState(false)
   const [activeFeature, setActiveFeature] = useState('secure')
+  const [hoveredFeature, setHoveredFeature] = useState(null)
   const [form, setForm] = useState({ email: '', username: '', password: '', captchaAnswer: '' })
   const [error, setError] = useState('')
   const [pendingNotice, setPendingNotice] = useState('')
@@ -313,7 +314,7 @@ export default function AuthPage() {
     },
     {
       key: 'realtime',
-      icon: Zap,
+      icon: Server,
       label: t('auth.features.realtime'),
       description: t('auth.features.realtimeDesc', 'Statuts, synchronisation et actions instantanées sur ton bot.'),
       iconClass: 'text-neon-violet',
@@ -967,15 +968,23 @@ export default function AuthPage() {
                 <div className="auth-mobile-features mt-5 sm:mt-6 space-y-3">
                 <div className="grid grid-cols-3 gap-2">
                   {featureCards.map((feature) => {
-                    const active = feature.key === activeFeature
+                    const active = touchDevice ? feature.key === activeFeature : feature.key === hoveredFeature
                     const Icon = feature.icon
 
                     return (
                       <motion.button
                         key={feature.key}
                         type="button"
-                        onMouseEnter={() => setActiveFeature(feature.key)}
-                        onFocus={() => setActiveFeature(feature.key)}
+                        onMouseEnter={() => {
+                          setHoveredFeature(feature.key)
+                          setActiveFeature(feature.key)
+                        }}
+                        onMouseLeave={() => setHoveredFeature(null)}
+                        onFocus={() => {
+                          setHoveredFeature(feature.key)
+                          setActiveFeature(feature.key)
+                        }}
+                        onBlur={() => setHoveredFeature(null)}
                         onClick={() => setActiveFeature(feature.key)}
                         whileHover={{ y: -3, scale: 1.01 }}
                         whileTap={{ scale: 0.98 }}
