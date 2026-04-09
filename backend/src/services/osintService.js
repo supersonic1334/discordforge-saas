@@ -23,6 +23,34 @@ function normalizeShortText(value, maxLength = 320) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maxLength);
 }
 
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function uniqueStrings(values, limit = 8) {
+  return Array.from(new Set(
+    safeArray(values)
+      .map((entry) => normalizeShortText(entry, 120))
+      .filter(Boolean)
+  )).slice(0, limit);
+}
+
+async function runLimited(items, limit, iterator) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const currentIndex = cursor;
+      cursor += 1;
+      results[currentIndex] = await iterator(items[currentIndex], currentIndex);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
 function normalizeConfidence(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 50;
@@ -568,6 +596,28 @@ function cleanDiscordIdentity(value) {
     .slice(0, 120);
 }
 
+function scoreDiscordCandidate(identity, candidate) {
+  const lowered = String(identity || '').trim().toLowerCase();
+  const names = uniqueStrings([
+    candidate?.display_name,
+    candidate?.username,
+    candidate?.global_name,
+    ...(candidate?.observed_names || []),
+  ], 12).map((entry) => entry.toLowerCase());
+
+  let score = Number(candidate?.server_count || 0) * 4;
+  if (candidate?.source === 'site_link') score += 20;
+
+  for (const name of names) {
+    if (!name) continue;
+    if (name === lowered) score += 120;
+    else if (name.startsWith(lowered)) score += 40;
+    else if (name.includes(lowered)) score += 12;
+  }
+
+  return score;
+}
+
 function buildDiscordProfileFromApi(user) {
   if (!user?.id) return null;
 
@@ -612,6 +662,127 @@ function buildDiscordCandidate(row) {
     display_name: row.discord_global_name || row.discord_username || row.username || row.discord_id || row.id,
     avatar_url: row.discord_avatar_url || row.avatar_url || null,
     source: row.discord_id ? 'site_link' : 'site_user',
+    observed_names: uniqueStrings([row.discord_username, row.discord_global_name, row.username]),
+    server_count: Number(row.server_count || 0) || 0,
+  };
+}
+
+function buildDiscordCandidateFromGuildMember(member) {
+  const user = member?.user || null;
+  if (!user?.id) return null;
+
+  const avatarHash = user.avatar || member.avatar || null;
+
+  return {
+    id: String(user.id),
+    username: user.username || null,
+    global_name: user.global_name || null,
+    display_name: member.nick || user.global_name || user.username || user.id,
+    avatar_url: discordService.getAvatarUrl(user.id, avatarHash, 256, user.discriminator),
+    source: 'guild_search',
+    observed_names: uniqueStrings([member.nick, user.global_name, user.username]),
+    server_count: 1,
+  };
+}
+
+function buildDiscordProfileFromGuildCandidate(candidate) {
+  if (!candidate?.id) return null;
+
+  return {
+    id: String(candidate.id),
+    username: candidate.username || null,
+    global_name: candidate.global_name || null,
+    display_name: candidate.display_name || candidate.global_name || candidate.username || candidate.id,
+    avatar_url: candidate.avatar_url || null,
+    banner_url: null,
+    banner_color: null,
+    avatar_animated: false,
+    banner_animated: false,
+    created_at: parseDiscordSnowflakeCreatedAt(candidate.id),
+    source: 'guild_search',
+  };
+}
+
+function mergeDiscordCandidates(...groups) {
+  const byId = new Map();
+
+  for (const candidate of groups.flat().filter(Boolean)) {
+    const key = String(candidate.id || candidate.username || candidate.display_name || '').trim();
+    if (!key) continue;
+
+    const existing = byId.get(key);
+    if (!existing) {
+      byId.set(key, {
+        ...candidate,
+        observed_names: uniqueStrings(candidate.observed_names || []),
+        server_count: Number(candidate.server_count || 0) || 0,
+      });
+      continue;
+    }
+
+    existing.username = existing.username || candidate.username || null;
+    existing.global_name = existing.global_name || candidate.global_name || null;
+    existing.display_name = existing.display_name || candidate.display_name || existing.username || key;
+    existing.avatar_url = existing.avatar_url || candidate.avatar_url || null;
+    existing.server_count = Math.max(Number(existing.server_count || 0), Number(candidate.server_count || 0));
+    existing.observed_names = uniqueStrings([...(existing.observed_names || []), ...(candidate.observed_names || [])]);
+    if (existing.source !== 'site_link' && candidate.source === 'site_link') {
+      existing.source = 'site_link';
+    } else if (existing.source === 'site_user' && candidate.source === 'guild_search') {
+      existing.source = 'guild_search';
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
+function enrichDiscordProfile(profile, context = {}) {
+  const observedNames = uniqueStrings([
+    profile?.username,
+    profile?.global_name,
+    profile?.display_name,
+    ...(context.guildCandidate?.observed_names || []),
+    context.linkedRow?.username,
+    context.linkedRow?.discord_username,
+    context.linkedRow?.discord_global_name,
+  ], 10);
+
+  const sources = uniqueStrings([
+    profile?.source === 'discord_api' ? 'API Discord' : '',
+    context.linkedRow ? 'Compte lie au site' : '',
+    context.guildCandidate ? 'Serveurs relies au bot' : '',
+  ], 4);
+
+  const serverCount = Number(context.guildCandidate?.server_count || 0) || 0;
+  const aliasCount = Math.max(0, observedNames.length - 1);
+  const sourceCount = Math.max(1, sources.length);
+
+  return {
+    ...profile,
+    summary: normalizeShortText(
+      [
+        serverCount ? `Profil recoupe sur ${serverCount} serveur(s) relie(s) au bot.` : '',
+        sourceCount > 1 ? `${sourceCount} recoupements publics consolides.` : 'Profil public resolu.',
+        aliasCount ? `${aliasCount} alias ou pseudo(s) public(s) observe(s).` : '',
+      ].filter(Boolean).join(' '),
+      320
+    ),
+    sources,
+    server_count: serverCount,
+    observed_names: observedNames,
+    facts: [
+      { label: 'Pseudo', value: profile?.username || '--' },
+      { label: 'Nom global', value: profile?.global_name || '--' },
+      { label: 'ID Discord', value: profile?.id || '--' },
+      { label: 'Creation', value: profile?.created_at ? new Date(profile.created_at).toLocaleDateString('fr-FR') : '--' },
+      sourceCount ? { label: 'Recoupements', value: `${sourceCount} source(s)` } : null,
+      serverCount ? { label: 'Serveurs relies', value: String(serverCount) } : null,
+      aliasCount ? { label: 'Alias observes', value: String(aliasCount) } : null,
+    ].filter(Boolean),
+    sections: [
+      sources.length ? { title: 'Recoupements', items: sources } : null,
+      observedNames.length > 1 ? { title: 'Alias observes', items: observedNames.filter((entry) => entry !== profile?.display_name).slice(0, 8) } : null,
+    ].filter(Boolean),
   };
 }
 
@@ -645,6 +816,7 @@ async function fetchDiscordProfileFromBot(userId, discordId) {
 function searchLinkedDiscordCandidates(identity) {
   const lowered = String(identity || '').trim().toLowerCase();
   if (!lowered) return [];
+  const likeQuery = `%${lowered.replace(/[%_]/g, '')}%`;
 
   return db.raw(
     `
@@ -665,11 +837,53 @@ function searchLinkedDiscordCandidates(identity) {
       WHERE discord_id = ?
          OR lower(COALESCE(discord_username, '')) = ?
          OR lower(COALESCE(discord_global_name, '')) = ?
+         OR lower(COALESCE(discord_username, '')) LIKE ?
+         OR lower(COALESCE(discord_global_name, '')) LIKE ?
+         OR lower(COALESCE(username, '')) LIKE ?
       ORDER BY updated_at DESC
-      LIMIT 8
+      LIMIT 12
     `,
-    [identity, lowered, lowered]
+    [identity, lowered, lowered, likeQuery, likeQuery, likeQuery]
   );
+}
+
+async function searchDiscordCandidatesAcrossGuilds(userId, identity) {
+  const cleanedIdentity = cleanDiscordIdentity(identity);
+  if (!cleanedIdentity || cleanedIdentity.length < 2) return [];
+
+  const tokenRow = db.findOne('bot_tokens', { user_id: userId });
+  if (!tokenRow?.encrypted_token) return [];
+
+  try {
+    const token = decrypt(tokenRow.encrypted_token);
+    const guilds = safeArray(await discordService.getBotGuilds(token)).slice(0, 40);
+    if (!guilds.length) return [];
+
+    const hits = await runLimited(guilds, 5, async (guild) => {
+      try {
+        const members = safeArray(await discordService.searchGuildMembers(token, guild.id, cleanedIdentity, 4));
+        return members.map(buildDiscordCandidateFromGuildMember).filter(Boolean);
+      } catch (error) {
+        logger.debug?.('Discord guild search skipped', {
+          guildId: guild.id,
+          query: cleanedIdentity,
+          message: error?.message || 'guild_search_failed',
+        });
+        return [];
+      }
+    });
+
+    return mergeDiscordCandidates(...hits)
+      .sort((left, right) => scoreDiscordCandidate(cleanedIdentity, right) - scoreDiscordCandidate(cleanedIdentity, left))
+      .slice(0, 8);
+  } catch (error) {
+    logger.debug?.('Discord cross-guild search failed', {
+      userId,
+      query: cleanedIdentity,
+      message: error?.message || 'cross_guild_search_failed',
+    });
+    return [];
+  }
 }
 
 async function lookupDiscordPublicProfile(userId, identity) {
@@ -684,14 +898,32 @@ async function lookupDiscordPublicProfile(userId, identity) {
 
   if (directId) {
     const liveProfile = await fetchDiscordProfileFromBot(userId, directId);
+    const guildCandidate = (await searchDiscordCandidatesAcrossGuilds(userId, directId)).find((entry) => entry.id === directId) || null;
     if (liveProfile) {
       const linkedRow = db.findOne('users', { discord_id: directId });
-      return formatDiscordLookupResponse(cleanedIdentity, liveProfile, linkedRow ? [buildDiscordCandidate(linkedRow)] : []);
+      return formatDiscordLookupResponse(
+        cleanedIdentity,
+        enrichDiscordProfile(liveProfile, { linkedRow, guildCandidate }),
+        mergeDiscordCandidates(linkedRow ? [buildDiscordCandidate(linkedRow)] : [], guildCandidate ? [guildCandidate] : [])
+      );
     }
 
     const linkedRow = db.findOne('users', { discord_id: directId });
     if (linkedRow) {
-      return formatDiscordLookupResponse(cleanedIdentity, buildDiscordProfileFromRow(linkedRow), [buildDiscordCandidate(linkedRow)]);
+      return formatDiscordLookupResponse(
+        cleanedIdentity,
+        enrichDiscordProfile(buildDiscordProfileFromRow(linkedRow), { linkedRow, guildCandidate }),
+        mergeDiscordCandidates([buildDiscordCandidate(linkedRow)], guildCandidate ? [guildCandidate] : [])
+      );
+    }
+
+    if (guildCandidate) {
+      return formatDiscordLookupResponse(
+        cleanedIdentity,
+        enrichDiscordProfile(buildDiscordProfileFromGuildCandidate(guildCandidate), { guildCandidate }),
+        [guildCandidate],
+        'Profil resolu via les serveurs relies au bot.'
+      );
     }
 
     const error = new Error('Profil Discord introuvable pour cet ID');
@@ -699,21 +931,30 @@ async function lookupDiscordPublicProfile(userId, identity) {
     throw error;
   }
 
-  const candidates = searchLinkedDiscordCandidates(cleanedIdentity);
+  const linkedCandidates = searchLinkedDiscordCandidates(cleanedIdentity).map(buildDiscordCandidate);
+  const guildCandidates = await searchDiscordCandidatesAcrossGuilds(userId, cleanedIdentity);
+  const candidates = mergeDiscordCandidates(linkedCandidates, guildCandidates)
+    .sort((left, right) => scoreDiscordCandidate(cleanedIdentity, right) - scoreDiscordCandidate(cleanedIdentity, left));
+
   if (!candidates.length) {
-    const error = new Error('Aucun profil Discord public resoluble. Utilise de preference un ID ou une mention.');
+    const error = new Error('Aucun profil Discord public resoluble pour ce pseudo ou cet identifiant.');
     error.status = 404;
     throw error;
   }
 
   const primary = candidates[0];
-  const liveProfile = primary?.discord_id ? await fetchDiscordProfileFromBot(userId, primary.discord_id) : null;
+  const linkedRow = primary?.id ? db.findOne('users', { discord_id: primary.id }) : null;
+  const guildCandidate = guildCandidates.find((entry) => entry.id === primary?.id) || null;
+  const liveProfile = primary?.id ? await fetchDiscordProfileFromBot(userId, primary.id) : null;
+  const profile = liveProfile || buildDiscordProfileFromRow(linkedRow) || buildDiscordProfileFromGuildCandidate(primary);
 
   return formatDiscordLookupResponse(
     cleanedIdentity,
-    liveProfile || buildDiscordProfileFromRow(primary),
-    candidates.map(buildDiscordCandidate),
-    'Recherche publique fiable : ID ou mention Discord recommandes.'
+    enrichDiscordProfile(profile, { linkedRow, guildCandidate }),
+    candidates,
+    candidates.length > 1
+      ? 'Plusieurs correspondances publiques ont ete trouvees. La meilleure correspondance est affichee en premier.'
+      : 'Profil public resolu.'
   );
 }
 
@@ -761,14 +1002,14 @@ async function fetchWikipediaReferences(coordinates) {
 
   try {
     const geoPayload = await fetchJson(
-      `https://fr.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${encodeURIComponent(`${coordinates.lat}|${coordinates.lon}`)}&gsradius=2500&gslimit=4&format=json&origin=*`
+      `https://fr.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${encodeURIComponent(`${coordinates.lat}|${coordinates.lon}`)}&gsradius=5000&gslimit=6&format=json&origin=*`
     );
     const geoItems = Array.isArray(geoPayload?.query?.geosearch) ? geoPayload.query.geosearch : [];
     if (!geoItems.length) return [];
 
     const pageIds = geoItems.map((entry) => entry.pageid).join('|');
     const pagePayload = await fetchJson(
-      `https://fr.wikipedia.org/w/api.php?action=query&pageids=${encodeURIComponent(pageIds)}&prop=pageimages|info&inprop=url&pithumbsize=720&format=json&origin=*`
+      `https://fr.wikipedia.org/w/api.php?action=query&pageids=${encodeURIComponent(pageIds)}&prop=pageimages|info&inprop=url&pithumbsize=900&format=json&origin=*`
     );
     const pages = pagePayload?.query?.pages || {};
 
@@ -943,8 +1184,9 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
   const systemPrompt = [
     'You are a cautious image geolocation analyst.',
     'Inspect the photo carefully and infer only what is visually supported.',
-    'Prefer city/region precision over invented exact points.',
+    'Prefer city, district, landmark, and region precision over invented exact addresses.',
     'If coordinates are uncertain, leave them empty instead of guessing.',
+    'Explain public visual clues, likely environment, nearby landmark hypotheses, and plausible alternatives.',
     'Return only one JSON object wrapped in <result></result>.',
     'Do not use markdown.',
   ].join(' ');
@@ -953,9 +1195,10 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
     'Respond with compact JSON only.',
     'Use this exact schema:',
     '<result>{"confidence":"haute","country":"...","country_code":"...","region":"...","city":"...","district":"...","exact_location":"...","landmark":null,"coordinates":{"lat":0.0,"lon":0.0},"maps_search":"...","clues":[{"type":"Architecture","detail":"...","weight":"high"}],"time_of_day":"...","weather_conditions":"...","analysis":"...","alternative_locations":["..."]}</result>',
-    'Target the most plausible city or area when possible.',
-    'Do not return more than 7 clues or 5 alternative locations.',
+    'Target the most plausible city, district, or landmark when possible.',
+    'Do not return more than 9 clues or 6 alternative locations.',
     'If a field is unknown, return an empty string or null instead of inventing data.',
+    'maps_search must be a clean query for maps, not a sentence.',
   ].join('\n');
 
   const anthropicImageContent = [
