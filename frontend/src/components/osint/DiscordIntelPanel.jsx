@@ -3,12 +3,10 @@ import toast from 'react-hot-toast'
 import {
   AlertTriangle,
   ExternalLink,
-  Fingerprint,
   Image as ImageIcon,
   RefreshCw,
   Search,
   ShieldCheck,
-  UserRound,
 } from 'lucide-react'
 import { osintAPI } from '../../services/api'
 
@@ -29,20 +27,49 @@ function formatDate(value) {
   }
 }
 
-function Avatar({ src, label }) {
-  if (src) {
+function stringToAccentColor(value) {
+  const palette = [
+    'from-neon-cyan/25 to-cyan-500/18',
+    'from-violet-500/25 to-fuchsia-500/18',
+    'from-emerald-500/22 to-teal-500/18',
+    'from-sky-500/24 to-indigo-500/18',
+  ]
+  const seed = String(value || '').split('').reduce((total, char) => total + char.charCodeAt(0), 0)
+  return palette[seed % palette.length]
+}
+
+function getAvatarFallbackLetter(label) {
+  const cleaned = String(label || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+
+  return String(cleaned[0] || '?').toUpperCase()
+}
+
+function Avatar({ src, label, compact = false }) {
+  const [failed, setFailed] = useState(false)
+  const sizeClass = compact ? 'h-11 w-11 rounded-[16px]' : 'h-24 w-24 rounded-[28px]'
+  const letterClass = compact ? 'text-lg' : 'text-4xl'
+  const accentClass = stringToAccentColor(label)
+
+  if (src && !failed) {
     return (
       <img
         src={src}
         alt={label}
-        className="h-24 w-24 rounded-[28px] border border-white/10 object-cover shadow-[0_24px_48px_rgba(0,0,0,0.32)]"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className={`${sizeClass} border border-white/10 object-cover shadow-[0_24px_48px_rgba(0,0,0,0.32)]`}
       />
     )
   }
 
   return (
-    <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-white/10 bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 text-white/80 shadow-[0_24px_48px_rgba(0,0,0,0.32)]">
-      <UserRound className="h-10 w-10" />
+    <div className={`flex ${sizeClass} items-center justify-center border border-white/10 bg-gradient-to-br ${accentClass} text-white shadow-[0_24px_48px_rgba(0,0,0,0.32)]`}>
+      <span className={`font-display font-800 ${letterClass}`}>{getAvatarFallbackLetter(label)}</span>
     </div>
   )
 }
@@ -65,6 +92,9 @@ export default function DiscordIntelPanel() {
 
   const profile = payload?.profile || null
   const candidates = useMemo(() => (Array.isArray(payload?.candidates) ? payload.candidates : []), [payload])
+  const facts = useMemo(() => (Array.isArray(profile?.facts) ? profile.facts : []), [profile])
+  const sections = useMemo(() => (Array.isArray(profile?.sections) ? profile.sections : []), [profile])
+  const canOpenDiscordProfile = /^\d{16,22}$/.test(String(profile?.id || ''))
 
   async function handleLookup(nextIdentity = identity) {
     const cleaned = String(nextIdentity || '').trim()
@@ -100,7 +130,7 @@ export default function DiscordIntelPanel() {
                   void handleLookup()
                 }
               }}
-              placeholder="ID Discord, mention ou pseudo exact publiquement resoluble..."
+              placeholder="Pseudo, ID Discord ou mention..."
               className="input-field pl-11"
             />
           </div>
@@ -160,13 +190,14 @@ export default function DiscordIntelPanel() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-white/55">
-                      @{profile.username || 'inconnu'} {profile.id ? `· ${profile.id}` : ''}
+                      @{profile.username || 'inconnu'} {profile.id ? ` - ${profile.id}` : ''}
                     </p>
                     {payload?.note ? <p className="mt-2 text-sm text-white/45">{payload.note}</p> : null}
+                    {profile.summary ? <p className="mt-3 max-w-2xl text-sm leading-6 text-white/62">{profile.summary}</p> : null}
                   </div>
                 </div>
 
-                {profile.id ? (
+                {canOpenDiscordProfile ? (
                   <a
                     href={`https://discord.com/users/${profile.id}`}
                     target="_blank"
@@ -180,10 +211,10 @@ export default function DiscordIntelPanel() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Metric label="Source" value={profile.source === 'discord_api' ? 'API Discord' : 'Compte lie'} />
-                <Metric label="Creation" value={formatDate(profile.created_at)} hint="depuis le snowflake" />
-                <Metric label="Avatar" value={profile.avatar_animated ? 'Anime' : 'Statique'} />
-                <Metric label="Banniere" value={profile.banner_animated ? 'Animee' : (profile.banner_url ? 'Active' : 'Aucune')} />
+                <Metric label="Creation" value={formatDate(profile.created_at)} hint="date publique estimee" />
+                <Metric label="Serveurs relies" value={profile.server_count || '--'} hint="recoupements serveur visibles" />
+                <Metric label="Alias publics" value={profile.observed_names?.length ? Math.max(0, profile.observed_names.length - 1) : '--'} hint="noms observes publiquement" />
+                <Metric label="Recoupements" value={profile.sources?.length || 1} hint="multi-source public" />
               </div>
             </div>
           </div>
@@ -193,25 +224,42 @@ export default function DiscordIntelPanel() {
               <div className="relative z-[1] space-y-4">
                 <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Fiche publique</p>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {[
+                  {(facts.length ? facts : [
                     { label: 'Pseudo', value: profile.username },
                     { label: 'Nom global', value: profile.global_name },
                     { label: 'ID Discord', value: profile.id },
                     { label: 'Couleur', value: profile.banner_color },
-                  ].map((item) => (
+                  ]).map((item) => (
                     <div key={item.label} className="rounded-[20px] border border-white/8 bg-black/15 px-4 py-4">
                       <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{item.label}</p>
                       <p className="mt-3 text-sm leading-6 text-white/72">{item.value || '--'}</p>
                     </div>
                   ))}
                 </div>
+
+                {sections.length ? (
+                  <div className="grid gap-3 pt-2">
+                    {sections.map((section) => (
+                      <div key={section.title} className="rounded-[20px] border border-white/8 bg-black/15 p-4">
+                        <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{section.title}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {section.items.map((item) => (
+                            <span key={item} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/60">
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
 
             {candidates.length ? (
               <div className="spotlight-card p-5">
                 <div className="relative z-[1]">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Correspondances liees</p>
+                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Correspondances</p>
                   <div className="mt-4 space-y-3">
                     {candidates.map((candidate) => (
                       <button
@@ -223,18 +271,17 @@ export default function DiscordIntelPanel() {
                         }}
                         className="flex w-full items-center gap-3 rounded-[20px] border border-white/8 bg-black/15 px-4 py-4 text-left transition-all hover:border-white/15 hover:bg-white/[0.04]"
                       >
-                        {candidate.avatar_url ? (
-                          <img src={candidate.avatar_url} alt={candidate.display_name} className="h-11 w-11 rounded-[16px] border border-white/10 object-cover" />
-                        ) : (
-                          <div className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-white/10 bg-white/[0.04] text-white/65">
-                            <Fingerprint className="h-4 w-4" />
-                          </div>
-                        )}
+                        <Avatar src={candidate.avatar_url} label={candidate.display_name} compact />
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-display font-700 text-white">{candidate.display_name}</p>
                           <p className="mt-1 truncate text-xs font-mono uppercase tracking-[0.18em] text-white/35">
                             {candidate.username || candidate.id}
                           </p>
+                          {candidate.server_count ? (
+                            <p className="mt-2 text-xs text-white/45">
+                              {candidate.server_count} serveur(s) relie(s) - {candidate.source === 'site_link' ? 'compte lie' : 'recherche publique'}
+                            </p>
+                          ) : null}
                         </div>
                       </button>
                     ))}
@@ -245,9 +292,9 @@ export default function DiscordIntelPanel() {
               <div className="spotlight-card p-5">
                 <div className="relative z-[1] text-center">
                   <ImageIcon className="mx-auto h-10 w-10 text-white/12" />
-                  <p className="mt-4 font-display text-lg font-700 text-white">Resolution publique</p>
+                  <p className="mt-4 font-display text-lg font-700 text-white">Recherche multi-source</p>
                   <p className="mt-2 text-sm leading-6 text-white/45">
-                    Pour une resolution Discord globale fiable, privilegie un ID ou une mention.
+                    Recherche par pseudo, mention ou ID avec recoupements publics, comptes lies et serveurs relies.
                   </p>
                 </div>
               </div>
@@ -260,7 +307,7 @@ export default function DiscordIntelPanel() {
             <ShieldCheck className="mx-auto h-12 w-12 text-white/10" />
             <p className="mt-4 font-display text-xl font-700 text-white">Discord Panel</p>
             <p className="mt-2 text-sm leading-6 text-white/45">
-              Fiche publique Discord: ID, avatar, banniere, dates et identite resoluble sans scope prive.
+              Fiche Discord publique enrichie avec plusieurs sources visibles sans scope prive.
             </p>
           </div>
         </div>
