@@ -102,8 +102,32 @@ function readFileAsDataUrl(file) {
   })
 }
 
+function stringToAccentColor(value) {
+  const palette = [
+    'from-neon-cyan/25 to-cyan-500/18',
+    'from-violet-500/25 to-fuchsia-500/18',
+    'from-emerald-500/22 to-teal-500/18',
+    'from-sky-500/24 to-indigo-500/18',
+    'from-amber-500/24 to-orange-500/18',
+  ]
+  const seed = String(value || '').split('').reduce((total, char) => total + char.charCodeAt(0), 0)
+  return palette[seed % palette.length]
+}
+
+function getAvatarFallbackLetter(label) {
+  const cleaned = String(label || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+
+  return String(cleaned[0] || '?').toUpperCase()
+}
+
 function ResolvedProfileImage({ src, alt, size = 'h-16 w-16 rounded-[22px]' }) {
   const [resolvedSrc, setResolvedSrc] = useState('')
+  const fallbackLetter = getAvatarFallbackLetter(alt)
+  const fallbackAccent = stringToAccentColor(alt)
 
   useEffect(() => {
     let active = true
@@ -143,14 +167,19 @@ function ResolvedProfileImage({ src, alt, size = 'h-16 w-16 rounded-[22px]' }) {
   }
 
   return (
-    <div className={`flex ${size} items-center justify-center border border-white/10 bg-white/[0.04]`}>
-      <Fingerprint className="h-6 w-6 text-neon-cyan/80" />
+    <div className={`flex ${size} items-center justify-center border border-white/10 bg-gradient-to-br ${fallbackAccent} text-white shadow-[0_18px_36px_rgba(0,0,0,0.28)]`}>
+      <span className="font-display text-2xl font-800">{fallbackLetter}</span>
     </div>
   )
 }
 
 function UsernameProfileCard({ profile }) {
   const [open, setOpen] = useState(false)
+  const visibleFacts = useMemo(
+    () => (Array.isArray(profile?.facts) ? profile.facts : []).filter((fact) => !['Page', 'Titre', 'Handle', 'Source', 'Domaine'].includes(fact?.label)),
+    [profile]
+  )
+  const hasExtraDetails = Boolean(visibleFacts.length || profile.sections?.length || profile.insights?.length)
 
   return (
     <div className="spotlight-card border-neon-cyan/18 bg-neon-cyan/[0.05] p-5">
@@ -181,19 +210,9 @@ function UsernameProfileCard({ profile }) {
           {profile.summary}
         </div>
 
-        {profile.facts?.length ? (
-          <div className="flex flex-wrap gap-2">
-            {profile.facts.map((fact) => (
-              <span key={`${fact.label}-${fact.value}`} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/60">
-                {fact.label}: {fact.value}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        {profile.insights?.length ? (
+        {profile.insights?.length && open ? (
           <div className="space-y-2">
-            {profile.insights.slice(0, open ? profile.insights.length : 2).map((insight) => (
+            {profile.insights.map((insight) => (
               <div key={insight} className="rounded-[16px] border border-white/8 bg-black/15 px-4 py-3 text-sm leading-6 text-white/68">
                 {insight}
               </div>
@@ -218,8 +237,19 @@ function UsernameProfileCard({ profile }) {
           </div>
         ) : null}
 
+        {open && visibleFacts.length ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {visibleFacts.map((fact) => (
+              <div key={`${fact.label}-${fact.value}`} className="rounded-[18px] border border-white/8 bg-black/15 px-4 py-3">
+                <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">{fact.label}</p>
+                <p className="mt-2 text-sm leading-6 text-white/72">{fact.value}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         <div className="mt-auto flex flex-wrap gap-3">
-          {profile.sections?.length || (profile.insights?.length || 0) > 2 ? (
+          {hasExtraDetails ? (
             <button
               type="button"
               onClick={() => setOpen((current) => !current)}
