@@ -434,6 +434,49 @@
   .app-screen-scroll[data-scrollable="true"] {
     overflow-y: auto;
   }
+  .app-boot-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(circle at top, rgba(54, 84, 110, 0.18), transparent 28%),
+      linear-gradient(180deg, rgba(12, 18, 27, 0.98), rgba(0, 0, 0, 1));
+  }
+  .app-boot-splash__panel {
+    width: min(92vw, 22rem);
+    padding: 1.35rem 1.2rem;
+    border-radius: 1.5rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(20,20,31,0.96), rgba(10,10,17,0.98));
+    box-shadow: 0 24px 72px rgba(0,0,0,0.42);
+    text-align: center;
+  }
+  .app-boot-splash__ring {
+    width: 2.5rem;
+    height: 2.5rem;
+    margin: 0 auto 0.9rem;
+    border-radius: 999px;
+    border: 2px solid rgba(255,255,255,0.12);
+    border-top-color: #00e5ff;
+    animation: spin 0.9s linear infinite;
+  }
+  .app-boot-splash__ring.is-lite {
+    animation-duration: 1.25s;
+  }
+  .app-boot-splash__title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.92);
+  }
+  .app-boot-splash__subtitle {
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.54);
+  }
   .auth-page-shell {
     display: flex;
     align-items: center;
@@ -449,6 +492,9 @@
     background: #000 !important;
     scrollbar-width: none;
     touch-action: manipulation;
+  }
+  .auth-page-shell[data-lite-mode="true"] {
+    background: linear-gradient(180deg, rgba(13, 18, 27, 1), rgba(0, 0, 0, 1)) !important;
   }
   .auth-page-shell::-webkit-scrollbar {
     display: none;
@@ -501,6 +547,49 @@
     width: min(100%, clamp(20rem, 92vw, 46rem));
     max-height: none;
     gap: 0.7rem;
+  }
+  .auth-boot-loader {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, rgba(4, 8, 14, 0.88), rgba(0, 0, 0, 0.94));
+    backdrop-filter: blur(6px);
+  }
+  .auth-boot-loader.is-compact {
+    align-items: flex-start;
+    padding-top: max(env(safe-area-inset-top), 12vh);
+  }
+  .auth-boot-loader__panel {
+    width: min(84vw, 18rem);
+    border-radius: 1.25rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(20,20,31,0.94), rgba(10,10,17,0.98));
+    padding: 1rem 1rem 0.95rem;
+    text-align: center;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.34);
+  }
+  .auth-boot-loader__ring {
+    width: 2.1rem;
+    height: 2.1rem;
+    margin: 0 auto 0.75rem;
+    border-radius: 999px;
+    border: 2px solid rgba(255,255,255,0.12);
+    border-top-color: #00e5ff;
+    animation: spin 0.9s linear infinite;
+  }
+  .auth-boot-loader__title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.92);
+  }
+  .auth-boot-loader__message {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.52);
   }
   .auth-mobile-hero {
     flex-shrink: 0;
@@ -1718,4 +1807,22 @@ h2 {
   .snow-particle {
     display: none !important;
   }
+}
+
+body.app-lite-mode .gradient-border::before,
+body.app-lite-mode .auth-mobile-logo-shell,
+body.app-lite-mode .auth-mobile-card,
+body.app-lite-mode .auth-feature-detail,
+body.app-lite-mode .glass-card,
+body.app-lite-mode .feature-hero,
+body.app-lite-mode .spotlight-card,
+body.app-lite-mode .depth-panel {
+  animation: none !important;
+  transition-duration: 0.12s !important;
+  box-shadow: none !important;
+}
+
+body.app-lite-mode .auth-page-shell .motion-safe,
+body.app-lite-mode .auth-page-shell [style*="blur("] {
+  filter: none !important;
 }

@@ -44,6 +44,26 @@ import ReviewReminderPopup from './components/reviews/ReviewReminderPopup'
 import PreciseLocationPrompt from './components/security/PreciseLocationPrompt'
 import { I18nProvider } from './i18n'
 
+function detectRuntimeProfile() {
+  if (typeof window === 'undefined') {
+    return { lite: false, touch: false }
+  }
+
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+  const effectiveType = String(connection?.effectiveType || '').toLowerCase()
+  const saveData = !!connection?.saveData
+  const downlink = Number(connection?.downlink || 0)
+  const deviceMemory = Number(navigator.deviceMemory || 0)
+  const hardwareConcurrency = Number(navigator.hardwareConcurrency || 0)
+  const touch = 'ontouchstart' in window || (navigator?.maxTouchPoints || 0) > 0
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false
+  const slowNetwork = ['slow-2g', '2g', '3g'].includes(effectiveType) || (downlink > 0 && downlink < 1.5)
+  const lowDevice = (deviceMemory > 0 && deviceMemory <= 4) || (hardwareConcurrency > 0 && hardwareConcurrency <= 4)
+  const lite = reducedMotion || saveData || slowNetwork || (touch && lowDevice)
+
+  return { lite, touch }
+}
+
 function getAccessFingerprint(snapshot) {
   const user = snapshot?.user
   return [
@@ -91,6 +111,20 @@ function AccessCheckSplash() {
         />
         <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 14, color: 'rgba(255,255,255,0.78)' }}>
           Verification de l&apos;acces...
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AppBootSplash({ liteMode = false }) {
+  return (
+    <div className="app-boot-splash">
+      <div className="app-boot-splash__panel">
+        <div className={`app-boot-splash__ring${liteMode ? ' is-lite' : ''}`} />
+        <div className="app-boot-splash__title">DiscordForger</div>
+        <div className="app-boot-splash__subtitle">
+          {liteMode ? 'Chargement optimise...' : 'Chargement de l interface...'}
         </div>
       </div>
     </div>
@@ -209,9 +243,65 @@ function DashboardHome() {
 function AppRoot() {
   const { token, fetchMe, logout } = useAuthStore()
   const location = useLocation()
+  const [bootReady, setBootReady] = useState(false)
+  const [liteMode, setLiteMode] = useState(false)
   const viewportRafRef = useRef(null)
   const viewportStableHeightRef = useRef(0)
   const focusScrollTimersRef = useRef([])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    let cancelled = false
+
+    const applyProfile = () => {
+      const profile = detectRuntimeProfile()
+      if (cancelled) return profile
+      setLiteMode(profile.lite)
+      document.body.classList.toggle('app-lite-mode', profile.lite)
+      document.body.dataset.touchDevice = profile.touch ? 'true' : 'false'
+      document.body.dataset.performanceTier = profile.lite ? 'lite' : 'full'
+      return profile
+    }
+
+    const bootstrap = async () => {
+      const profile = applyProfile()
+      const fontsReady = document.fonts?.ready
+        ? Promise.race([
+            document.fonts.ready.catch(() => {}),
+            new Promise((resolve) => window.setTimeout(resolve, profile.lite ? 900 : 500)),
+          ])
+        : new Promise((resolve) => window.setTimeout(resolve, profile.lite ? 220 : 120))
+
+      await fontsReady
+      await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)))
+      await new Promise((resolve) => window.setTimeout(resolve, profile.lite ? 180 : 90))
+
+      if (!cancelled) {
+        setBootReady(true)
+      }
+    }
+
+    bootstrap()
+
+    const handleProfileChange = () => {
+      applyProfile()
+    }
+
+    window.addEventListener('resize', handleProfileChange)
+    window.visualViewport?.addEventListener?.('resize', handleProfileChange)
+    navigator.connection?.addEventListener?.('change', handleProfileChange)
+
+    return () => {
+      cancelled = true
+      document.body.classList.remove('app-lite-mode')
+      delete document.body.dataset.touchDevice
+      delete document.body.dataset.performanceTier
+      window.removeEventListener('resize', handleProfileChange)
+      window.visualViewport?.removeEventListener?.('resize', handleProfileChange)
+      navigator.connection?.removeEventListener?.('change', handleProfileChange)
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -628,6 +718,7 @@ function AppRoot() {
 
   return (
     <>
+      {!bootReady && <AppBootSplash liteMode={liteMode} />}
       <Toaster position="top-right" gutter={8} toastOptions={{
         duration: 4000,
         style: {
@@ -642,9 +733,10 @@ function AppRoot() {
         success: { iconTheme: { primary: '#00e5ff', secondary: '#14141f' } },
         error:   { iconTheme: { primary: '#f87171', secondary: '#14141f' } },
       }} />
-      <ReviewReminderPopup />
-      <PreciseLocationPrompt />
+      {bootReady && <ReviewReminderPopup />}
+      {bootReady && <PreciseLocationPrompt />}
 
+      {bootReady ? (
       <Routes>
         <Route path="/auth" element={<PageTransition><AuthPage /></PageTransition>} />
         <Route path="/auth/callback" element={<OAuthCallback />} />
@@ -701,6 +793,7 @@ function AppRoot() {
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+      ) : null}
     </>
   )
 }

@@ -7,6 +7,41 @@ import { authAPI } from '../services/api'
 import { useAuthStore } from '../stores'
 import { useI18n } from '../i18n'
 
+function detectAuthRuntimeProfile() {
+  if (typeof window === 'undefined') {
+    return { lite: false, touch: false }
+  }
+
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+  const effectiveType = String(connection?.effectiveType || '').toLowerCase()
+  const saveData = !!connection?.saveData
+  const downlink = Number(connection?.downlink || 0)
+  const deviceMemory = Number(navigator.deviceMemory || 0)
+  const hardwareConcurrency = Number(navigator.hardwareConcurrency || 0)
+  const touch = 'ontouchstart' in window || (navigator?.maxTouchPoints || 0) > 0
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false
+  const slowNetwork = ['slow-2g', '2g', '3g'].includes(effectiveType) || (downlink > 0 && downlink < 1.5)
+  const lowDevice = (deviceMemory > 0 && deviceMemory <= 4) || (hardwareConcurrency > 0 && hardwareConcurrency <= 4)
+  const compactViewport = window.innerWidth <= 540 || window.innerHeight <= 820
+
+  return {
+    touch,
+    lite: reducedMotion || saveData || slowNetwork || (touch && (lowDevice || compactViewport)),
+  }
+}
+
+function AuthBootLoader({ compact = false, message = 'Chargement rapide...' }) {
+  return (
+    <div className={`auth-boot-loader${compact ? ' is-compact' : ''}`}>
+      <div className="auth-boot-loader__panel">
+        <div className="auth-boot-loader__ring" />
+        <div className="auth-boot-loader__title">DiscordForger</div>
+        <div className="auth-boot-loader__message">{message}</div>
+      </div>
+    </div>
+  )
+}
+
 function DiscordMark(props) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
@@ -42,45 +77,45 @@ function buildSnowLayer(count, options) {
   }))
 }
 
-function AuthSnowBackdrop({ pointerX, pointerY }) {
-  const layerDriftX = useSpring(useTransform(pointerX, [0, 100], [-24, 24]), { stiffness: 120, damping: 18, mass: 0.7 })
-  const layerDriftY = useSpring(useTransform(pointerY, [0, 100], [-14, 14]), { stiffness: 120, damping: 18, mass: 0.72 })
-  const backFlakes = useMemo(() => buildSnowLayer(78, {
+function AuthSnowBackdrop({ pointerX, pointerY, liteMode = false }) {
+  const layerDriftX = useSpring(useTransform(pointerX, [0, 100], liteMode ? [-8, 8] : [-24, 24]), { stiffness: 120, damping: 18, mass: 0.7 })
+  const layerDriftY = useSpring(useTransform(pointerY, [0, 100], liteMode ? [-6, 6] : [-14, 14]), { stiffness: 120, damping: 18, mass: 0.72 })
+  const backFlakes = useMemo(() => buildSnowLayer(liteMode ? 22 : 78, {
     key: 'back',
     minSize: 0.8,
     maxSize: 2.4,
-    minDuration: 18,
-    maxDuration: 31,
+    minDuration: liteMode ? 22 : 18,
+    maxDuration: liteMode ? 36 : 31,
     maxDelay: 18,
     maxDrift: 28,
     minOpacity: 0.1,
     maxOpacity: 0.28,
     maxBlur: 1.4,
-  }), [])
-  const midFlakes = useMemo(() => buildSnowLayer(56, {
+  }), [liteMode])
+  const midFlakes = useMemo(() => buildSnowLayer(liteMode ? 16 : 56, {
     key: 'mid',
     minSize: 1.1,
     maxSize: 3.8,
-    minDuration: 13,
-    maxDuration: 23,
+    minDuration: liteMode ? 16 : 13,
+    maxDuration: liteMode ? 27 : 23,
     maxDelay: 16,
     maxDrift: 40,
     minOpacity: 0.16,
     maxOpacity: 0.46,
     maxBlur: 0.9,
-  }), [])
-  const frontFlakes = useMemo(() => buildSnowLayer(52, {
+  }), [liteMode])
+  const frontFlakes = useMemo(() => buildSnowLayer(liteMode ? 10 : 52, {
     key: 'front',
     minSize: 1.8,
     maxSize: 5.6,
-    minDuration: 9,
-    maxDuration: 17,
+    minDuration: liteMode ? 14 : 9,
+    maxDuration: liteMode ? 20 : 17,
     maxDelay: 16,
     maxDrift: 58,
     minOpacity: 0.28,
     maxOpacity: 0.8,
     maxBlur: 0.5,
-  }), [])
+  }), [liteMode])
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -88,7 +123,12 @@ function AuthSnowBackdrop({ pointerX, pointerY }) {
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(38,62,84,0.22),rgba(9,16,24,0.2)_18%,rgba(0,0,0,0.9)_54%,rgba(0,0,0,1))]" />
       <div className="absolute inset-x-0 top-0 h-[42vh] bg-[linear-gradient(180deg,rgba(92,123,154,0.12),rgba(92,123,154,0.05)_36%,transparent)]" />
 
-      <motion.div style={{ x: layerDriftX, y: layerDriftY }} className="absolute inset-[-8%]">
+      <motion.div
+        style={{ x: layerDriftX, y: layerDriftY }}
+        className="absolute inset-[-8%]"
+        animate={liteMode ? undefined : { opacity: [0.98, 1, 0.985] }}
+        transition={liteMode ? undefined : { duration: 10, repeat: Infinity, ease: 'easeInOut' }}
+      >
         {backFlakes.map((flake) => (
           <motion.span
             key={flake.id}
@@ -241,6 +281,9 @@ export default function AuthPage() {
   const [blocked, setBlocked] = useState(false)
   const [oauthProviders, setOauthProviders] = useState({ discord: false, google: false })
   const [compactAuthMode, setCompactAuthMode] = useState(false)
+  const [authLiteMode, setAuthLiteMode] = useState(false)
+  const [touchDevice, setTouchDevice] = useState(false)
+  const [bootReady, setBootReady] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const { login, register, isLoading } = useAuthStore()
@@ -255,6 +298,7 @@ export default function AuthPage() {
   const isRegister = mode === 'register'
   const registerCaptchaReady = !isRegister || (!!registerCaptcha?.token && !captchaLoading)
   const [registerCardMaxHeight, setRegisterCardMaxHeight] = useState(null)
+  const showBootLoader = !bootReady || (authLiteMode && !accessChecked)
 
   const featureCards = [
     {
@@ -292,6 +336,7 @@ export default function AuthPage() {
 
   // Auto-rotate features
   useEffect(() => {
+    if (authLiteMode) return undefined
     const keys = featureCards.map((f) => f.key)
     let idx = keys.indexOf(activeFeature)
     const interval = window.setInterval(() => {
@@ -299,7 +344,56 @@ export default function AuthPage() {
       setActiveFeature(keys[idx])
     }, 5000)
     return () => window.clearInterval(interval)
-  }, [activeFeature])
+  }, [activeFeature, authLiteMode])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    let cancelled = false
+
+    const applyProfile = () => {
+      const profile = detectAuthRuntimeProfile()
+      if (cancelled) return profile
+      setAuthLiteMode(profile.lite)
+      setTouchDevice(profile.touch)
+      return profile
+    }
+
+    const bootstrap = async () => {
+      const profile = applyProfile()
+      const fontsReady = typeof document !== 'undefined' && document.fonts?.ready
+        ? Promise.race([
+            document.fonts.ready.catch(() => {}),
+            new Promise((resolve) => window.setTimeout(resolve, profile.lite ? 800 : 450)),
+          ])
+        : new Promise((resolve) => window.setTimeout(resolve, profile.lite ? 180 : 90))
+
+      await fontsReady
+      await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)))
+      await new Promise((resolve) => window.setTimeout(resolve, profile.lite ? 180 : 90))
+
+      if (!cancelled) {
+        setBootReady(true)
+      }
+    }
+
+    bootstrap()
+
+    const handleProfileChange = () => {
+      applyProfile()
+    }
+
+    window.addEventListener('resize', handleProfileChange)
+    window.visualViewport?.addEventListener?.('resize', handleProfileChange)
+    navigator.connection?.addEventListener?.('change', handleProfileChange)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('resize', handleProfileChange)
+      window.visualViewport?.removeEventListener?.('resize', handleProfileChange)
+      navigator.connection?.removeEventListener?.('change', handleProfileChange)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -378,10 +472,10 @@ export default function AuthPage() {
   }
 
   useEffect(() => {
-    if (!registerCaptcha && !captchaLoading) {
+    if (isRegister && !registerCaptcha && !captchaLoading) {
       loadRegisterCaptcha({ force: true })
     }
-  }, [registerCaptcha, captchaLoading])
+  }, [isRegister, registerCaptcha, captchaLoading])
 
   useEffect(() => {
     shellRef.current?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' })
@@ -509,6 +603,7 @@ export default function AuthPage() {
   }
 
   const handleAuthPointerMove = (event) => {
+    if (authLiteMode || touchDevice) return
     const bounds = event.currentTarget.getBoundingClientRect()
     if (!bounds.width || !bounds.height) return
 
@@ -517,6 +612,7 @@ export default function AuthPage() {
   }
 
   const resetAuthPointer = () => {
+    if (authLiteMode || touchDevice) return
     pointerX.set(50)
     pointerY.set(24)
   }
@@ -544,47 +640,51 @@ export default function AuthPage() {
       className={`auth-page-shell app-screen-scroll bg-black relative p-4 md:px-6 md:py-8 ${compactAuthMode ? 'is-compact-auth' : ''}`}
       data-scrollable={isRegister ? 'true' : 'false'}
       data-auth-mode={mode}
-      onMouseMove={handleAuthPointerMove}
-      onMouseLeave={resetAuthPointer}
+      data-lite-mode={authLiteMode ? 'true' : 'false'}
+      onMouseMove={authLiteMode ? undefined : handleAuthPointerMove}
+      onMouseLeave={authLiteMode ? undefined : resetAuthPointer}
     >
-      <AuthSnowBackdrop pointerX={pointerX} pointerY={pointerY} />
+      <AuthSnowBackdrop pointerX={pointerX} pointerY={pointerY} liteMode={authLiteMode} />
+      {showBootLoader && (
+        <AuthBootLoader compact={compactAuthMode || authLiteMode} message={authLiteMode ? 'Preparation de l interface...' : 'Chargement...'} />
+      )}
 
       <div className={`auth-page-frame auth-mobile-shell relative z-10 mx-auto flex w-full max-w-7xl flex-col items-center gap-6 md:gap-10 ${compactAuthMode ? 'is-compact-auth' : ''}`}>
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          initial={authLiteMode ? false : { opacity: 0, y: 24 }}
+          animate={{ opacity: showBootLoader ? 0 : 1, y: showBootLoader ? 8 : 0 }}
+          transition={{ duration: authLiteMode ? 0.2 : 0.6, ease: [0.16, 1, 0.3, 1] }}
           className={`auth-mobile-panel w-full max-w-[min(30rem,100%)] pt-4 sm:pt-6 md:pt-10 ${isRegister ? 'is-register' : ''} ${compactAuthMode ? 'is-compact' : ''}`}
         >
           {/* Logo section */}
             <div ref={heroRef} className="auth-mobile-hero text-center mb-6 sm:mb-8">
               <motion.div
-                initial={{ opacity: 0, scale: 0.92, y: 18 }}
+                initial={authLiteMode ? false : { opacity: 0, scale: 0.92, y: 18 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.7, ease: 'easeOut' }}
-                whileHover={{ y: -5, scale: 1.01 }}
+                transition={{ duration: authLiteMode ? 0.18 : 0.7, ease: 'easeOut' }}
+                whileHover={authLiteMode ? undefined : { y: -5, scale: 1.01 }}
                 className="auth-mobile-logo-shell relative mx-auto mb-4 sm:mb-5 w-full max-w-[min(440px,84vw)]"
               >
               <motion.div
-                animate={{
+                animate={authLiteMode ? undefined : {
                   y: [0, -10, 0, 7, 0],
                   rotate: [0, -1.8, 1.6, 0],
                   scale: [1, 1.018, 0.996, 1.01, 1],
                 }}
-                transition={{ duration: 7.2, repeat: Infinity, ease: 'easeInOut' }}
+                transition={authLiteMode ? undefined : { duration: 7.2, repeat: Infinity, ease: 'easeInOut' }}
                 className="relative"
               >
                 <motion.img
                   src="/discordforger-logo-full.png"
                   alt="DiscordForger"
-                  animate={{
+                  animate={authLiteMode ? undefined : {
                     filter: [
                       'drop-shadow(0 10px 22px rgba(84,114,145,0.16))',
                       'drop-shadow(0 14px 26px rgba(108,138,170,0.2))',
                       'drop-shadow(0 10px 22px rgba(84,114,145,0.16))',
                     ],
                   }}
-                  transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
+                  transition={authLiteMode ? undefined : { duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
                   className="auth-mobile-logo relative z-10 w-full h-auto object-contain"
                   loading="eager"
                 />
@@ -629,10 +729,10 @@ export default function AuthPage() {
           ) : (
           <motion.div
             ref={cardRef}
-            initial={{ opacity: 0, y: 16 }}
+            initial={authLiteMode ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            whileHover={{ y: -6, scale: 1.006 }}
+            transition={{ duration: authLiteMode ? 0.18 : 0.5, delay: authLiteMode ? 0 : 0.1, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={authLiteMode ? undefined : { y: -6, scale: 1.006 }}
             className={`auth-mobile-card gradient-border ${(isRegister || compactAuthMode) ? 'is-scrollable' : ''}`}
             style={(isRegister || compactAuthMode) && registerCardMaxHeight ? { '--auth-register-card-max': `${registerCardMaxHeight}px` } : undefined}
           >
@@ -674,10 +774,10 @@ export default function AuthPage() {
                   <AnimatePresence initial={false} mode="wait">
                     <motion.div
                       key={mode}
-                      initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
+                      initial={authLiteMode ? false : { opacity: 0, y: 10, filter: 'blur(6px)' }}
                       animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                      exit={{ opacity: 0, y: -8, filter: 'blur(6px)' }}
-                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      exit={authLiteMode ? { opacity: 0 } : { opacity: 0, y: -8, filter: 'blur(6px)' }}
+                      transition={{ duration: authLiteMode ? 0.12 : 0.2, ease: [0.22, 1, 0.36, 1] }}
                       className="w-full space-y-4"
                       style={{ transformOrigin: '50% 0%' }}
                     >
@@ -864,6 +964,7 @@ export default function AuthPage() {
                 </motion.form>
 
                 {/* Feature cards */}
+                {!authLiteMode && (
                 <div className="auth-mobile-features mt-5 sm:mt-6 space-y-3">
                 <div className="grid grid-cols-3 gap-2">
                   {featureCards.map((feature) => {
@@ -922,6 +1023,7 @@ export default function AuthPage() {
                   </motion.div>
                 </AnimatePresence>
                 </div>
+                )}
               </div>
             </div>
           </motion.div>
