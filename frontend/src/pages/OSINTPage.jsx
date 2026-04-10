@@ -561,6 +561,8 @@ function ImageGeolocator({ status }) {
   }
 
   const hasCoordinates = Number.isFinite(Number(result?.coordinates?.lat)) && Number.isFinite(Number(result?.coordinates?.lon))
+  const hasExactMetadataCoords = Boolean(result?.meta?.exact_coordinates_from_metadata)
+  const hasExactMetadataTime = Boolean(result?.meta?.captured_at_from_metadata)
 
   return (
     <div className="space-y-5">
@@ -680,11 +682,11 @@ function ImageGeolocator({ status }) {
               <MetricTile label="Pays" value={result.country_code || '--'} hint={result.country || 'inconnu'} />
               <MetricTile label="Ville" value={result.city || '--'} hint={result.region || 'zone'} />
               <MetricTile label="Quartier" value={result.district || '--'} hint={result.landmark || 'zone'} />
-              <MetricTile label="Moment estime" value={result.time_of_day || '--'} hint={result.landmark || 'repere'} />
+              <MetricTile label={hasExactMetadataTime ? 'Heure photo' : 'Moment estime'} value={result.time_of_day || '--'} hint={hasExactMetadataTime ? 'metadata image' : (result.landmark || 'repere')} />
               <MetricTile
                 label="Coordonnees"
-                value={hasCoordinates ? `${Number(result.coordinates.lat).toFixed(4)}, ${Number(result.coordinates.lon).toFixed(4)}` : '--'}
-                hint={result.landmark || 'zone retenue'}
+                value={hasCoordinates ? `${Number(result.coordinates.lat).toFixed(hasExactMetadataCoords ? 6 : 4)}, ${Number(result.coordinates.lon).toFixed(hasExactMetadataCoords ? 6 : 4)}` : '--'}
+                hint={hasExactMetadataCoords ? 'metadata image' : (result.landmark || 'zone retenue')}
               />
             </div>
           </div>

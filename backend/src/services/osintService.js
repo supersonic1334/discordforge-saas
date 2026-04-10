@@ -8,6 +8,7 @@ const db = require('../database');
 const logger = require('../utils/logger').child('OSINTService');
 const { getProviderCatalog } = require('../config/aiCatalog');
 const { decrypt } = require('./encryptionService');
+const exifParser = require('exif-parser');
 
 const fetch = global.fetch ? global.fetch.bind(globalThis) : require('node-fetch');
 const OSINT_FETCH_HEADERS = {
@@ -109,6 +110,16 @@ function normalizeClueWeight(value) {
   return 'low';
 }
 
+function formatExifTime(value) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
+  const date = new Date(timestamp * 1000);
+  if (Number.isNaN(date.getTime())) return '';
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}h${minutes}`;
+}
+
 function normalizeFrenchTimeOfDay(value) {
   const normalized = normalizeShortText(value, 80);
   if (!normalized) return '';
@@ -151,6 +162,34 @@ function normalizeFrenchTimeOfDay(value) {
   }
 
   return normalized;
+}
+
+function extractImageMetadata(imageBase64) {
+  try {
+    const buffer = Buffer.from(String(imageBase64 || ''), 'base64');
+    if (!buffer.length) return null;
+
+    const parser = exifParser.create(buffer);
+    parser.enableSimpleValues(true);
+    const parsed = parser.parse();
+    const tags = parsed?.tags || {};
+
+    const lat = Number(tags.GPSLatitude);
+    const lon = Number(tags.GPSLongitude);
+    const coordinates = Number.isFinite(lat) && Number.isFinite(lon)
+      ? normalizeCoordinates({ lat, lon })
+      : null;
+
+    const capturedAt = formatExifTime(tags.DateTimeOriginal || tags.CreateDate || tags.ModifyDate);
+    return {
+      coordinates,
+      capturedAt,
+      hasExactCoordinates: Boolean(coordinates),
+      hasCapturedAt: Boolean(capturedAt),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function tryParseJSON(candidate) {
@@ -1396,6 +1435,8 @@ function normalizeGeolocationResult(rawResult) {
     time_of_day: normalizeFrenchTimeOfDay(rawResult?.time_of_day),
     weather_conditions: normalizeShortText(rawResult?.weather_conditions, 120),
     analysis: normalizeShortText(rawResult?.analysis, 1200),
+    precision_source: normalizeShortText(rawResult?.precision_source, 80),
+    captured_at: normalizeShortText(rawResult?.captured_at, 40),
     alternative_locations: alternatives
       .map((entry) => normalizeShortText(entry, 160))
       .filter(Boolean)
@@ -1465,6 +1506,7 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
     throw error;
   }
 
+  const imageMetadata = extractImageMetadata(imageBase64);
   const systemPrompt = [
     'You are a cautious image geolocation analyst.',
     'Inspect the photo carefully and infer only what is visually supported.',
@@ -1549,6 +1591,14 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
     markProviderKeySuccess(aiConfig);
 
     const normalized = normalizeGeolocationResult(parsed);
+    if (imageMetadata?.hasExactCoordinates) {
+      normalized.coordinates = imageMetadata.coordinates;
+      normalized.precision_source = 'metadata_image';
+    }
+    if (imageMetadata?.hasCapturedAt) {
+      normalized.time_of_day = imageMetadata.capturedAt;
+      normalized.captured_at = imageMetadata.capturedAt;
+    }
     const enhanced = await enhanceGeolocationResult(normalized);
 
     return {
@@ -1556,6 +1606,8 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
       meta: {
         provider: aiConfig.provider,
         model: completion?.model || aiConfig.model,
+        exact_coordinates_from_metadata: Boolean(imageMetadata?.hasExactCoordinates),
+        captured_at_from_metadata: Boolean(imageMetadata?.hasCapturedAt),
       },
     };
   } catch (error) {
