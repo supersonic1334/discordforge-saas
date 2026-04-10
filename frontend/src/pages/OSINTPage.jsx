@@ -19,12 +19,27 @@ import DiscordIntelPanel from '../components/osint/DiscordIntelPanel'
 
 function getErrorPayload(error) {
   const rawMessage = error?.response?.data?.error || error?.message || 'Une erreur est survenue'
-  if (String(rawMessage).toLowerCase().includes('ia non configuree')) {
+  const lowered = String(rawMessage).toLowerCase()
+  if (lowered.includes('ia non configuree')) {
     return {
       message: "Configure une IA vision avant de lancer la geolocalisation.",
       raw: '',
       actionLabel: "Configurer l'IA",
       actionHref: '/dashboard/ai',
+    }
+  }
+
+  if (lowered.includes('high demand') || lowered.includes('temporairement sature') || lowered.includes('unavailable')) {
+    return {
+      message: "Le moteur visuel est temporairement sature. Reessaie dans quelques instants.",
+      raw: '',
+    }
+  }
+
+  if (lowered.includes('quota') || lowered.includes('resource exhausted') || lowered.includes('insufficient_quota')) {
+    return {
+      message: "Le quota visuel IA est temporairement indisponible ou atteint. Reessaie plus tard ou change de modele.",
+      raw: '',
     }
   }
 
