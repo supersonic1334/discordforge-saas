@@ -676,76 +676,61 @@ function ImageGeolocator({ status }) {
               </div>
             </div>
 
-            <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="relative z-[1] mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <MetricTile label="Pays" value={result.country_code || '--'} hint={result.country || 'inconnu'} />
               <MetricTile label="Ville" value={result.city || '--'} hint={result.region || 'zone'} />
-              <MetricTile label="Moment" value={result.time_of_day || '--'} hint={result.weather_conditions || 'ambiance'} />
+              <MetricTile label="Quartier" value={result.district || '--'} hint={result.landmark || 'zone'} />
+              <MetricTile label="Moment estime" value={result.time_of_day || '--'} hint={result.weather_conditions || 'ambiance'} />
               <MetricTile
-                label="Coordonnees"
+                label="Point carto"
                 value={hasCoordinates ? `${Number(result.coordinates.lat).toFixed(4)}, ${Number(result.coordinates.lon).toFixed(4)}` : '--'}
-                hint="normalise carto"
+                hint="approximation publique"
               />
             </div>
           </div>
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="space-y-5">
-              {result.analysis ? (
-                <div className="spotlight-card p-5 sm:p-6">
-                  <div className="relative z-[1]">
-                    <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Analyse</p>
-                    <p className="mt-4 text-sm leading-7 text-white/70">{result.analysis}</p>
-                  </div>
-                </div>
-              ) : null}
+            <div className="spotlight-card p-5 sm:p-6">
+              <div className="relative z-[1]">
+                <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Zone retenue</p>
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                  {result.exact_location ? (
+                    <div className="rounded-[20px] border border-white/8 bg-black/15 p-4">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Adresse publique plausible</p>
+                      <p className="mt-3 text-sm leading-6 text-white/72">{result.exact_location}</p>
+                    </div>
+                  ) : null}
 
-              <div className="spotlight-card p-5 sm:p-6">
-                <div className="relative z-[1]">
-                  <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Indices</p>
-                  <div className="mt-5 space-y-3">
-                    {result.clues?.length ? result.clues.map((clue, index) => (
-                      <div key={`${clue.type}-${index}`} className="rounded-[20px] border border-white/8 bg-black/15 p-4">
-                        <div className="flex flex-wrap items-start gap-3">
-                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/70">{clue.type}</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.18em] text-white/45">{clue.weight}</span>
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-white/68">{clue.detail}</p>
-                      </div>
-                    )) : (
-                      <div className="rounded-[20px] border border-white/8 bg-black/15 px-4 py-4 text-sm text-white/45">Aucun indice detaille retourne.</div>
-                    )}
-                  </div>
+                  {result.landmark ? (
+                    <div className="rounded-[20px] border border-white/8 bg-black/15 p-4">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Repere probable</p>
+                      <p className="mt-3 text-sm leading-6 text-white/72">{result.landmark}</p>
+                    </div>
+                  ) : null}
+
+                  {result.district ? (
+                    <div className="rounded-[20px] border border-white/8 bg-black/15 p-4">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Quartier ou zone</p>
+                      <p className="mt-3 text-sm leading-6 text-white/72">{result.district}</p>
+                    </div>
+                  ) : null}
+
+                  {result.weather_conditions || result.time_of_day ? (
+                    <div className="rounded-[20px] border border-white/8 bg-black/15 p-4">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Contexte visuel</p>
+                      <p className="mt-3 text-sm leading-6 text-white/72">
+                        {[result.time_of_day, result.weather_conditions].filter(Boolean).join(' · ') || '--'}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {!result.exact_location && !result.landmark && !result.district && !result.weather_conditions && !result.time_of_day ? (
+                    <div className="rounded-[20px] border border-white/8 bg-black/15 px-4 py-4 text-sm text-white/45">
+                      Aucun repere public exploitable n a ete retenu.
+                    </div>
+                  ) : null}
                 </div>
               </div>
-
-              {result.reference_images?.length ? (
-                <div className="spotlight-card p-5 sm:p-6">
-                  <div className="relative z-[1]">
-                    <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Images et reperes proches</p>
-                    <div className="mt-5 grid gap-4 md:grid-cols-2">
-                      {result.reference_images.map((entry) => (
-                        <a
-                          key={`${entry.title}-${entry.page_url || entry.image_url}`}
-                          href={entry.page_url || entry.image_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="overflow-hidden rounded-[22px] border border-white/8 bg-black/15 transition-all hover:border-white/15 hover:bg-white/[0.04]"
-                        >
-                          {entry.image_url ? (
-                            <img src={entry.image_url} alt={entry.title} className="h-44 w-full object-cover" />
-                          ) : null}
-                          <div className="p-4">
-                            <p className="font-display text-lg font-700 text-white">{entry.title}</p>
-                            <p className="mt-2 text-sm text-white/50">
-                              {entry.distance_m ? `A ${entry.distance_m} m environ` : entry.source || 'Reference publique'}
-                            </p>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
             </div>
 
             <div className="space-y-5">
@@ -777,21 +762,6 @@ function ImageGeolocator({ status }) {
                   </div>
                 </div>
               ) : null}
-
-              {result.alternative_locations?.length ? (
-                <div className="spotlight-card p-5">
-                  <div className="relative z-[1]">
-                    <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">Alternatives</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {result.alternative_locations.map((entry) => (
-                        <span key={entry} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">
-                          {entry}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>
         </>
@@ -801,7 +771,7 @@ function ImageGeolocator({ status }) {
             <Image className="mx-auto h-12 w-12 text-white/10" />
             <p className="mt-4 font-display text-xl font-700 text-white">Image Geolocator</p>
             <p className="mt-2 text-sm leading-6 text-white/45">
-              Lieu probable, normalisation cartographique et reperes visuels publics proches.
+              Ville, quartier, repere plausible et point cartographique public.
             </p>
           </div>
         </div>

@@ -1090,18 +1090,75 @@ async function reverseGeocodeCoordinates(coordinates) {
   }
 }
 
-async function geocodeFromQuery(query) {
+async function geocodeFromQuery(query, limit = 3) {
   const cleanedQuery = normalizeShortText(query, 220);
   if (!cleanedQuery) return null;
 
   try {
     const payload = await fetchJson(
-      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(cleanedQuery)}`
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=${clamp(Number(limit) || 3, 1, 5)}&q=${encodeURIComponent(cleanedQuery)}`
     );
-    return Array.isArray(payload) ? payload[0] || null : null;
+    return Array.isArray(payload) ? payload.filter(Boolean) : [];
   } catch {
-    return null;
+    return [];
   }
+}
+
+function buildLocationTokens(values) {
+  return Array.from(new Set(
+    safeArray(values)
+      .flatMap((entry) => String(entry || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .split(/[^a-z0-9]+/i)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 3))
+  ));
+}
+
+function scoreGeocodedCandidate(candidate, query, result) {
+  const haystack = [
+    candidate?.display_name,
+    candidate?.name,
+    candidate?.type,
+    candidate?.class,
+    candidate?.addresstype,
+  ].join(' ').toLowerCase();
+
+  const weightedSources = [
+    { value: result.exact_location, weight: 10 },
+    { value: result.landmark, weight: 9 },
+    { value: result.district, weight: 7 },
+    { value: result.city, weight: 7 },
+    { value: result.region, weight: 5 },
+    { value: result.country, weight: 4 },
+    { value: query, weight: 3 },
+  ];
+
+  let score = 0;
+  for (const source of weightedSources) {
+    for (const token of buildLocationTokens([source.value])) {
+      if (haystack.includes(token)) {
+        score += source.weight;
+      }
+    }
+  }
+
+  const importance = Number(candidate?.importance);
+  if (Number.isFinite(importance)) {
+    score += importance * 5;
+  }
+
+  if (['building', 'amenity', 'tourism', 'leisure', 'shop', 'office'].includes(String(candidate?.class || '').toLowerCase())) {
+    score += 2;
+  }
+
+  if (['house', 'building', 'retail', 'commercial', 'residential', 'amenity', 'suburb', 'neighbourhood', 'quarter'].includes(String(candidate?.type || '').toLowerCase())) {
+    score += 2;
+  }
+
+  return score;
 }
 
 function buildGeolocationSearchQueries(result) {
@@ -1207,15 +1264,30 @@ async function enhanceGeolocationResult(result) {
 
   if (!nextCoordinates) {
     const queryCandidates = buildGeolocationSearchQueries(result);
+    let bestCandidate = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
     for (const query of queryCandidates) {
-      const geocoded = await geocodeFromQuery(query);
-      const lat = Number(geocoded?.lat);
-      const lon = Number(geocoded?.lon);
-      if (Number.isFinite(lat) && Number.isFinite(lon)) {
-        nextCoordinates = normalizeCoordinates({ lat, lon });
-        matchedQuery = query;
-        break;
+      const geocodedResults = await geocodeFromQuery(query, 3);
+      for (const geocoded of geocodedResults) {
+        const lat = Number(geocoded?.lat);
+        const lon = Number(geocoded?.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+        const score = scoreGeocodedCandidate(geocoded, query, result);
+        if (score > bestScore) {
+          bestScore = score;
+          bestCandidate = geocoded;
+          matchedQuery = query;
+        }
       }
+    }
+
+    if (bestCandidate) {
+      nextCoordinates = normalizeCoordinates({
+        lat: Number(bestCandidate.lat),
+        lon: Number(bestCandidate.lon),
+      });
     }
   }
 
@@ -1231,7 +1303,7 @@ async function enhanceGeolocationResult(result) {
   const resolvedDistrict = result.district || pickAddressField(address, ['suburb', 'borough', 'city_district', 'neighbourhood']);
   const resolvedExactLocation = result.exact_location || normalizeShortText(reverseGeocode?.display_name, 220);
   const resolvedMapsSearch = result.maps_search || matchedQuery || [resolvedExactLocation, result.landmark, resolvedDistrict, resolvedCity, resolvedRegion, resolvedCountry].filter(Boolean).join(', ');
-  const reference_images = await fetchWikipediaReferences(nextCoordinates);
+  const reference_images = [];
 
   return {
     ...result,
