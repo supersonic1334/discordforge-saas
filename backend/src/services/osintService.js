@@ -27,6 +27,40 @@ function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function pushUniqueModel(candidates, modelId) {
+  const normalized = String(modelId || '').trim();
+  if (!normalized || candidates.includes(normalized)) return;
+  candidates.push(normalized);
+}
+
+function resolveGeminiOsintModelCandidates(selectedModel = '') {
+  const normalized = String(selectedModel || '').trim().toLowerCase();
+  const candidates = [];
+
+  pushUniqueModel(candidates, selectedModel);
+
+  if (normalized === 'gemini-2.5-flash-image' || normalized === 'gemini-3-pro-image-preview') {
+    pushUniqueModel(candidates, 'gemini-2.5-flash');
+    pushUniqueModel(candidates, 'gemini-2.5-pro');
+    pushUniqueModel(candidates, 'gemini-2.5-flash-lite');
+  } else if (normalized.startsWith('gemini-2.5-pro')) {
+    pushUniqueModel(candidates, 'gemini-2.5-flash');
+    pushUniqueModel(candidates, 'gemini-2.5-flash-lite');
+  } else if (normalized.startsWith('gemini-2.5-flash-lite')) {
+    pushUniqueModel(candidates, 'gemini-2.5-flash');
+    pushUniqueModel(candidates, 'gemini-2.5-pro');
+  } else if (normalized.startsWith('gemini-2.5-flash')) {
+    pushUniqueModel(candidates, 'gemini-2.5-pro');
+    pushUniqueModel(candidates, 'gemini-2.5-flash-lite');
+  }
+
+  pushUniqueModel(candidates, 'gemini-2.5-flash');
+  pushUniqueModel(candidates, 'gemini-2.5-pro');
+  pushUniqueModel(candidates, 'gemini-2.5-flash-lite');
+
+  return candidates.length ? candidates : ['gemini-2.5-flash', 'gemini-2.5-pro'];
+}
+
 function uniqueStrings(values, limit = 8) {
   return Array.from(new Set(
     safeArray(values)
@@ -533,6 +567,79 @@ async function requestOSINTCompletion(aiConfig, request) {
   throw Object.assign(new Error(`Unsupported AI provider: ${aiConfig.provider}`), { status: 400 });
 }
 
+function shouldFallbackGeminiOsintModel(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || '').toLowerCase();
+
+  return (
+    status === 404
+    || (
+      status === 400
+      && message.includes('model')
+      && (
+        message.includes('unavailable')
+        || message.includes('not found')
+        || message.includes('not supported')
+        || message.includes('does not exist')
+      )
+    )
+    || ((status === 429 || status === 503) && (
+      message.includes('high demand')
+      || message.includes('resource exhausted')
+      || message.includes('unavailable')
+      || message.includes('quota')
+    ))
+  );
+}
+
+function isRetryableGeminiOsintError(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    [429, 500, 502, 503, 504].includes(status)
+    || message.includes('high demand')
+    || message.includes('temporar')
+  );
+}
+
+async function requestOSINTCompletionWithFallback(aiConfig, request) {
+  if (aiConfig.provider !== 'gemini') {
+    return {
+      text: await requestOSINTCompletion(aiConfig, request),
+      model: aiConfig.model,
+    };
+  }
+
+  const candidateModels = resolveGeminiOsintModelCandidates(aiConfig.model);
+  let lastError = null;
+
+  for (const model of candidateModels) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return {
+          text: await requestGemini({ ...aiConfig, model }, request),
+          model,
+        };
+      } catch (error) {
+        lastError = error;
+
+        if (shouldFallbackGeminiOsintModel(error)) {
+          break;
+        }
+
+        if (isRetryableGeminiOsintError(error) && attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 900 * (attempt + 1)));
+          continue;
+        }
+
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || Object.assign(new Error('Analyse geolocator indisponible pour les modeles Gemini configures.'), { status: 503 });
+}
+
 function normalizeCoordinates(coordinates) {
   const lat = Number(coordinates?.lat);
   const lon = Number(coordinates?.lon);
@@ -997,6 +1104,54 @@ async function geocodeFromQuery(query) {
   }
 }
 
+function buildGeolocationSearchQueries(result) {
+  return uniqueStrings([
+    result.exact_location,
+    [result.landmark, result.exact_location, result.district, result.city, result.region, result.country].filter(Boolean).join(', '),
+    [result.landmark, result.district, result.city, result.country].filter(Boolean).join(', '),
+    [result.landmark, result.city, result.country].filter(Boolean).join(', '),
+    [result.district, result.city, result.region, result.country].filter(Boolean).join(', '),
+    [result.city, result.region, result.country].filter(Boolean).join(', '),
+    result.maps_search,
+  ], 8);
+}
+
+function mergeGeolocationClues(result, resolved, matchedQuery, referenceImages = []) {
+  const nextClues = safeArray(result.clues).slice(0, 10);
+  const seen = new Set(nextClues.map((entry) => `${entry.type}|${entry.detail}`));
+  const additions = [
+    matchedQuery ? {
+      type: 'Recherche cartographique',
+      detail: `Requete retenue: ${matchedQuery}`,
+      weight: 'medium',
+    } : null,
+    resolved.landmark ? {
+      type: 'Repere probable',
+      detail: resolved.landmark,
+      weight: 'high',
+    } : null,
+    [resolved.district, resolved.city, resolved.region, resolved.country].filter(Boolean).length ? {
+      type: 'Zone resolue',
+      detail: [resolved.district, resolved.city, resolved.region, resolved.country].filter(Boolean).join(', '),
+      weight: 'medium',
+    } : null,
+    referenceImages.length ? {
+      type: 'Reperes publics',
+      detail: referenceImages.map((entry) => entry.title).filter(Boolean).slice(0, 3).join(', '),
+      weight: 'medium',
+    } : null,
+  ].filter(Boolean);
+
+  for (const clue of additions) {
+    const key = `${clue.type}|${clue.detail}`;
+    if (!clue.detail || seen.has(key)) continue;
+    seen.add(key);
+    nextClues.push(clue);
+  }
+
+  return nextClues.slice(0, 12);
+}
+
 async function fetchWikipediaReferences(coordinates) {
   if (!coordinates) return [];
 
@@ -1048,13 +1203,19 @@ function buildMapLinks(coordinates, mapsSearch) {
 async function enhanceGeolocationResult(result) {
   let nextCoordinates = result.coordinates;
   let reverseGeocode = null;
+  let matchedQuery = '';
 
-  if (!nextCoordinates && result.maps_search) {
-    const geocoded = await geocodeFromQuery(result.maps_search);
-    const lat = Number(geocoded?.lat);
-    const lon = Number(geocoded?.lon);
-    if (Number.isFinite(lat) && Number.isFinite(lon)) {
-      nextCoordinates = normalizeCoordinates({ lat, lon });
+  if (!nextCoordinates) {
+    const queryCandidates = buildGeolocationSearchQueries(result);
+    for (const query of queryCandidates) {
+      const geocoded = await geocodeFromQuery(query);
+      const lat = Number(geocoded?.lat);
+      const lon = Number(geocoded?.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        nextCoordinates = normalizeCoordinates({ lat, lon });
+        matchedQuery = query;
+        break;
+      }
     }
   }
 
@@ -1069,7 +1230,7 @@ async function enhanceGeolocationResult(result) {
   const resolvedCity = result.city || pickAddressField(address, ['city', 'town', 'village', 'municipality']);
   const resolvedDistrict = result.district || pickAddressField(address, ['suburb', 'borough', 'city_district', 'neighbourhood']);
   const resolvedExactLocation = result.exact_location || normalizeShortText(reverseGeocode?.display_name, 220);
-  const resolvedMapsSearch = result.maps_search || [resolvedExactLocation, resolvedCity, resolvedRegion, resolvedCountry].filter(Boolean).join(', ');
+  const resolvedMapsSearch = result.maps_search || matchedQuery || [resolvedExactLocation, result.landmark, resolvedDistrict, resolvedCity, resolvedRegion, resolvedCountry].filter(Boolean).join(', ');
   const reference_images = await fetchWikipediaReferences(nextCoordinates);
 
   return {
@@ -1082,6 +1243,13 @@ async function enhanceGeolocationResult(result) {
     exact_location: resolvedExactLocation,
     coordinates: nextCoordinates,
     maps_search: resolvedMapsSearch,
+    clues: mergeGeolocationClues(result, {
+      district: resolvedDistrict,
+      city: resolvedCity,
+      region: resolvedRegion,
+      country: resolvedCountry,
+      landmark: result.landmark,
+    }, matchedQuery, reference_images),
     map_links: buildMapLinks(nextCoordinates, resolvedMapsSearch),
     reference_images,
   };
@@ -1184,9 +1352,10 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
   const systemPrompt = [
     'You are a cautious image geolocation analyst.',
     'Inspect the photo carefully and infer only what is visually supported.',
-    'Prefer city, district, landmark, and region precision over invented exact addresses.',
+    'Prefer city, district, landmark, neighbourhood, or public place precision over invented exact addresses.',
     'If coordinates are uncertain, leave them empty instead of guessing.',
-    'Explain public visual clues, likely environment, nearby landmark hypotheses, and plausible alternatives.',
+    'Extract public visual clues such as language, signs, storefronts, road layout, architecture, vegetation, terrain, transit hints, brands, uniforms, plates, landmarks, skyline, coastline, mountains, and public infrastructure.',
+    'Explain likely environment, nearby landmark hypotheses, probable city zone, and plausible alternatives.',
     'Return only one JSON object wrapped in <result></result>.',
     'Do not use markdown.',
   ].join(' ');
@@ -1195,10 +1364,12 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
     'Respond with compact JSON only.',
     'Use this exact schema:',
     '<result>{"confidence":"haute","country":"...","country_code":"...","region":"...","city":"...","district":"...","exact_location":"...","landmark":null,"coordinates":{"lat":0.0,"lon":0.0},"maps_search":"...","clues":[{"type":"Architecture","detail":"...","weight":"high"}],"time_of_day":"...","weather_conditions":"...","analysis":"...","alternative_locations":["..."]}</result>',
-    'Target the most plausible city, district, or landmark when possible.',
-    'Do not return more than 9 clues or 6 alternative locations.',
+    'Target the most plausible city, district, street area, or landmark when possible.',
+    'When a public landmark, district, station, avenue, beach, stadium, mall, bridge, or mountain is likely, include it in landmark or exact_location.',
+    'Return 6 to 12 concrete clues when possible, not generic clues.',
+    'Do not return more than 12 clues or 6 alternative locations.',
     'If a field is unknown, return an empty string or null instead of inventing data.',
-    'maps_search must be a clean query for maps, not a sentence.',
+    'maps_search must be a clean map query with the best probable public location, not a sentence.',
   ].join('\n');
 
   const anthropicImageContent = [
@@ -1242,13 +1413,14 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
   ];
 
   try {
-    const rawText = await requestOSINTCompletion(aiConfig, {
+    const completion = await requestOSINTCompletionWithFallback(aiConfig, {
       systemPrompt,
       userContent: anthropicImageContent,
       parts: geminiParts,
       content: openAIContent,
       maxTokens: 1400,
     });
+    const rawText = String(completion?.text || '');
     const parsed = extractJSON(rawText);
 
     if (!parsed || typeof parsed !== 'object') {
@@ -1267,10 +1439,23 @@ async function geolocateImage(userId, { imageBase64, mimeType }) {
       ...enhanced,
       meta: {
         provider: aiConfig.provider,
-        model: aiConfig.model,
+        model: completion?.model || aiConfig.model,
       },
     };
   } catch (error) {
+    const lowerMessage = String(error?.message || '').toLowerCase();
+    if (Number(error?.status || 0) === 503 && lowerMessage.includes('high demand')) {
+      error.message = 'Le moteur visuel est temporairement sature. Reessaie dans quelques instants.';
+      error.raw = '';
+    } else if (
+      Number(error?.status || 0) === 429
+      || lowerMessage.includes('quota')
+      || lowerMessage.includes('resource exhausted')
+      || lowerMessage.includes('insufficient_quota')
+    ) {
+      error.message = 'Le quota visuel IA est temporairement indisponible ou atteint. Reessaie plus tard ou change de modele.';
+      error.raw = '';
+    }
     markProviderKeyFailure(aiConfig, error?.status, error?.message);
     logger.warn('Image geolocation failed', {
       userId,
