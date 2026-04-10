@@ -109,6 +109,50 @@ function normalizeClueWeight(value) {
   return 'low';
 }
 
+function normalizeFrenchTimeOfDay(value) {
+  const normalized = normalizeShortText(value, 80);
+  if (!normalized) return '';
+
+  const lower = normalized.toLowerCase();
+  const directMap = [
+    ['early morning', 'tot le matin'],
+    ['morning', 'matin'],
+    ['late morning', 'fin de matinee'],
+    ['noon', 'midi'],
+    ['midday', 'midi'],
+    ['early afternoon', 'debut d apres-midi'],
+    ['afternoon', 'apres-midi'],
+    ['late afternoon', 'fin d apres-midi'],
+    ['golden hour', 'heure doree'],
+    ['sunset', 'coucher du soleil'],
+    ['dusk', 'crepuscule'],
+    ['evening', 'soir'],
+    ['night', 'nuit'],
+    ['sunrise', 'lever du soleil'],
+  ];
+
+  for (const [source, target] of directMap) {
+    if (lower.includes(source)) return target;
+  }
+
+  const hhmmMatch = lower.match(/\b(\d{1,2})[:h](\d{2})\b/);
+  if (hhmmMatch) {
+    return `${hhmmMatch[1]}h${hhmmMatch[2]}`;
+  }
+
+  const ampmMatch = lower.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+  if (ampmMatch) {
+    const rawHours = Number(ampmMatch[1]);
+    const minutes = ampmMatch[2] || '00';
+    const suffix = ampmMatch[3];
+    let hours = rawHours % 12;
+    if (suffix === 'pm') hours += 12;
+    return `${hours}h${minutes}`;
+  }
+
+  return normalized;
+}
+
 function tryParseJSON(candidate) {
   const normalized = String(candidate || '').trim();
   if (!normalized) return null;
@@ -1244,7 +1288,7 @@ function buildMapLinks(coordinates, mapsSearch) {
   if (coordinates) {
     return {
       google: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${coordinates.lat},${coordinates.lon}`)}`,
-      osm: `https://www.openstreetmap.org/?mlat=${coordinates.lat}&mlon=${coordinates.lon}&zoom=16`,
+      osm: `https://www.openstreetmap.org/?mlat=${coordinates.lat}&mlon=${coordinates.lon}&zoom=19`,
     };
   }
 
@@ -1300,7 +1344,7 @@ async function enhanceGeolocationResult(result) {
   const resolvedCountryCode = result.country_code || normalizeShortText(address.country_code, 12).toUpperCase();
   const resolvedRegion = result.region || pickAddressField(address, ['state', 'region', 'county']);
   const resolvedCity = result.city || pickAddressField(address, ['city', 'town', 'village', 'municipality']);
-  const resolvedDistrict = result.district || pickAddressField(address, ['suburb', 'borough', 'city_district', 'neighbourhood']);
+  const resolvedDistrict = result.district || pickAddressField(address, ['neighbourhood', 'suburb', 'borough', 'city_district']);
   const resolvedExactLocation = result.exact_location || normalizeShortText(reverseGeocode?.display_name, 220);
   const resolvedMapsSearch = result.maps_search || matchedQuery || [resolvedExactLocation, result.landmark, resolvedDistrict, resolvedCity, resolvedRegion, resolvedCountry].filter(Boolean).join(', ');
   const reference_images = [];
@@ -1349,7 +1393,7 @@ function normalizeGeolocationResult(rawResult) {
         weight: normalizeClueWeight(clue?.weight),
       }))
       .filter((clue) => clue.detail),
-    time_of_day: normalizeShortText(rawResult?.time_of_day, 80),
+    time_of_day: normalizeFrenchTimeOfDay(rawResult?.time_of_day),
     weather_conditions: normalizeShortText(rawResult?.weather_conditions, 120),
     analysis: normalizeShortText(rawResult?.analysis, 1200),
     alternative_locations: alternatives

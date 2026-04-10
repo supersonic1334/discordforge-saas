@@ -680,11 +680,11 @@ function ImageGeolocator({ status }) {
               <MetricTile label="Pays" value={result.country_code || '--'} hint={result.country || 'inconnu'} />
               <MetricTile label="Ville" value={result.city || '--'} hint={result.region || 'zone'} />
               <MetricTile label="Quartier" value={result.district || '--'} hint={result.landmark || 'zone'} />
-              <MetricTile label="Moment estime" value={result.time_of_day || '--'} hint={result.weather_conditions || 'ambiance'} />
+              <MetricTile label="Moment estime" value={result.time_of_day || '--'} hint={result.landmark || 'repere'} />
               <MetricTile
-                label="Point carto"
+                label="Coordonnees"
                 value={hasCoordinates ? `${Number(result.coordinates.lat).toFixed(4)}, ${Number(result.coordinates.lon).toFixed(4)}` : '--'}
-                hint="approximation publique"
+                hint={result.landmark || 'zone retenue'}
               />
             </div>
           </div>
@@ -696,7 +696,7 @@ function ImageGeolocator({ status }) {
                 <div className="mt-5 grid gap-3 md:grid-cols-2">
                   {result.exact_location ? (
                     <div className="rounded-[20px] border border-white/8 bg-black/15 p-4">
-                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Adresse publique plausible</p>
+                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Lieu retenu</p>
                       <p className="mt-3 text-sm leading-6 text-white/72">{result.exact_location}</p>
                     </div>
                   ) : null}
@@ -715,16 +715,7 @@ function ImageGeolocator({ status }) {
                     </div>
                   ) : null}
 
-                  {result.weather_conditions || result.time_of_day ? (
-                    <div className="rounded-[20px] border border-white/8 bg-black/15 p-4">
-                      <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/35">Contexte visuel</p>
-                      <p className="mt-3 text-sm leading-6 text-white/72">
-                        {[result.time_of_day, result.weather_conditions].filter(Boolean).join(' · ') || '--'}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  {!result.exact_location && !result.landmark && !result.district && !result.weather_conditions && !result.time_of_day ? (
+                  {!result.exact_location && !result.landmark && !result.district ? (
                     <div className="rounded-[20px] border border-white/8 bg-black/15 px-4 py-4 text-sm text-white/45">
                       Aucun repere public exploitable n a ete retenu.
                     </div>
