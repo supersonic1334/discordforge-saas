@@ -1200,6 +1200,116 @@ function buildLocationTokens(values) {
   ));
 }
 
+function haversineDistanceMeters(left, right) {
+  const lat1 = Number(left?.lat);
+  const lon1 = Number(left?.lon);
+  const lat2 = Number(right?.lat);
+  const lon2 = Number(right?.lon);
+  if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+
+  const toRad = (value) => (value * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = (
+    Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  );
+  return 2 * earthRadius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function pickFeatureClass(tags = {}) {
+  return (
+    tags.tourism
+    || tags.amenity
+    || tags.historic
+    || tags.leisure
+    || tags.shop
+    || tags.office
+    || tags.railway
+    || tags.highway
+    || tags.man_made
+    || tags.natural
+    || tags.waterway
+    || tags.place
+    || tags.building
+    || ''
+  );
+}
+
+async function fetchNearbyPublicFeatures(coordinates) {
+  if (!coordinates) return [];
+
+  const radius = 1800;
+  const query = [
+    '[out:json][timeout:15];',
+    '(',
+    `node(around:${radius},${coordinates.lat},${coordinates.lon})["name"];`,
+    `way(around:${radius},${coordinates.lat},${coordinates.lon})["name"];`,
+    `relation(around:${radius},${coordinates.lat},${coordinates.lon})["name"];`,
+    ');',
+    'out tags center;',
+  ].join('');
+
+  try {
+    const payload = await fetchJson(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+    const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+
+    return elements
+      .map((element) => {
+        const lat = Number(element?.lat ?? element?.center?.lat);
+        const lon = Number(element?.lon ?? element?.center?.lon);
+        const name = normalizeShortText(element?.tags?.name, 140);
+        if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+        return {
+          name,
+          className: normalizeShortText(pickFeatureClass(element.tags), 60),
+          coordinates: { lat, lon },
+          distance_m: Math.round(haversineDistanceMeters(coordinates, { lat, lon })),
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.distance_m - right.distance_m)
+      .slice(0, 60);
+  } catch {
+    return [];
+  }
+}
+
+function scoreNearbyFeature(feature, result) {
+  const haystack = `${feature?.name || ''} ${feature?.className || ''}`.toLowerCase();
+  const tokens = buildLocationTokens([
+    result.landmark,
+    result.exact_location,
+    result.district,
+    result.city,
+    result.region,
+    result.country,
+    result.maps_search,
+    ...safeArray(result.clues).map((entry) => entry?.detail),
+  ]);
+
+  let score = 0;
+  for (const token of tokens) {
+    if (haystack.includes(token)) score += token.length > 5 ? 6 : 3;
+  }
+
+  const distance = Number(feature?.distance_m);
+  if (Number.isFinite(distance)) {
+    score += Math.max(0, 12 - (distance / 80));
+    if (distance <= 80) score += 8;
+    else if (distance <= 180) score += 5;
+    else if (distance <= 350) score += 2;
+  }
+
+  if (['tourism', 'amenity', 'historic', 'leisure', 'railway', 'highway', 'man_made', 'place', 'building'].some((entry) => String(feature?.className || '').includes(entry))) {
+    score += 1.5;
+  }
+
+  return score;
+}
+
 function scoreGeocodedCandidate(candidate, query, result) {
   const haystack = [
     candidate?.display_name,
@@ -1378,14 +1488,29 @@ async function enhanceGeolocationResult(result) {
     reverseGeocode = await reverseGeocodeCoordinates(nextCoordinates);
   }
 
+  const nearbyFeatures = await fetchNearbyPublicFeatures(nextCoordinates);
+  const bestFeature = nearbyFeatures
+    .map((feature) => ({ ...feature, score: scoreNearbyFeature(feature, result) }))
+    .sort((left, right) => right.score - left.score)[0] || null;
+
   const address = reverseGeocode?.address || {};
   const resolvedCountry = result.country || normalizeShortText(address.country, 120);
   const resolvedCountryCode = result.country_code || normalizeShortText(address.country_code, 12).toUpperCase();
   const resolvedRegion = result.region || pickAddressField(address, ['state', 'region', 'county']);
   const resolvedCity = result.city || pickAddressField(address, ['city', 'town', 'village', 'municipality']);
   const resolvedDistrict = result.district || pickAddressField(address, ['neighbourhood', 'suburb', 'borough', 'city_district']);
-  const resolvedExactLocation = result.exact_location || normalizeShortText(reverseGeocode?.display_name, 220);
-  const resolvedMapsSearch = result.maps_search || matchedQuery || [resolvedExactLocation, result.landmark, resolvedDistrict, resolvedCity, resolvedRegion, resolvedCountry].filter(Boolean).join(', ');
+  const resolvedLandmark = result.landmark || (bestFeature?.score >= 7 ? bestFeature.name : '');
+  const resolvedExactLocation = (
+    (bestFeature?.score >= 7 && bestFeature?.name)
+      ? [bestFeature.name, resolvedDistrict, resolvedCity, resolvedRegion, resolvedCountry].filter(Boolean).join(', ')
+      : result.exact_location || normalizeShortText(reverseGeocode?.display_name, 220)
+  );
+  const resolvedMapsSearch = result.maps_search || matchedQuery || [resolvedLandmark || bestFeature?.name, resolvedExactLocation, resolvedDistrict, resolvedCity, resolvedRegion, resolvedCountry].filter(Boolean).join(', ');
+  const snappedCoordinates = (
+    result.precision_source !== 'metadata_image'
+    && bestFeature?.score >= 8
+    && Number(bestFeature?.distance_m) <= 350
+  ) ? normalizeCoordinates(bestFeature.coordinates) : nextCoordinates;
   const reference_images = [];
 
   return {
@@ -1396,16 +1521,17 @@ async function enhanceGeolocationResult(result) {
     city: resolvedCity,
     district: resolvedDistrict,
     exact_location: resolvedExactLocation,
-    coordinates: nextCoordinates,
+    landmark: resolvedLandmark,
+    coordinates: snappedCoordinates,
     maps_search: resolvedMapsSearch,
     clues: mergeGeolocationClues(result, {
       district: resolvedDistrict,
       city: resolvedCity,
       region: resolvedRegion,
       country: resolvedCountry,
-      landmark: result.landmark,
+      landmark: resolvedLandmark,
     }, matchedQuery, reference_images),
-    map_links: buildMapLinks(nextCoordinates, resolvedMapsSearch),
+    map_links: buildMapLinks(snappedCoordinates, resolvedMapsSearch),
     reference_images,
   };
 }
