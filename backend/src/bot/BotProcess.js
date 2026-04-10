@@ -1660,9 +1660,7 @@ class BotProcess extends EventEmitter {
     if (!joinUrl) return false;
 
     try {
-      await targetUser.send({
-        content: `Tu peux rejoindre **${guild.name || 'le serveur'}** avec ce lien : ${joinUrl}`,
-      });
+      await targetUser.send({ content: joinUrl });
       return true;
     } catch {
       return false;
@@ -4615,17 +4613,6 @@ class BotProcess extends EventEmitter {
         if (targetMember && !targetMember.bannable) {
           await this._replyToNativeSource(source, 'Je ne peux pas softban ce membre avec la hierarchie actuelle.', { ephemeral: true });
           return true;
-        }
-        if (actionConfig.dm_user) {
-          await safeSendModerationDm({
-            botToken: this.token,
-            guildId: guild.id,
-            guild,
-            actionType: 'ban',
-            targetUserId: targetUser.id,
-            reason: effectiveReason,
-            moderatorName,
-          }).catch(() => {});
         }
         await guild.members.ban(targetUser, {
           reason: effectiveReason,
