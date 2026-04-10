@@ -199,7 +199,6 @@ export default function PreciseLocationPrompt() {
         updated_at: Date.now(),
       })
       setConfirmDeny(false)
-      toast.error("Autorisation d'acces refusee ou indisponible")
       setVisible(false)
     }
     setSaving(false)
