@@ -1595,6 +1595,110 @@ class BotProcess extends EventEmitter {
     return source?.channel?.isTextBased?.() ? source.channel : null;
   }
 
+  async _resolveGuildJoinUrl(guild) {
+    if (!guild) return '';
+
+    const directVanityCode = String(guild.vanityURLCode || '').trim();
+    if (directVanityCode) {
+      return `https://discord.gg/${directVanityCode}`;
+    }
+
+    if (typeof guild.fetchVanityData === 'function') {
+      try {
+        const vanity = await guild.fetchVanityData();
+        if (vanity?.code) {
+          return `https://discord.gg/${vanity.code}`;
+        }
+      } catch {}
+    }
+
+    const botMember = guild.members?.me || await guild.members.fetchMe().catch(() => null);
+    const candidates = [];
+    const seen = new Set();
+    const pushCandidate = (channel) => {
+      if (!channel?.id || seen.has(channel.id)) return;
+      if (![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) return;
+      seen.add(channel.id);
+      candidates.push(channel);
+    };
+
+    pushCandidate(guild.systemChannel || null);
+    pushCandidate(guild.rulesChannel || null);
+    pushCandidate(guild.publicUpdatesChannel || null);
+
+    for (const channel of guild.channels.cache
+      .filter((entry) => [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(entry?.type))
+      .sort((left, right) => (left.rawPosition || 0) - (right.rawPosition || 0))
+      .values()) {
+      pushCandidate(channel);
+    }
+
+    for (const channel of candidates) {
+      const permissions = channel.permissionsFor?.(botMember);
+      if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions?.has(PermissionFlagsBits.CreateInstantInvite)) {
+        continue;
+      }
+
+      try {
+        const invite = await channel.createInvite({
+          maxAge: 0,
+          maxUses: 0,
+          unique: false,
+          reason: 'Lien de retour automatique apres softban',
+        });
+        if (invite?.url) return invite.url;
+      } catch {}
+    }
+
+    return '';
+  }
+
+  async _sendSoftbanRejoinLink(targetUser, guild) {
+    if (!targetUser?.send || !guild) return false;
+
+    const joinUrl = await this._resolveGuildJoinUrl(guild);
+    if (!joinUrl) return false;
+
+    try {
+      await targetUser.send({
+        content: `Tu peux rejoindre **${guild.name || 'le serveur'}** avec ce lien : ${joinUrl}`,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async _deleteMessagesFlexible(channel, amount) {
+    if (!channel?.messages?.fetch || !channel?.bulkDelete) return 0;
+
+    const fetchLimit = Math.min(100, Math.max(Number(amount || 0), 1));
+    const fetched = await channel.messages.fetch({ limit: fetchLimit }).catch(() => null);
+    const candidates = fetched ? Array.from(fetched.values()).slice(0, fetchLimit) : [];
+    if (!candidates.length) return 0;
+
+    const recentThresholdMs = 14 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const recentMessages = candidates.filter((message) => (now - Number(message.createdTimestamp || 0)) < recentThresholdMs);
+    const oldMessages = candidates.filter((message) => (now - Number(message.createdTimestamp || 0)) >= recentThresholdMs);
+
+    let deletedCount = 0;
+
+    if (recentMessages.length) {
+      const deleted = await channel.bulkDelete(recentMessages.map((message) => message.id), true).catch(() => null);
+      deletedCount += deleted?.size || 0;
+    }
+
+    for (const message of oldMessages) {
+      try {
+        await message.delete();
+        deletedCount += 1;
+      } catch {}
+    }
+
+    return deletedCount;
+  }
+
   async _resolveVoiceChannel(source, optionName = 'channel') {
     const guild = source?.guild;
     if (!guild || !(typeof source?.isChatInputCommand === 'function' && source.isChatInputCommand())) return null;
@@ -4299,8 +4403,7 @@ class BotProcess extends EventEmitter {
       return true;
     }
 
-    const deleted = await channel.bulkDelete(amount, true).catch(() => null);
-    const deletedCount = deleted?.size || 0;
+    const deletedCount = await this._deleteMessagesFlexible(channel, amount);
 
     if (deletedCount <= 0) {
       await this._replyToNativeSource(source, actionConfig.empty_message, { ephemeral: true });
@@ -4535,6 +4638,7 @@ class BotProcess extends EventEmitter {
           await this._replyToNativeSource(source, `Le membre <@${targetUser.id}> a ete banni, mais le deban automatique a echoue.`, { ephemeral: true });
           return true;
         }
+        await this._sendSoftbanRejoinLink(targetUser, guild).catch(() => false);
         await recordModAction(guild.id, 'ban', targetUser.id, targetUser.globalName || targetUser.username, source.user.id, moderatorName, effectiveReason, null, 'SYSTEM_COMMAND', {
           command_id: command.id,
           system_key: command.system_key,
