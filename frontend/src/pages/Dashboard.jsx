@@ -7,7 +7,6 @@ import { botAPI } from '../services/api'
 import { useAuthStore, useGuildStore, useBotStore } from '../stores'
 import { wsService } from '../services/websocket'
 import { useI18n } from '../i18n'
-import BotStudioPanel from '../components/dashboard/BotStudioPanel'
 
 function DashboardPanel({ children, className = '', delay = 0, glow = 'cyan' }) {
   const glowClasses = {
@@ -658,13 +657,6 @@ export default function Dashboard() {
           delay={0.17}
         />
       </div>
-
-      <BotStudioPanel
-        selectedGuildId={selectedGuildId}
-        selectedGuild={selectedGuild}
-        canManageBot={hasOwnBotToken}
-        onProfileUpdated={fetchStatus}
-      />
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <DashboardPanel glow="cyan" delay={0.2} className="p-5 sm:p-6">

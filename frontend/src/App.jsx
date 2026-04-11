@@ -28,6 +28,8 @@ import NativeCommandsPage from './pages/NativeCommandsPage'
 import TicketGeneratorPage from './pages/TicketGeneratorPage'
 import CaptchaPage from './pages/CaptchaPage'
 import VoiceGeneratorPage from './pages/VoiceGeneratorPage'
+import BotCustomizationPage from './pages/BotCustomizationPage'
+import BotMessagesPage from './pages/BotMessagesPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import IncidentsPage from './pages/IncidentsPage'
 import ReviewsPage from './pages/ReviewsPage'
@@ -776,6 +778,8 @@ function AppRoot() {
           <Route path="tickets" element={<PageTransition><TicketGeneratorPage /></PageTransition>} />
           <Route path="captcha" element={<PageTransition><CaptchaPage /></PageTransition>} />
           <Route path="voice-rooms" element={<PageTransition><VoiceGeneratorPage /></PageTransition>} />
+          <Route path="bot-customization" element={<PageTransition><BotCustomizationPage /></PageTransition>} />
+          <Route path="bot-messages" element={<PageTransition><BotMessagesPage /></PageTransition>} />
           <Route path="analytics" element={<PageTransition><AnalyticsPage /></PageTransition>} />
           <Route path="reviews" element={<PageTransition><ReviewsPage /></PageTransition>} />
           <Route path="support" element={<PageTransition><SupportPage /></PageTransition>} />

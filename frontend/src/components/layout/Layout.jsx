@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket, ShieldCheck, Volume2
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket, ShieldCheck, Volume2, SlidersHorizontal, MessageSquareText
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
@@ -379,6 +379,7 @@ export default function Layout() {
   const isEmailFastRoute = location.pathname === '/email-fast'
   const isOsintRoute = location.pathname === '/dashboard/osint'
   const isAiAssistantRoute = location.pathname === '/dashboard/ai'
+  const isBotCustomizationRoute = location.pathname === '/dashboard/bot-customization'
   const canOpenWithoutGuild = (
     location.pathname === '/dashboard/servers'
     || location.pathname === '/dashboard/provider'
@@ -386,9 +387,10 @@ export default function Layout() {
     || location.pathname === '/dashboard/support'
     || isOsintRoute
     || isEmailFastRoute
+    || isBotCustomizationRoute
   )
   const mustStayOnServers = !hasSelectedGuild && !canOpenWithoutGuild
-  const shouldRenderSidebar = hasSelectedGuild || isEmailFastRoute || isOsintRoute
+  const shouldRenderSidebar = hasSelectedGuild || isEmailFastRoute || isOsintRoute || isBotCustomizationRoute
 
   const selectedGuild = guilds.find((g) => g.id === selectedGuildId)
   const navItems = [
@@ -411,6 +413,8 @@ export default function Layout() {
     { icon: Ticket, label: t('layout.nav.tickets', 'Tickets'), path: '/dashboard/tickets', needsGuild: true },
     { icon: ShieldCheck, label: t('layout.nav.captcha', 'CAPTCHA'), path: '/dashboard/captcha', needsGuild: true },
     { icon: Volume2, label: t('layout.nav.voiceRooms', 'Vocaux temporaires'), path: '/dashboard/voice-rooms', needsGuild: true },
+    { icon: SlidersHorizontal, label: 'Personnalisation du bot', path: '/dashboard/bot-customization' },
+    { icon: MessageSquareText, label: 'Messages du bot', path: '/dashboard/bot-messages', needsGuild: true },
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]
