@@ -131,6 +131,24 @@ async function validateToken(token) {
   return data; // { id, username, discriminator, avatar, … }
 }
 
+async function modifyCurrentUser(token, payload) {
+  return discordFetch('/users/@me', token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+async function getCurrentApplication(token) {
+  return discordFetch('/applications/@me', token);
+}
+
+async function modifyCurrentApplication(token, payload) {
+  return discordFetch('/applications/@me', token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 /**
  * Fetch guilds the bot is in.
  * Note: Bots use /users/@me/guilds. Returns array of partial guild objects.
@@ -478,6 +496,9 @@ function getBannerUrl(userId, bannerHash, size = 480) {
 module.exports = {
   DiscordAPIError,
   validateToken,
+  modifyCurrentUser,
+  getCurrentApplication,
+  modifyCurrentApplication,
   getBotGuilds,
   getGuild,
   getGuildChannels,

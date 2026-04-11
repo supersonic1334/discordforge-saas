@@ -18,6 +18,7 @@ const {
   ButtonStyle,
   AttachmentBuilder,
   EmbedBuilder,
+  ActivityType,
 } = require('discord.js');
 const EventEmitter = require('events');
 
@@ -80,6 +81,7 @@ const {
   buildVoiceRoomName,
   SUPPORTED_REGIONS,
 } = require('../services/voiceGeneratorService');
+const { getBotProfileSettings } = require('../services/botProfileService');
 const config = require('../config');
 
 // ── Status enum ───────────────────────────────────────────────────────────────
@@ -303,6 +305,14 @@ function buildInfoEmbed({ title, description, color = 0x22d3ee, thumbnail = null
 const DEFAULT_ACTION_CONFIG_BY_TYPE = new Map(
   DEFAULT_SYSTEM_COMMANDS.map((definition) => [definition.action_type, definition.action_config || {}])
 );
+
+const ACTIVITY_TYPE_MAP = Object.freeze({
+  playing: ActivityType.Playing,
+  listening: ActivityType.Listening,
+  watching: ActivityType.Watching,
+  competing: ActivityType.Competing,
+  streaming: ActivityType.Streaming,
+});
 
 function normalizeCommandActionConfig(actionType, rawValue = {}) {
   const source = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue : {};
@@ -1034,6 +1044,29 @@ class BotProcess extends EventEmitter {
     await this.start();
   }
 
+  _buildPresencePayload(settings = {}) {
+    const presenceStatus = String(settings.presence_status || 'online').trim().toLowerCase();
+    const activityTypeKey = String(settings.activity_type || 'playing').trim().toLowerCase();
+    const activityText = String(settings.activity_text || '').trim().slice(0, 128);
+    const mappedType = ACTIVITY_TYPE_MAP[activityTypeKey] ?? ActivityType.Playing;
+
+    return {
+      status: ['online', 'idle', 'dnd', 'invisible'].includes(presenceStatus) ? presenceStatus : 'online',
+      activities: activityText
+        ? [{
+            name: activityText,
+            type: mappedType,
+          }]
+        : [],
+    };
+  }
+
+  async applyStoredPresence() {
+    if (!this.client?.user) return;
+    const settings = getBotProfileSettings(this.userId);
+    await this.client.user.setPresence(this._buildPresencePayload(settings));
+  }
+
   // ── Client Setup ────────────────────────────────────────────────────────────
 
   _createClient() {
@@ -1067,13 +1100,16 @@ class BotProcess extends EventEmitter {
   _registerEvents() {
     const c = this.client;
 
-    c.once(Events.ClientReady, (readyClient) => {
+    c.once(Events.ClientReady, async (readyClient) => {
       this.restartCount = 0;
       this.startedAt = new Date().toISOString();
       this.lastError = null;
       this._setStatus(BotStatus.RUNNING);
 
       logger.info(`✅ Bot ready: ${readyClient.user.tag} | Guilds: ${readyClient.guilds.cache.size}`, { userId: this.userId });
+      await this.applyStoredPresence().catch((error) => {
+        logger.warn(`Presence restore failed: ${error.message}`, { userId: this.userId });
+      });
       this._startHeartbeat();
       this._syncGuilds();
       this.emit('ready', readyClient.user);

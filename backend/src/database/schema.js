@@ -709,6 +709,16 @@ const SCHEMA = [
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  `CREATE TABLE IF NOT EXISTS bot_profile_settings (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    presence_status TEXT NOT NULL DEFAULT 'online' CHECK(presence_status IN ('online','idle','dnd','invisible')),
+    activity_type   TEXT NOT NULL DEFAULT 'playing' CHECK(activity_type IN ('playing','listening','watching','competing','streaming')),
+    activity_text   TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
   // ────────────────────────────────────────────────────────────────────────────
   // PLAYBOOKS (automated moderation workflows)
   // ────────────────────────────────────────────────────────────────────────────

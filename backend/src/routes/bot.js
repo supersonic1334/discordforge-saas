@@ -8,8 +8,9 @@ const { syncGuildsForUser, removeGuildForUser } = require('../services/guildSync
 const guildAccessService = require('../services/guildAccessService');
 const discordService = require('../services/discordService');
 const { decrypt } = require('../services/encryptionService');
+const { getBotProfileSettings, saveBotProfileSettings } = require('../services/botProfileService');
 const { requireAuth, requireBotToken, requireGuildOwner, requireGuildPrimaryOwner, validate } = require('../middleware');
-const { guildAccessCodeRedeemSchema } = require('../validators/schemas');
+const { guildAccessCodeRedeemSchema, botProfileSchema } = require('../validators/schemas');
 const db = require('../database');
 const logger = require('../utils/logger').child('BotRoutes');
 const wsServer = require('../websocket');
@@ -24,6 +25,14 @@ const blockedRoutes = require('./blocked');
 const messageRoutes = require('./messages');
 const teamRoutes = require('./team');
 const scanRoutes = require('./scan');
+
+function requireBotPrimaryOwner(req, res, next) {
+  if (String(req.botToken?.user_id || '') !== String(req.user?.id || '')) {
+    return res.status(403).json({ error: 'Primary bot owner access required' });
+  }
+
+  return next();
+}
 
 // ── GET /status ───────────────────────────────────────────────────────────────
 router.get('/status', requireAuth, (req, res) => {
@@ -64,6 +73,106 @@ router.get('/status', requireAuth, (req, res) => {
         : null,
     },
   });
+});
+
+router.get('/profile', requireAuth, requireBotToken, requireBotPrimaryOwner, async (req, res, next) => {
+  try {
+    const token = decrypt(req.botToken.encrypted_token);
+    const botUser = await discordService.validateToken(token);
+    const application = await discordService.getCurrentApplication(token).catch(() => null);
+    const presence = getBotProfileSettings(req.user.id);
+
+    res.json({
+      profile: {
+        id: botUser.id,
+        username: botUser.username,
+        discriminator: botUser.discriminator,
+        avatar_url: discordService.getAvatarUrl(botUser.id, botUser.avatar, 256, botUser.discriminator),
+        invite_url: discordService.buildBotInviteUrl(botUser.id),
+        bio: String(application?.description || '').trim(),
+        presence_status: presence.presence_status,
+        activity_type: presence.activity_type,
+        activity_text: presence.activity_text,
+        is_running: botManager.isRunning(req.user.id),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/profile', requireAuth, requireBotToken, requireBotPrimaryOwner, validate(botProfileSchema), async (req, res, next) => {
+  try {
+    const token = decrypt(req.botToken.encrypted_token);
+    const process = botManager.getProcess(req.user.id);
+    const updates = req.body || {};
+    let currentUser = null;
+    let currentApplication = null;
+    let savedPresence = getBotProfileSettings(req.user.id);
+
+    if (typeof updates.username === 'string' && updates.username.trim()) {
+      currentUser = await discordService.modifyCurrentUser(token, {
+        username: updates.username.trim(),
+      });
+
+      db.update('bot_tokens', {
+        bot_username: currentUser.username,
+        bot_discriminator: currentUser.discriminator,
+        bot_avatar: currentUser.avatar,
+        last_validated_at: new Date().toISOString(),
+      }, { user_id: req.user.id });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'bio')) {
+      currentApplication = await discordService.modifyCurrentApplication(token, {
+        description: String(updates.bio || '').trim(),
+      });
+    }
+
+    const shouldPersistPresence = (
+      Object.prototype.hasOwnProperty.call(updates, 'presence_status')
+      || Object.prototype.hasOwnProperty.call(updates, 'activity_type')
+      || Object.prototype.hasOwnProperty.call(updates, 'activity_text')
+    );
+
+    if (shouldPersistPresence) {
+      savedPresence = saveBotProfileSettings(req.user.id, {
+        presence_status: updates.presence_status,
+        activity_type: updates.activity_type,
+        activity_text: updates.activity_text,
+      });
+
+      if (process?.client?.user) {
+        await process.applyStoredPresence();
+      }
+    }
+
+    if (!currentUser) {
+      currentUser = await discordService.validateToken(token);
+    }
+
+    if (!currentApplication) {
+      currentApplication = await discordService.getCurrentApplication(token).catch(() => null);
+    }
+
+    res.json({
+      message: 'Bot profile updated',
+      profile: {
+        id: currentUser.id,
+        username: currentUser.username,
+        discriminator: currentUser.discriminator,
+        avatar_url: discordService.getAvatarUrl(currentUser.id, currentUser.avatar, 256, currentUser.discriminator),
+        invite_url: discordService.buildBotInviteUrl(currentUser.id),
+        bio: String(currentApplication?.description || '').trim(),
+        presence_status: savedPresence.presence_status,
+        activity_type: savedPresence.activity_type,
+        activity_text: savedPresence.activity_text,
+        is_running: botManager.isRunning(req.user.id),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // ── POST /start ───────────────────────────────────────────────────────────────

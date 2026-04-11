@@ -4,7 +4,7 @@ const express = require('express');
 const router = express.Router({ mergeParams: true });
 
 const { requireAuth, requireBotToken, requireGuildOwner, validate, validateQuery } = require('../middleware');
-const { moderationSearchSchema, guildDmConfigSchema, directMessageSchema } = require('../validators/schemas');
+const { moderationSearchSchema, guildDmConfigSchema, directMessageSchema, channelMessageSchema } = require('../validators/schemas');
 const { decrypt } = require('../services/encryptionService');
 const discordService = require('../services/discordService');
 const authService = require('../services/authService');
@@ -238,6 +238,36 @@ router.post('/direct', validate(directMessageSchema), async (req, res, next) => 
     if (error?.httpStatus === 403) {
       return res.status(403).json({ error: 'Impossible d envoyer un MP a cet utilisateur' });
     }
+    next(error);
+  }
+});
+
+router.post('/channel', validate(channelMessageSchema), async (req, res, next) => {
+  try {
+    const token = decrypt(req.botToken.encrypted_token);
+    const { channel_id, message } = req.body;
+    const channels = await discordService.getGuildChannels(token, req.guild.guild_id);
+    const targetChannel = (Array.isArray(channels) ? channels : []).find((channel) => String(channel?.id || '') === String(channel_id));
+
+    if (!targetChannel) {
+      return res.status(404).json({ error: 'Salon introuvable' });
+    }
+
+    if (![0, 5].includes(Number(targetChannel.type))) {
+      return res.status(400).json({ error: 'Choisis un salon textuel' });
+    }
+
+    const sent = await discordService.sendMessage(token, channel_id, {
+      content: String(message || '').trim(),
+      allowed_mentions: { parse: [] },
+    });
+
+    res.status(201).json({
+      message: 'Message envoye',
+      sent_message_id: sent?.id || null,
+      channel_id,
+    });
+  } catch (error) {
     next(error);
   }
 });

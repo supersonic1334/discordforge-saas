@@ -152,6 +152,8 @@ export const authAPI = {
 // ── Bot ───────────────────────────────────────────────────────────────────────
 export const botAPI = {
   status:     ()        => api.get('/bot/status'),
+  profile:    ()        => api.get('/bot/profile'),
+  updateProfile: (data) => api.patch('/bot/profile', data),
   start:      ()        => api.post('/bot/start'),
   stop:       ()        => api.post('/bot/stop'),
   restart:    ()        => api.post('/bot/restart'),
@@ -199,6 +201,7 @@ export const messagesAPI = {
   saveConfig: (guildId, data) => api.put(`/bot/guilds/${guildId}/messages/config`, data),
   search:     (guildId, params) => api.get(`/bot/guilds/${guildId}/messages/search`, { params }),
   send:       (guildId, data) => api.post(`/bot/guilds/${guildId}/messages/direct`, data),
+  sendChannel:(guildId, data) => api.post(`/bot/guilds/${guildId}/messages/channel`, data),
 }
 
 export const teamAPI = {

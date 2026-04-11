@@ -105,6 +105,16 @@ const botTokenSchema = z.object({
     .regex(/^[A-Za-z0-9._-]+$/, 'Token contains invalid characters'),
 });
 
+const botProfileSchema = z.object({
+  username: z.string().trim().min(2).max(32).optional(),
+  bio: z.string().trim().max(300).optional(),
+  presence_status: z.enum(['online', 'idle', 'dnd', 'invisible']).optional(),
+  activity_type: z.enum(['playing', 'listening', 'watching', 'competing', 'streaming']).optional(),
+  activity_text: z.string().trim().max(128).optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one field is required',
+});
+
 // ── Modules ──────────────────────────────────────────────────────────────────
 const moduleToggleSchema = z.object({
   enabled: z.boolean(),
@@ -182,6 +192,11 @@ const directMessageSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   message: z.string().trim().min(2).max(2000),
   hide_sender_identity: z.boolean().optional().default(false),
+});
+
+const channelMessageSchema = z.object({
+  channel_id: z.string().regex(/^\d+$/, 'Must be a Discord channel ID'),
+  message: z.string().trim().min(1).max(2000),
 });
 
 const guildAccessInviteSchema = z.object({
@@ -607,6 +622,7 @@ module.exports = {
   discordLinkSchema,
   preciseLocationSchema,
   botTokenSchema,
+  botProfileSchema,
   moduleToggleSchema,
   moduleConfigSchema,
   moduleTypeSchema,
@@ -614,6 +630,7 @@ module.exports = {
   modActionSchema,
   guildDmConfigSchema,
   directMessageSchema,
+  channelMessageSchema,
   guildAccessInviteSchema,
   guildAccessCodeCreateSchema,
   guildAccessCodeRedeemSchema,
