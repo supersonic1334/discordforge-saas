@@ -647,7 +647,7 @@ export default function AuthPage() {
     >
       <AuthSnowBackdrop pointerX={pointerX} pointerY={pointerY} liteMode={authLiteMode} />
       {showBootLoader && (
-        <AuthBootLoader compact={compactAuthMode || authLiteMode} message={authLiteMode ? 'Preparation de l interface...' : 'Chargement...'} />
+        <AuthBootLoader compact={compactAuthMode || authLiteMode} message={authLiteMode ? "Préparation de l'interface..." : 'Chargement...'} />
       )}
 
       <div className={`auth-page-frame auth-mobile-shell relative z-10 mx-auto flex w-full max-w-7xl flex-col items-center gap-6 md:gap-10 ${compactAuthMode ? 'is-compact-auth' : ''}`}>

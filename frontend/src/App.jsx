@@ -124,7 +124,7 @@ function AppBootSplash({ liteMode = false }) {
         <div className={`app-boot-splash__ring${liteMode ? ' is-lite' : ''}`} />
         <div className="app-boot-splash__title">DiscordForger</div>
         <div className="app-boot-splash__subtitle">
-          {liteMode ? 'Chargement optimise...' : 'Chargement de l interface...'}
+          {liteMode ? 'Chargement optimisé...' : "Chargement de l'interface..."}
         </div>
       </div>
     </div>
