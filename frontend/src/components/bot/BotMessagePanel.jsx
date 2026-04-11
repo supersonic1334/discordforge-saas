@@ -148,23 +148,17 @@ export default function BotMessagePanel({ selectedGuildId, selectedGuild, canMan
                   setChannelMenuOpen((current) => !current)
                 }}
                 disabled={loadingChannels || channels.length === 0}
-                className="group flex w-full items-center justify-between gap-3 overflow-hidden rounded-[24px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(10,16,29,0.94),rgba(5,9,19,0.98))] px-4 py-3.5 text-left text-white shadow-[0_16px_48px_rgba(3,8,20,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:border-neon-cyan/30 hover:shadow-[0_18px_54px_rgba(0,229,255,0.14)] disabled:cursor-not-allowed disabled:opacity-45"
+                className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-slate-950/60 px-4 py-3 text-left text-white outline-none transition-colors hover:border-neon-cyan/24 focus-visible:border-neon-cyan/30 disabled:cursor-not-allowed disabled:opacity-45"
               >
-                <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.14),transparent_42%)] opacity-90" />
-                <span className="relative flex min-w-0 items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[0_10px_30px_rgba(34,211,238,0.08)]">
-                    <Hash className="h-4.5 w-4.5 text-neon-cyan" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.22em] text-white/28">
+                    {loadingChannels ? 'Chargement' : 'Salon actif'}
                   </span>
-                  <span className="min-w-0">
-                    <span className="block text-[11px] font-mono uppercase tracking-[0.22em] text-white/28">
-                      {loadingChannels ? 'Chargement' : 'Salon actif'}
-                    </span>
-                    <span className="mt-1 block truncate font-display text-base font-700 text-white">
-                      {selectedChannel ? `#${selectedChannel.name}` : (loadingChannels ? 'Recuperation des salons...' : 'Aucun salon textuel detecte')}
-                    </span>
+                  <span className="mt-1 block truncate font-display text-base font-700 text-white">
+                    {selectedChannel ? `#${selectedChannel.name}` : (loadingChannels ? 'Recuperation des salons...' : 'Aucun salon textuel detecte')}
                   </span>
                 </span>
-                <span className="relative flex items-center gap-3">
+                <span className="flex items-center gap-3">
                   {channels.length > 0 && (
                     <span className="hidden rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/42 sm:inline-flex">
                       {channels.length} salons
@@ -181,7 +175,7 @@ export default function BotMessagePanel({ selectedGuildId, selectedGuild, canMan
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.985 }}
                     transition={{ duration: 0.16, ease: 'easeOut' }}
-                    className="absolute left-0 right-0 top-[calc(100%+10px)] z-30 overflow-hidden rounded-[24px] border border-neon-cyan/18 bg-[linear-gradient(180deg,rgba(9,14,28,0.98),rgba(6,10,20,0.99))] p-2 shadow-[0_28px_80px_rgba(0,0,0,0.46),0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-2xl"
+                    className="absolute left-0 right-0 top-[calc(100%+10px)] z-30 overflow-hidden rounded-[24px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(8,12,24,0.98),rgba(5,9,19,0.99))] p-2 shadow-[0_28px_80px_rgba(0,0,0,0.46),0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-2xl"
                   >
                     <div className="max-h-72 space-y-1 overflow-y-auto pr-1 scrollbar-none">
                       {channels.map((channel, index) => {
@@ -200,8 +194,8 @@ export default function BotMessagePanel({ selectedGuildId, selectedGuild, canMan
                             }}
                             className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-150 ${
                               active
-                                ? 'border border-neon-cyan/20 bg-[linear-gradient(90deg,rgba(34,211,238,0.14),rgba(168,85,247,0.12))] shadow-[0_12px_32px_rgba(0,229,255,0.08)]'
-                                : 'border border-transparent bg-white/[0.02] hover:border-white/[0.08] hover:bg-white/[0.05]'
+                                ? 'border border-neon-cyan/20 bg-[linear-gradient(90deg,rgba(34,211,238,0.12),rgba(168,85,247,0.08))] shadow-[0_12px_32px_rgba(0,229,255,0.08)]'
+                                : 'border border-transparent bg-white/[0.02] hover:border-white/[0.08] hover:bg-white/[0.04]'
                             }`}
                           >
                             <span className={`flex h-9 w-9 items-center justify-center rounded-2xl border ${
