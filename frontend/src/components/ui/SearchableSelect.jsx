@@ -124,7 +124,7 @@ export default function SearchableSelect({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Rechercher..."
-                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/24"
+                  className="w-full border-0 bg-transparent text-sm text-white outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-white/24"
                 />
                 {query ? (
                   <button
