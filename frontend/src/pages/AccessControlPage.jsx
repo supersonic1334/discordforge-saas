@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { blockedAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 function getErrorMessage(error) {
   return error?.response?.data?.error || error?.message || 'Erreur inattendue'
@@ -404,15 +405,22 @@ export default function AccessControlPage() {
               <div className="pt-2">
                 <label className="block space-y-2">
                   <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Type de restriction</span>
-                  <select
-                    className="select-field"
+                  <SearchableSelect
+                    label="Type de restriction"
                     value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                  >
-                    <option value="all">Tout afficher</option>
-                    <option value="bans">Bannis uniquement</option>
-                    <option value="blacklist">Blacklist uniquement</option>
-                  </select>
+                    onChange={(option) => setFilterType(option.value)}
+                    options={[
+                      { value: 'all', label: 'Tout afficher' },
+                      { value: 'bans', label: 'Bannis uniquement' },
+                      { value: 'blacklist', label: 'Blacklist uniquement' },
+                    ]}
+                    placeholder="Tout afficher"
+                    emptyLabel="Aucun filtre"
+                    emptySearchLabel="Aucun filtre"
+                    getOptionKey={(option) => option.value}
+                    getOptionLabel={(option) => option.label}
+                    showCount={false}
+                  />
                 </label>
               </div>
             </motion.div>

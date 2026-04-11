@@ -6,6 +6,7 @@ import { botAPI, modulesAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
 import { getModuleCopy, useI18n } from '../i18n'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const TEXT_CHANNEL_TYPES = [0, 5, 11, 12, 15]
 
@@ -1014,15 +1015,18 @@ function WarningStepsField({ ui, value, onChange, actionOptions }) {
             </div>
             <div>
               <label className="block text-xs text-white/45 mb-1">{ui.labels.action}</label>
-              <select
-                className="select-field"
+              <SearchableSelect
+                label={ui.labels.action}
                 value={step.action}
-                onChange={(event) => updateStep(index, { action: event.target.value })}
-              >
-                {actionOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+                onChange={(option) => updateStep(index, { action: option.value })}
+                options={actionOptions}
+                placeholder={ui.labels.action}
+                emptyLabel={ui.labels.action}
+                emptySearchLabel={ui.labels.action}
+                getOptionKey={(option) => option.value}
+                getOptionLabel={(option) => option.label}
+                showCount={false}
+              />
             </div>
             <div>
               <label className="block text-xs text-white/45 mb-1">{ui.labels.timeoutDuration}</label>
@@ -1123,15 +1127,18 @@ function ModuleField({ field, formState, setFormState, ui, roles, channels, guil
       )}
 
       {field.type === 'select' && (
-        <select
-          className="select-field"
+        <SearchableSelect
+          label={field.label}
           value={value}
-          onChange={(event) => updateValue(event.target.value)}
-        >
-          {field.options.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
+          onChange={(option) => updateValue(option.value)}
+          options={field.options}
+          placeholder={field.label}
+          emptyLabel={field.label}
+          emptySearchLabel={field.label}
+          getOptionKey={(option) => option.value}
+          getOptionLabel={(option) => option.label}
+          showCount={false}
+        />
       )}
 
       {field.type === 'boolean' && (
@@ -1181,29 +1188,33 @@ function ModuleField({ field, formState, setFormState, ui, roles, channels, guil
       )}
 
       {field.type === 'channel-select' && (
-        <select
-          className="select-field"
+        <SearchableSelect
+          label={field.label}
           value={value}
-          onChange={(event) => updateValue(event.target.value)}
-        >
-          <option value="">{ui.noChannelOption}</option>
-          {channelOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
+          onChange={(option) => updateValue(option?.value || '')}
+          options={channelOptions}
+          placeholder={ui.noChannelOption}
+          emptyLabel={ui.noChannelOption}
+          emptySearchLabel={ui.noChannelOption}
+          getOptionKey={(option) => option.value}
+          getOptionLabel={(option) => option.label}
+          showCount={false}
+        />
       )}
 
       {field.type === 'role-select' && (
-        <select
-          className="select-field"
+        <SearchableSelect
+          label={field.label}
           value={value}
-          onChange={(event) => updateValue(event.target.value)}
-        >
-          <option value="">{ui.noRoles}</option>
-          {roleOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
+          onChange={(option) => updateValue(option?.value || '')}
+          options={roleOptions}
+          placeholder={ui.noRoles}
+          emptyLabel={ui.noRoles}
+          emptySearchLabel={ui.noRoles}
+          getOptionKey={(option) => option.value}
+          getOptionLabel={(option) => option.label}
+          showCount={false}
+        />
       )}
 
       {field.type === 'checklist' && (

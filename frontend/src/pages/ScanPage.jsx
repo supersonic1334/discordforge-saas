@@ -22,6 +22,7 @@ import { SelectGuildState, formatDate, getErrorMessage, initials, parseDurationI
 import { useAuthStore, useGuildStore } from '../stores'
 import { openDiscordLinkPopup } from '../utils/discordLinkPopup'
 import { wsService } from '../services/websocket'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const RISK_OPTIONS = [
   { value: 'all', label: 'Tous les risques' },
@@ -754,25 +755,31 @@ export default function ScanPage() {
             />
           </div>
 
-          <select
-            className="select-field"
+          <SearchableSelect
+            label="Risque"
             value={filters.risk}
-            onChange={(event) => setFilters((current) => ({ ...current, risk: event.target.value, page: 1 }))}
-          >
-            {RISK_OPTIONS.map((entry) => (
-              <option key={entry.value} value={entry.value}>{entry.label}</option>
-            ))}
-          </select>
+            onChange={(option) => setFilters((current) => ({ ...current, risk: option.value, page: 1 }))}
+            options={RISK_OPTIONS}
+            placeholder="Tous les risques"
+            emptyLabel="Aucun risque"
+            emptySearchLabel="Aucun risque"
+            getOptionKey={(option) => option.value}
+            getOptionLabel={(option) => option.label}
+            showCount={false}
+          />
 
-          <select
-            className="select-field"
+          <SearchableSelect
+            label="Perimetre"
             value={filters.scope}
-            onChange={(event) => setFilters((current) => ({ ...current, scope: event.target.value, page: 1 }))}
-          >
-            {SCOPE_OPTIONS.map((entry) => (
-              <option key={entry.value} value={entry.value}>{entry.label}</option>
-            ))}
-          </select>
+            onChange={(option) => setFilters((current) => ({ ...current, scope: option.value, page: 1 }))}
+            options={SCOPE_OPTIONS}
+            placeholder="Tout le serveur"
+            emptyLabel="Aucun perimetre"
+            emptySearchLabel="Aucun perimetre"
+            getOptionKey={(option) => option.value}
+            getOptionLabel={(option) => option.label}
+            showCount={false}
+          />
 
           <div className="flex items-center justify-end text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">
             {scan?.total_filtered || 0} résultat(s)

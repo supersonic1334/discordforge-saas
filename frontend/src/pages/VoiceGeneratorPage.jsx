@@ -5,6 +5,7 @@ import { ArrowRight, ChevronDown, ImagePlus, Mic, RefreshCw, Save, Send, Upload,
 import { botAPI, voiceGeneratorAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const VOICE_CHANNEL_TYPES = new Set([2, 13])
 const CATEGORY_CHANNEL_TYPES = new Set([4])
@@ -14,6 +15,8 @@ const MAX_REQUEST_LENGTH = 700000
 const DEFAULT_SITE_ICON = '/discordforger-icon.png'
 const DEFAULT_SITE_BANNER = '/discordforger-logo-full.png'
 const DEFAULT_SITE_BUTTON_LABEL = 'Ouvrir DiscordForger'
+const LEGACY_CONTROL_TITLE = 'Ta vocale temporaire'
+const LEGACY_CONTROL_DESCRIPTION = 'Utilise les menus ci-dessous pour gerer ta vocale temporaire.'
 
 const DEFAULT_CONFIG = {
   enabled: true,
@@ -21,8 +24,8 @@ const DEFAULT_CONFIG = {
   creator_channel_id: '',
   creator_channel_name: 'Creer ta voc',
   creator_category_id: '',
-  control_title: 'Ta vocale temporaire',
-  control_description: 'Utilise les menus ci-dessous pour gerer ta vocale temporaire.',
+  control_title: 'Bienvenue dans ton salon vocal',
+  control_description: 'Utilise les menus ci-dessous pour personnaliser et gerer ta vocale.',
   panel_color: '#22c55e',
   panel_thumbnail_url: '',
   panel_image_url: '',
@@ -67,12 +70,14 @@ function sortChannels(channels) {
 }
 
 function normalizeConfig(value = {}) {
+  const normalizedTitle = String(value?.control_title || DEFAULT_CONFIG.control_title).trim() || DEFAULT_CONFIG.control_title
+  const normalizedDescription = String(value?.control_description || DEFAULT_CONFIG.control_description).trim() || DEFAULT_CONFIG.control_description
   return {
     ...DEFAULT_CONFIG,
     ...(value || {}),
     creator_channel_name: String(value?.creator_channel_name || DEFAULT_CONFIG.creator_channel_name).trim() || DEFAULT_CONFIG.creator_channel_name,
-    control_title: String(value?.control_title || DEFAULT_CONFIG.control_title).trim() || DEFAULT_CONFIG.control_title,
-    control_description: String(value?.control_description || DEFAULT_CONFIG.control_description).trim() || DEFAULT_CONFIG.control_description,
+    control_title: normalizedTitle === LEGACY_CONTROL_TITLE ? DEFAULT_CONFIG.control_title : normalizedTitle,
+    control_description: normalizedDescription === LEGACY_CONTROL_DESCRIPTION ? DEFAULT_CONFIG.control_description : normalizedDescription,
     room_name_template: String(value?.room_name_template || DEFAULT_CONFIG.room_name_template).trim() || DEFAULT_CONFIG.room_name_template,
     site_button_label: String(value?.site_button_label || DEFAULT_CONFIG.site_button_label).trim() || DEFAULT_CONFIG.site_button_label,
     show_site_link: typeof value?.show_site_link === 'boolean' ? value.show_site_link : DEFAULT_CONFIG.show_site_link,
@@ -182,18 +187,18 @@ function SelectField({ label, value, onChange, options, emptyLabel }) {
   return (
     <label className="space-y-2">
       <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">{label}</span>
-      <div className="relative">
-        <select
-          value={value || ''}
-          onChange={(event) => onChange(event.target.value)}
-          className="w-full appearance-none rounded-2xl border border-white/10 bg-[#0a101b] px-4 py-3 pr-12 text-sm text-white outline-none transition focus:border-cyan-400/25"
-          style={{ colorScheme: 'dark' }}
-        >
-          <option value="" style={{ color: '#f8fafc', backgroundColor: '#0a101b' }}>{emptyLabel}</option>
-          {options.map((option) => <option key={option.id || option.value} value={option.id || option.value} style={{ color: '#f8fafc', backgroundColor: '#0a101b' }}>{option.name || option.label}</option>)}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-      </div>
+      <SearchableSelect
+        label={label}
+        value={value || ''}
+        onChange={(option) => onChange(option.id || option.value)}
+        options={options}
+        placeholder={emptyLabel}
+        emptyLabel={emptyLabel}
+        emptySearchLabel="Aucun resultat"
+        countSuffix="elements"
+        getOptionKey={(option) => option.id || option.value}
+        getOptionLabel={(option) => option.name || option.label}
+      />
     </label>
   )
 }
@@ -548,18 +553,18 @@ export default function VoiceGeneratorPage() {
 
                 <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white">
                   <input type="checkbox" checked={!!normalizedDraft.allow_claim} onChange={(event) => updateDraft({ allow_claim: event.target.checked })} className="h-4 w-4 rounded border-white/15 bg-transparent text-cyan-400 focus:ring-cyan-400/30" />
-                  Autoriser le claim si le createur part
+                  Autoriser la recuperation si le createur part
                 </label>
               </div>
             </section>
 
             <section className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,14,24,0.98),rgba(6,8,14,0.98))] p-5 shadow-[0_24px_80px_rgba(3,10,24,0.38)]">
               <div className="grid gap-4 md:grid-cols-2">
-                <InputField label="Titre du message" value={normalizedDraft.control_title} onChange={(value) => updateDraft({ control_title: value })} placeholder="Ta vocale temporaire" />
+                <InputField label="Titre du message" value={normalizedDraft.control_title} onChange={(value) => updateDraft({ control_title: value })} placeholder="Bienvenue dans ton salon vocal" />
                 <InputField label="Couleur" value={normalizedDraft.panel_color} onChange={(value) => updateDraft({ panel_color: value })} placeholder="#22c55e" />
               </div>
               <div className="mt-4">
-                <InputField label="Message du chat vocal" value={normalizedDraft.control_description} onChange={(value) => updateDraft({ control_description: value })} multiline rows={4} placeholder="Utilise les menus ci-dessous pour gerer ta vocale temporaire." />
+                <InputField label="Message du chat vocal" value={normalizedDraft.control_description} onChange={(value) => updateDraft({ control_description: value })} multiline rows={4} placeholder="Utilise les menus ci-dessous pour personnaliser et gerer ta vocale." />
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white">
@@ -590,31 +595,34 @@ export default function VoiceGeneratorPage() {
                     <div className="flex items-start gap-3">
                       <img src={previewThumbnail} alt="" className="h-14 w-14 rounded-2xl border border-white/10 object-cover shadow-[0_10px_30px_rgba(0,0,0,0.25)]" />
                       <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-display text-lg font-700 text-white">{normalizedDraft.control_title}</p>
-                          <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-emerald-200">owner only</span>
-                        </div>
+                        <p className="font-display text-lg font-700 text-white">{normalizedDraft.control_title}</p>
                         <p className="text-sm leading-6 text-white/72">{normalizedDraft.control_description}</p>
                         <div className="grid gap-2 sm:grid-cols-3">
                           <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
-                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Nom</p>
+                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Createur</p>
+                            <p className="mt-1 text-sm text-white">@Supersonic</p>
+                          </div>
+                          <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
+                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Salon</p>
                             <p className="mt-1 text-sm text-white">Vocal de Supersonic</p>
                           </div>
                           <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
-                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Acces</p>
+                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Statut</p>
                             <p className="mt-1 text-sm text-white">Ouvert - Visible</p>
-                          </div>
-                          <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
-                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">Region</p>
-                            <p className="mt-1 text-sm text-white">{REGION_OPTIONS.find((option) => option.value === normalizedDraft.default_region)?.label || 'Region auto'}</p>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {['Renommer', 'Limite', 'Lock', 'Ghost', 'Invite', 'Transfer'].map((label) => (
-                        <span key={label} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-mono uppercase tracking-[0.14em] text-white/55">{label}</span>
-                      ))}
+                    <div className="mt-4 grid gap-2">
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/72">
+                        Parametres de la vocale
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/72">
+                        Gerer l'acces
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/72">
+                        Region active : {REGION_OPTIONS.find((option) => option.value === normalizedDraft.default_region)?.label || 'Region auto'}
+                      </div>
                     </div>
                   </div>
                   <img src={previewBanner} alt="" className="max-h-52 w-full rounded-2xl border border-white/10 object-cover" />

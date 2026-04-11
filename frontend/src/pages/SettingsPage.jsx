@@ -8,6 +8,7 @@ import { AI_LANGUAGE_OPTIONS, SITE_LANGUAGE_OPTIONS, getOptionLabel, useI18n } f
 import { prepareAvatarDataUrl } from '../utils/avatarUpload'
 import { getQuickBotToken, setQuickBotToken } from '../utils/quickBotToken'
 import { openDiscordLinkPopup } from '../utils/discordLinkPopup'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 function normalizePreference(value, fallback = 'auto') {
   return ['auto', 'fr', 'en', 'es'].includes(value) ? value : fallback
@@ -192,17 +193,18 @@ function PreferenceSelect({ label, value, options, locale, accent = 'cyan', onCh
   return (
     <div className="space-y-2">
       <label className="text-xs font-mono text-white/40 block">{label}</label>
-      <select
-        className={`select-field ${accent === 'violet' ? 'focus:border-neon-violet/50' : 'focus:border-neon-cyan/50'}`}
+      <SearchableSelect
+        label={label}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {getOptionLabel(option, locale)}
-          </option>
-        ))}
-      </select>
+        onChange={(option) => onChange(option.value)}
+        options={options.map((option) => ({ ...option, label: getOptionLabel(option, locale) }))}
+        placeholder={getOptionLabel(options[0], locale)}
+        emptyLabel="Aucune option"
+        emptySearchLabel="Aucun resultat"
+        getOptionKey={(option) => option.value}
+        getOptionLabel={(option) => option.label}
+        showCount={false}
+      />
     </div>
   )
 }
@@ -843,18 +845,18 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <div className="space-y-2">
                 <label className="text-xs font-mono text-white/40 block">Serveur ciblé</label>
-                <select
-                  className="select-field"
+                <SearchableSelect
+                  label="Serveur cible"
                   value={selectedGuildId || ''}
-                  onChange={(event) => selectGuild(event.target.value || null)}
-                >
-                  <option value="">Choisir un serveur</option>
-                  {guilds.map((guild) => (
-                    <option key={guild.id} value={guild.id}>
-                      {guild.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(option) => selectGuild(option?.id || null)}
+                  options={guilds}
+                  placeholder="Choisir un serveur"
+                  emptyLabel="Aucun serveur"
+                  emptySearchLabel="Aucun serveur"
+                  getOptionKey={(option) => option.id}
+                  getOptionLabel={(option) => option.name}
+                  showCount={false}
+                />
               </div>
 
               <div className="rounded-2xl border border-white/8 bg-black/15 px-4 py-4 text-sm leading-6 text-white/60">

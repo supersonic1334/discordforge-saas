@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bot, Eye, Gamepad2, Headphones, Radio, Save, Sparkles, Trophy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { botAPI } from '../../services/api'
 import BotStudioCard from './BotStudioCard'
+import SearchableSelect from '../ui/SearchableSelect'
 
 const STATUS_OPTIONS = [
   { value: 'online', label: 'En ligne' },
@@ -47,11 +48,6 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
 
-  const currentActivity = useMemo(
-    () => ACTIVITY_OPTIONS.find((item) => item.value === profile.activity_type) || ACTIVITY_OPTIONS[0],
-    [profile.activity_type]
-  )
-
   useEffect(() => {
     if (!canManageBot) return undefined
 
@@ -90,7 +86,6 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
     if (profile.description !== initialProfile.description) payload.bio = profile.description.trim()
     if (profile.presence_status !== initialProfile.presence_status) payload.presence_status = profile.presence_status
     if (profile.activity_type !== initialProfile.activity_type) payload.activity_type = profile.activity_type
-    if (profile.activity_text !== initialProfile.activity_text) payload.activity_text = profile.activity_text.trim()
 
     if (!Object.keys(payload).length) {
       toast.success('Aucune modification a enregistrer')
@@ -129,7 +124,7 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
   return (
     <BotStudioCard
       title="Personnalisation du bot"
-      subtitle="Statut, activite, pseudo et description modifies en direct sur Discord."
+      subtitle="Statut, activite, pseudo et biographie modifies en direct sur Discord."
       icon={Sparkles}
     >
       <div className="flex flex-col gap-5">
@@ -152,28 +147,34 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
             <span className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/30">Statut Discord</span>
-            <select
+            <SearchableSelect
+              label="Statut Discord"
               value={profile.presence_status}
-              onChange={(event) => handleField('presence_status', event.target.value)}
-              className="w-full rounded-2xl border border-white/[0.08] bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-neon-cyan/30"
-            >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+              onChange={(option) => handleField('presence_status', option.value)}
+              options={STATUS_OPTIONS}
+              placeholder="Choisir un statut"
+              emptyLabel="Aucun statut"
+              emptySearchLabel="Aucun statut"
+              showCount={false}
+              getOptionKey={(option) => option.value}
+              getOptionLabel={(option) => option.label}
+            />
           </label>
 
           <label className="space-y-2">
             <span className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/30">Type d'activite</span>
-            <select
+            <SearchableSelect
+              label="Type d'activite"
               value={profile.activity_type}
-              onChange={(event) => handleField('activity_type', event.target.value)}
-              className="w-full rounded-2xl border border-white/[0.08] bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-neon-cyan/30"
-            >
-              {ACTIVITY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+              onChange={(option) => handleField('activity_type', option.value)}
+              options={ACTIVITY_OPTIONS}
+              placeholder="Choisir une activite"
+              emptyLabel="Aucune activite"
+              emptySearchLabel="Aucune activite"
+              showCount={false}
+              getOptionKey={(option) => option.value}
+              getOptionLabel={(option) => option.label}
+            />
           </label>
 
           <label className="space-y-2">
@@ -187,25 +188,10 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
             />
           </label>
 
-          <label className="space-y-2">
-            <span className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/30">Texte affiche sur Discord</span>
-            <div className="relative">
-              <input
-                type="text"
-                value={profile.activity_text}
-                onChange={(event) => handleField('activity_text', event.target.value.slice(0, 128))}
-                placeholder={currentActivity?.value === 'playing' ? 'Roblox' : 'DiscordForger'}
-                className="w-full rounded-2xl border border-white/[0.08] bg-slate-950/60 px-4 py-3 pr-24 text-sm text-white outline-none transition-colors placeholder:text-white/22 focus:border-neon-cyan/30"
-              />
-              <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs font-mono text-white/25">
-                {profile.activity_text.length}/128
-              </span>
-            </div>
-          </label>
         </div>
 
         <label className="space-y-2">
-          <span className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/30">Description du bot</span>
+          <span className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/30">Biographie</span>
           <textarea
             rows={4}
             value={profile.description}

@@ -5,6 +5,7 @@ import { ArrowRight, ChevronDown, ImagePlus, LifeBuoy, RefreshCw, Save, Send, Ti
 import { botAPI, ticketGeneratorAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const TEXT_CHANNEL_TYPES = new Set([0, 5, 11, 12, 15])
 const AUTO_REFRESH_MS = 12000
@@ -354,13 +355,18 @@ function SelectField({ label, value, onChange, options, emptyLabel }) {
   return (
     <label className="space-y-2">
       <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">{label}</span>
-      <div className="relative">
-        <select value={value || ''} onChange={(event) => onChange(event.target.value)} className="w-full appearance-none rounded-2xl border border-white/10 bg-[#0a101b] px-4 py-3 pr-12 text-sm text-white outline-none transition focus:border-cyan-400/25" style={{ colorScheme: 'dark' }}>
-          <option value="" style={{ color: '#f8fafc', backgroundColor: '#0a101b' }}>{emptyLabel}</option>
-          {options.map((option) => <option key={option.id} value={option.id} style={{ color: '#f8fafc', backgroundColor: '#0a101b' }}>{option.name}</option>)}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-      </div>
+      <SearchableSelect
+        label={label}
+        value={value || ''}
+        onChange={(option) => onChange(option.id)}
+        options={options}
+        placeholder={emptyLabel}
+        emptyLabel={emptyLabel}
+        emptySearchLabel="Aucun resultat"
+        countSuffix="elements"
+        getOptionKey={(option) => option.id}
+        getOptionLabel={(option) => option.name}
+      />
     </label>
   )
 }

@@ -17,6 +17,7 @@ import { botAPI, commandsAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const TEXT_CHANNEL_TYPES = [0, 5, 11, 12, 15]
 const CATEGORY_ORDER = ['all', 'moderation', 'utility']
@@ -541,16 +542,18 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
           <div className="grid gap-5 md:grid-cols-2">
             <label className="space-y-2">
               <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.logChannel}</span>
-              <select
-                className="select-field"
+              <SearchableSelect
+                label={ui.logChannel}
                 value={draft.log_channel_id}
-                onChange={(event) => setDraft((current) => ({ ...current, log_channel_id: event.target.value }))}
-              >
-                <option value="">{ui.noLogChannel}</option>
-                {textChannels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>#{channel.name}</option>
-                ))}
-              </select>
+                onChange={(option) => setDraft((current) => ({ ...current, log_channel_id: option?.id || '' }))}
+                options={textChannels}
+                placeholder={ui.noLogChannel}
+                emptyLabel={ui.noLogChannel}
+                emptySearchLabel={ui.noLogChannel}
+                getOptionKey={(option) => option.id}
+                getOptionLabel={(option) => `#${option.name}`}
+                showCount={false}
+              />
             </label>
 
             <div className="space-y-2">
@@ -581,16 +584,18 @@ function NativeCommandCard({ command, ui, textChannels, onToggle, onSave }) {
             <div className="grid gap-5 md:grid-cols-2">
               <label className="space-y-2">
                 <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{ui.defaultTargetChannel}</span>
-                <select
-                  className="select-field"
+                <SearchableSelect
+                  label={ui.defaultTargetChannel}
                   value={draft.default_channel_id}
-                  onChange={(event) => setDraft((current) => ({ ...current, default_channel_id: event.target.value }))}
-                >
-                  <option value="">{ui.noLogChannel}</option>
-                  {textChannels.map((channel) => (
-                    <option key={channel.id} value={channel.id}>#{channel.name}</option>
-                  ))}
-                </select>
+                  onChange={(option) => setDraft((current) => ({ ...current, default_channel_id: option?.id || '' }))}
+                  options={textChannels}
+                  placeholder={ui.noLogChannel}
+                  emptyLabel={ui.noLogChannel}
+                  emptySearchLabel={ui.noLogChannel}
+                  getOptionKey={(option) => option.id}
+                  getOptionLabel={(option) => `#${option.name}`}
+                  showCount={false}
+                />
               </label>
             </div>
           )}
@@ -985,16 +990,18 @@ export default function NativeCommandsPage() {
                 <p className="mt-3 text-sm leading-6 text-white/55">{ui.globalLogText}</p>
               </div>
               <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[minmax(0,1fr),auto]">
-                <select
-                  className="select-field"
+                <SearchableSelect
+                  label={ui.globalLogTitle}
                   value={globalLogChannelId}
-                  onChange={(event) => setGlobalLogChannelId(event.target.value)}
-                >
-                  <option value="">{ui.noLogChannel}</option>
-                  {textChannels.map((channel) => (
-                    <option key={channel.id} value={channel.id}>#{channel.name}</option>
-                  ))}
-                </select>
+                  onChange={(option) => setGlobalLogChannelId(option?.id || '')}
+                  options={textChannels}
+                  placeholder={ui.noLogChannel}
+                  emptyLabel={ui.noLogChannel}
+                  emptySearchLabel={ui.noLogChannel}
+                  getOptionKey={(option) => option.id}
+                  getOptionLabel={(option) => `#${option.name}`}
+                  showCount={false}
+                />
                 <button
                   type="button"
                   onClick={applyGlobalLogChannel}

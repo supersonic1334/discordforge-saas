@@ -21,6 +21,7 @@ import {
 import { supportAPI } from '../services/api'
 import { useAuthStore } from '../stores'
 import { useI18n } from '../i18n'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const AUTO_REFRESH_MS = 8000
 
@@ -844,27 +845,37 @@ export default function SupportPage() {
                 </div>
                 <div>
                   <label className="text-[11px] uppercase tracking-[0.24em] text-white/35">{text.reason}</label>
-                  <select
-                    value={editForm.category}
-                    onChange={(event) => setEditForm((state) => ({ ...state, category: event.target.value }))}
-                    className="select-field mt-2"
-                  >
-                    {['bug', 'report', 'account', 'question', 'other'].map((category) => (
-                      <option key={category} value={category}>{text.categories[category]}</option>
-                    ))}
-                  </select>
+                  <div className="mt-2">
+                    <SearchableSelect
+                      label={text.reason}
+                      value={editForm.category}
+                      onChange={(option) => setEditForm((state) => ({ ...state, category: option.value }))}
+                      options={['bug', 'report', 'account', 'question', 'other'].map((category) => ({ value: category, label: text.categories[category] }))}
+                      placeholder={text.reason}
+                      emptyLabel={text.reason}
+                      emptySearchLabel={text.reason}
+                      getOptionKey={(option) => option.value}
+                      getOptionLabel={(option) => option.label}
+                      showCount={false}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="text-[11px] uppercase tracking-[0.24em] text-white/35">{text.status}</label>
-                  <select
-                    value={editForm.status}
-                    onChange={(event) => setEditForm((state) => ({ ...state, status: event.target.value }))}
-                    className="select-field mt-2"
-                  >
-                    {['open', 'claimed', 'closed'].map((status) => (
-                      <option key={status} value={status}>{text.filters[status]}</option>
-                    ))}
-                  </select>
+                  <div className="mt-2">
+                    <SearchableSelect
+                      label={text.status}
+                      value={editForm.status}
+                      onChange={(option) => setEditForm((state) => ({ ...state, status: option.value }))}
+                      options={['open', 'claimed', 'closed'].map((status) => ({ value: status, label: text.filters[status] }))}
+                      placeholder={text.status}
+                      emptyLabel={text.status}
+                      emptySearchLabel={text.status}
+                      getOptionKey={(option) => option.value}
+                      getOptionLabel={(option) => option.label}
+                      showCount={false}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1108,15 +1119,18 @@ export default function SupportPage() {
                           placeholder={text.searchPlaceholder}
                         />
                       </div>
-                      <select
+                      <SearchableSelect
+                        label={text.reason}
                         value={filters.category}
-                        onChange={(event) => setFilters((state) => ({ ...state, category: event.target.value }))}
-                        className="select-field"
-                      >
-                        {['all', 'bug', 'report', 'account', 'question', 'other'].map((category) => (
-                          <option key={category} value={category}>{text.categories[category]}</option>
-                        ))}
-                      </select>
+                        onChange={(option) => setFilters((state) => ({ ...state, category: option.value }))}
+                        options={['all', 'bug', 'report', 'account', 'question', 'other'].map((category) => ({ value: category, label: text.categories[category] }))}
+                        placeholder={text.reason}
+                        emptyLabel={text.reason}
+                        emptySearchLabel={text.reason}
+                        getOptionKey={(option) => option.value}
+                        getOptionLabel={(option) => option.label}
+                        showCount={false}
+                      />
                     </div>
                   </>
                 )}

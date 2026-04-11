@@ -42,6 +42,7 @@ import { authAPI, teamAPI } from '../services/api'
 import { useAuthStore, useGuildStore } from '../stores'
 import { wsService } from '../services/websocket'
 import { openDiscordLinkPopup } from '../utils/discordLinkPopup'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1084,15 +1085,18 @@ function OwnerJoinCodeCard({ saving, codeForm, setCodeForm, joinCodes, onCreateC
         tone="violet"
       />
       <div className="grid gap-3 lg:grid-cols-[220px_auto]">
-        <select
-          className="select-field"
+        <SearchableSelect
+          label="Expiration"
           value={codeForm.expires_in_hours}
-          onChange={(event) => setCodeForm((current) => ({ ...current, expires_in_hours: Number(event.target.value) }))}
-        >
-          {EXPIRY_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
+          onChange={(option) => setCodeForm((current) => ({ ...current, expires_in_hours: Number(option.value) }))}
+          options={EXPIRY_OPTIONS}
+          placeholder="Choisir une duree"
+          emptyLabel="Aucune duree"
+          emptySearchLabel="Aucune duree"
+          getOptionKey={(option) => option.value}
+          getOptionLabel={(option) => option.label}
+          showCount={false}
+        />
         <button
           type="button"
           onClick={onCreateCode}
@@ -1343,24 +1347,34 @@ function TeamTab({
                       onChange={(e) => setInviteForm((c) => ({ ...c, target: e.target.value }))}
                       onKeyDown={(e) => e.key === 'Enter' && onInvite()}
                     />
-                    <select
-                      className="select-field"
+                    <SearchableSelect
+                      label="Role"
                       value={inviteForm.access_role}
-                      onChange={(e) => setInviteForm((c) => ({ ...c, access_role: e.target.value }))}
-                    >
-                      <option value="admin">Admin</option>
-                      <option value="moderator">Modérateur</option>
-                      <option value="viewer">Lecture seule</option>
-                    </select>
-                    <select
-                      className="select-field"
+                      onChange={(option) => setInviteForm((c) => ({ ...c, access_role: option.value }))}
+                      options={[
+                        { value: 'admin', label: 'Admin' },
+                        { value: 'moderator', label: 'Modérateur' },
+                        { value: 'viewer', label: 'Lecture seule' },
+                      ]}
+                      placeholder="Choisir un role"
+                      emptyLabel="Aucun role"
+                      emptySearchLabel="Aucun role"
+                      getOptionKey={(option) => option.value}
+                      getOptionLabel={(option) => option.label}
+                      showCount={false}
+                    />
+                    <SearchableSelect
+                      label="Expiration"
                       value={inviteForm.expires_in_hours}
-                      onChange={(e) => setInviteForm((c) => ({ ...c, expires_in_hours: Number(e.target.value) }))}
-                    >
-                      {EXPIRY_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
+                      onChange={(option) => setInviteForm((c) => ({ ...c, expires_in_hours: Number(option.value) }))}
+                      options={EXPIRY_OPTIONS}
+                      placeholder="Choisir une duree"
+                      emptyLabel="Aucune duree"
+                      emptySearchLabel="Aucune duree"
+                      getOptionKey={(option) => option.value}
+                      getOptionLabel={(option) => option.label}
+                      showCount={false}
+                    />
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-white/25 font-mono">L'utilisateur recevra un accès immédiat au dashboard</p>
@@ -1438,16 +1452,26 @@ function TeamTab({
 
                   {isOwner && (
                     <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-                      <select
-                        className="select-compact"
-                        value={entry.access_role}
-                        onChange={(e) => onMemberRole(entry.user_id, e.target.value)}
-                        disabled={saving === `member:${entry.user_id}` || entry.is_suspended}
-                      >
-                        <option value="admin">Admin</option>
-                        <option value="moderator">Modérateur</option>
-                        <option value="viewer">Lecture</option>
-                      </select>
+                      <div className="min-w-[148px]">
+                        <SearchableSelect
+                          label="Role"
+                          value={entry.access_role}
+                          onChange={(option) => onMemberRole(entry.user_id, option.value)}
+                          options={[
+                            { value: 'admin', label: 'Admin' },
+                            { value: 'moderator', label: 'Modérateur' },
+                            { value: 'viewer', label: 'Lecture' },
+                          ]}
+                          placeholder="Choisir un role"
+                          emptyLabel="Aucun role"
+                          emptySearchLabel="Aucun role"
+                          getOptionKey={(option) => option.value}
+                          getOptionLabel={(option) => option.label}
+                          showCount={false}
+                          compact
+                          disabled={saving === `member:${entry.user_id}` || entry.is_suspended}
+                        />
+                      </div>
                       {entry.is_suspended ? (
                         <button
                           type="button"
@@ -1913,15 +1937,18 @@ function AccessCodesTab({ user, isOwner, saving, codeForm, setCodeForm, joinCode
             tone="violet"
           />
           <div className="grid gap-3 lg:grid-cols-[220px_auto]">
-            <select
-              className="select-field"
+            <SearchableSelect
+              label="Expiration"
               value={codeForm.expires_in_hours}
-              onChange={(event) => setCodeForm((current) => ({ ...current, expires_in_hours: Number(event.target.value) }))}
-            >
-              {EXPIRY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+              onChange={(option) => setCodeForm((current) => ({ ...current, expires_in_hours: Number(option.value) }))}
+              options={EXPIRY_OPTIONS}
+              placeholder="Choisir une duree"
+              emptyLabel="Aucune duree"
+              emptySearchLabel="Aucune duree"
+              getOptionKey={(option) => option.value}
+              getOptionLabel={(option) => option.label}
+              showCount={false}
+            />
             <button
               type="button"
               onClick={onCreateCode}

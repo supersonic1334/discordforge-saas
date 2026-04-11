@@ -26,6 +26,7 @@ import { aiAPI, botAPI, commandsAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
+import SearchableSelect from '../components/ui/SearchableSelect'
 import { useSpeechToText } from '../hooks/useSpeechToText'
 
 const UI = {
@@ -1598,30 +1599,37 @@ export default function CommandsPage() {
         <div className="grid gap-3 md:grid-cols-2">
           <label className="space-y-2">
             <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.logChannel}</span>
-            <select
-              className="input-field"
+            <SearchableSelect
+              label={pageCopy.logChannel}
               value={draft.log_channel_id}
-              onChange={(event) => updateSystemDraft(command.id, { log_channel_id: event.target.value })}
-            >
-              <option value="">{pageCopy.noLogChannel}</option>
-              {textChannels.map((channel) => (
-                <option key={channel.id} value={channel.id}>
-                  #{channel.name}
-                </option>
-              ))}
-            </select>
+              onChange={(option) => updateSystemDraft(command.id, { log_channel_id: option?.id || '' })}
+              options={textChannels}
+              placeholder={pageCopy.noLogChannel}
+              emptyLabel={pageCopy.noLogChannel}
+              emptySearchLabel={pageCopy.noLogChannel}
+              getOptionKey={(option) => option.id}
+              getOptionLabel={(option) => `#${option.name}`}
+              showCount={false}
+            />
           </label>
 
           <label className="space-y-2">
             <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.visibilityLabel}</span>
-            <select
-              className="input-field"
+            <SearchableSelect
+              label={pageCopy.visibilityLabel}
               value={draft.success_visibility}
-              onChange={(event) => updateSystemDraft(command.id, { success_visibility: event.target.value })}
-            >
-              <option value="ephemeral">{pageCopy.visibilityEphemeral}</option>
-              <option value="public">{pageCopy.visibilityPublic}</option>
-            </select>
+              onChange={(option) => updateSystemDraft(command.id, { success_visibility: option.value })}
+              options={[
+                { value: 'ephemeral', label: pageCopy.visibilityEphemeral },
+                { value: 'public', label: pageCopy.visibilityPublic },
+              ]}
+              placeholder={pageCopy.visibilityLabel}
+              emptyLabel={pageCopy.visibilityLabel}
+              emptySearchLabel={pageCopy.visibilityLabel}
+              getOptionKey={(option) => option.value}
+              getOptionLabel={(option) => option.label}
+              showCount={false}
+            />
           </label>
         </div>
 
@@ -1629,18 +1637,18 @@ export default function CommandsPage() {
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-2">
               <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/34">{pageCopy.defaultTargetChannel}</span>
-              <select
-                className="input-field"
+              <SearchableSelect
+                label={pageCopy.defaultTargetChannel}
                 value={draft.default_channel_id}
-                onChange={(event) => updateSystemDraft(command.id, { default_channel_id: event.target.value })}
-              >
-                <option value="">{pageCopy.noLogChannel}</option>
-                {textChannels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>
-                    #{channel.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(option) => updateSystemDraft(command.id, { default_channel_id: option?.id || '' })}
+                options={textChannels}
+                placeholder={pageCopy.noLogChannel}
+                emptyLabel={pageCopy.noLogChannel}
+                emptySearchLabel={pageCopy.noLogChannel}
+                getOptionKey={(option) => option.id}
+                getOptionLabel={(option) => `#${option.name}`}
+                showCount={false}
+              />
             </label>
           </div>
         )}

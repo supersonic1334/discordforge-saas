@@ -5,6 +5,7 @@ import { providerAPI } from '../services/api'
 import { useI18n } from '../i18n'
 import KeyDeleteConfirmDialog from '../components/KeyDeleteConfirmDialog'
 import ProviderQuickLinks from '../components/ProviderQuickLinks'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const UI = {
   fr: {
@@ -314,12 +315,18 @@ export default function ProviderPanel() {
       <div className="glass-card p-5 space-y-4">
         <div>
           <label className="text-xs font-mono text-white/40 mb-1.5 block">{ui.provider}</label>
-          <select className="select-field" value={provider} onChange={(event) => setProvider(event.target.value)}>
-            {!catalog.length && <option value="anthropic">{ui.selectPlaceholder}</option>}
-            {catalog.map((entry) => (
-              <option key={entry.id} value={entry.id}>{entry.label}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            label={ui.provider}
+            value={provider}
+            onChange={(option) => setProvider(option.id)}
+            options={catalog}
+            placeholder={ui.selectPlaceholder}
+            emptyLabel={ui.selectPlaceholder}
+            emptySearchLabel={ui.selectPlaceholder}
+            getOptionKey={(option) => option.id}
+            getOptionLabel={(option) => option.label}
+            showCount={false}
+          />
           {selectedProvider?.description ? <p className="text-xs text-white/35 mt-1">{selectedProvider.description}</p> : null}
         </div>
 
@@ -333,11 +340,18 @@ export default function ProviderPanel() {
 
         <div>
           <label className="text-xs font-mono text-white/40 mb-1.5 block">{ui.model}</label>
-          <select className="select-field" value={model} onChange={(event) => setModel(event.target.value)}>
-            {providerModels.map((entry) => (
-              <option key={entry.id} value={entry.id}>{entry.label}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            label={ui.model}
+            value={model}
+            onChange={(option) => setModel(option.id)}
+            options={providerModels}
+            placeholder={ui.model}
+            emptyLabel={ui.model}
+            emptySearchLabel={ui.model}
+            getOptionKey={(option) => option.id}
+            getOptionLabel={(option) => option.label}
+            showCount={false}
+          />
           <p className="text-xs text-white/35 mt-1">
             {providerModels.find((entry) => entry.id === model)?.description || ui.modelHelp}
           </p>
@@ -447,15 +461,20 @@ export default function ProviderPanel() {
                   </div>
 
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <select
-                      className="select-field flex-1"
-                      value={draftModel}
-                      onChange={(event) => setKeyModelDrafts((current) => ({ ...current, [key.id]: event.target.value }))}
-                    >
-                      {cardModels.map((entry) => (
-                        <option key={entry.id} value={entry.id}>{entry.label}</option>
-                      ))}
-                    </select>
+                    <div className="flex-1">
+                      <SearchableSelect
+                        label={ui.model}
+                        value={draftModel}
+                        onChange={(option) => setKeyModelDrafts((current) => ({ ...current, [key.id]: option.id }))}
+                        options={cardModels}
+                        placeholder={ui.model}
+                        emptyLabel={ui.model}
+                        emptySearchLabel={ui.model}
+                        getOptionKey={(option) => option.id}
+                        getOptionLabel={(option) => option.label}
+                        showCount={false}
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => updateKeyModel(key.id)}

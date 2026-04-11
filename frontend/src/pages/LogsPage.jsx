@@ -6,6 +6,7 @@ import { logsAPI, modAPI } from '../services/api'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
 import { ACTION_LABELS, ACTION_COLORS, LOG_LEVEL_COLORS, getErrorMessage, formatDate, renderAvatar, SelectGuildState } from '../components/moderation/moderationUI'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const TABS = [
   { id: 'site', label: 'Logs Site', icon: Activity, color: 'neon-cyan' },
@@ -445,15 +446,18 @@ export default function LogsPage() {
                     <Zap className="w-3 h-3" />
                     Type d'action
                   </span>
-                  <select
-                    className="select-field"
+                  <SearchableSelect
+                    label="Type d'action"
                     value={filterAction}
-                    onChange={(e) => setFilterAction(e.target.value)}
-                  >
-                    {ACTION_TYPES.map((type) => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
-                  </select>
+                    onChange={(option) => setFilterAction(option.value)}
+                    options={ACTION_TYPES}
+                    placeholder="Toutes les actions"
+                    emptyLabel="Aucune action"
+                    emptySearchLabel="Aucune action"
+                    getOptionKey={(option) => option.value}
+                    getOptionLabel={(option) => option.label}
+                    showCount={false}
+                  />
                 </label>
 
                 <label className="block space-y-2">
@@ -461,15 +465,18 @@ export default function LogsPage() {
                     <FileText className="w-3 h-3" />
                     Niveau de log
                   </span>
-                  <select
-                    className="select-field"
+                  <SearchableSelect
+                    label="Niveau de log"
                     value={filterLevel}
-                    onChange={(e) => setFilterLevel(e.target.value)}
-                  >
-                    {LOG_LEVELS.map((level) => (
-                      <option key={level.value} value={level.value}>{level.label}</option>
-                    ))}
-                  </select>
+                    onChange={(option) => setFilterLevel(option.value)}
+                    options={LOG_LEVELS}
+                    placeholder="Tous les niveaux"
+                    emptyLabel="Aucun niveau"
+                    emptySearchLabel="Aucun niveau"
+                    getOptionKey={(option) => option.value}
+                    getOptionLabel={(option) => option.label}
+                    showCount={false}
+                  />
                 </label>
 
                 <label className="block space-y-2">

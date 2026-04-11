@@ -21,6 +21,7 @@ import toast from 'react-hot-toast'
 import { messagesAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const DEFAULT_CONFIG = {
   auto_dm_warn: true,
@@ -666,16 +667,18 @@ export default function NotificationsPage() {
               <div className="grid gap-4 lg:grid-cols-2">
                 <label className="block space-y-2">
                   <span className="text-xs font-mono uppercase tracking-[0.2em] text-white/35">Serveur de recours</span>
-                  <select
-                    className="select-field"
+                  <SearchableSelect
+                    label="Serveur de recours"
                     value={appealGuilds.some((entry) => entry.name === config.appeal_server_name) ? config.appeal_server_name : ''}
-                    onChange={(event) => setConfig((current) => ({ ...current, appeal_server_name: event.target.value }))}
-                  >
-                    <option value="">Aucun serveur choisi</option>
-                    {appealGuilds.map((entry) => (
-                      <option key={entry.id} value={entry.name}>{entry.name}</option>
-                    ))}
-                  </select>
+                    onChange={(option) => setConfig((current) => ({ ...current, appeal_server_name: option.name }))}
+                    options={appealGuilds}
+                    placeholder="Aucun serveur choisi"
+                    emptyLabel="Aucun serveur choisi"
+                    emptySearchLabel="Aucun serveur"
+                    getOptionKey={(option) => option.name}
+                    getOptionLabel={(option) => option.name}
+                    showCount={false}
+                  />
                 </label>
 
                 <label className="block space-y-2">

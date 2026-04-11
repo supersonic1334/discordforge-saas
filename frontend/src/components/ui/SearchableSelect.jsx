@@ -17,6 +17,10 @@ export default function SearchableSelect({
   getOptionKey = (option) => option?.id ?? option?.value ?? String(option),
   getOptionLabel = (option) => option?.label ?? option?.name ?? String(option),
   countSuffix = 'elements',
+  showCount = true,
+  compact = false,
+  buttonClassName = '',
+  panelClassName = '',
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -84,25 +88,27 @@ export default function SearchableSelect({
           setOpen((current) => !current)
         }}
         disabled={disabled}
-        className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-slate-950/60 px-4 py-3 text-left text-white outline-none transition-colors hover:border-neon-cyan/24 focus-visible:border-neon-cyan/30 disabled:cursor-not-allowed disabled:opacity-45"
+        className={`group flex w-full items-center justify-between gap-3 border border-white/[0.08] bg-slate-950/60 text-left text-white outline-none transition-colors hover:border-neon-cyan/24 focus-visible:border-neon-cyan/30 disabled:cursor-not-allowed disabled:opacity-45 ${compact ? 'rounded-xl px-3 py-2.5' : 'rounded-2xl px-4 py-3'} ${buttonClassName}`}
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-mono uppercase tracking-[0.22em] text-white/28">
-            {loading ? 'Chargement' : label}
-          </span>
-          <span className="mt-1 block truncate font-display text-base font-700 text-white">
+          {!compact && (
+            <span className="block text-[11px] font-mono uppercase tracking-[0.22em] text-white/28">
+              {loading ? 'Chargement' : label}
+            </span>
+          )}
+          <span className={`block truncate font-display font-700 text-white ${compact ? 'text-sm' : 'mt-1 text-base'}`}>
             {selectedOption
               ? (renderValue ? renderValue(selectedOption) : getOptionLabel(selectedOption))
               : (loading ? 'Chargement...' : placeholder)}
           </span>
         </span>
         <span className="flex items-center gap-3">
-          {options.length > 0 && (
+          {showCount && options.length > 0 && (
             <span className="hidden rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[11px] font-mono text-white/42 sm:inline-flex">
               {options.length} {countSuffix}
             </span>
           )}
-          <ChevronDown className={`h-4.5 w-4.5 shrink-0 text-white/55 transition-transform duration-200 ${open ? 'rotate-180 text-neon-cyan' : ''}`} />
+          <ChevronDown className={`shrink-0 text-white/55 transition-transform duration-200 ${compact ? 'h-4 w-4' : 'h-4.5 w-4.5'} ${open ? 'rotate-180 text-neon-cyan' : ''}`} />
         </span>
       </button>
 
@@ -113,7 +119,7 @@ export default function SearchableSelect({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.985 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="absolute left-0 right-0 top-[calc(100%+10px)] z-30 overflow-hidden rounded-[24px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(8,12,24,0.98),rgba(5,9,19,0.99))] p-2 shadow-[0_28px_80px_rgba(0,0,0,0.46),0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-2xl"
+            className={`absolute left-0 right-0 top-[calc(100%+10px)] z-30 overflow-hidden border border-white/[0.08] bg-[linear-gradient(180deg,rgba(8,12,24,0.98),rgba(5,9,19,0.99))] p-2 shadow-[0_28px_80px_rgba(0,0,0,0.46),0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-2xl ${compact ? 'rounded-2xl' : 'rounded-[24px]'} ${panelClassName}`}
           >
             <div className="mb-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
               <div className="flex items-center gap-2">

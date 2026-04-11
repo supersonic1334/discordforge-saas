@@ -6,6 +6,7 @@ import { useI18n } from '../i18n'
 import { useAuthStore } from '../stores'
 import KeyDeleteConfirmDialog from '../components/KeyDeleteConfirmDialog'
 import ProviderQuickLinks from '../components/ProviderQuickLinks'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const DEFAULT_AI_CFG = {
   provider: 'anthropic',
@@ -720,15 +721,20 @@ export default function AdminPanel() {
           </div>
 
           <div className="mt-3 flex flex-col gap-2 lg:flex-row">
-            <select
-              className="select-field flex-1"
-              value={selectedModelValue}
-              onChange={(event) => setProviderKeyModelDrafts((prev) => ({ ...prev, [entry.id]: event.target.value }))}
-            >
-              {providerModels.map((model) => (
-                <option key={model.id} value={model.id}>{model.label}</option>
-              ))}
-            </select>
+            <div className="flex-1">
+              <SearchableSelect
+                label={t('admin.providerKeyModelLabel', 'Modele choisi')}
+                value={selectedModelValue}
+                onChange={(option) => setProviderKeyModelDrafts((prev) => ({ ...prev, [entry.id]: option.id }))}
+                options={providerModels}
+                placeholder={t('admin.providerKeyModelLabel', 'Modele choisi')}
+                emptyLabel={t('admin.providerKeyModelLabel', 'Modele choisi')}
+                emptySearchLabel={t('admin.providerKeyModelLabel', 'Modele choisi')}
+                getOptionKey={(option) => option.id}
+                getOptionLabel={(option) => option.label}
+                showCount={false}
+              />
+            </div>
             <button
               type="button"
               onClick={() => updateProviderKeyModel(entry)}
@@ -827,19 +833,22 @@ export default function AdminPanel() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-display font-600 text-white">{user.username}</p>
                       {!isPrimaryFounder && (
-                        <select
-                          value={user.role}
-                          onChange={(e) => setRole(user.id, e.target.value)}
-                          disabled={isCurrentFounder || isUpdatingThisUser}
-                          title={isCurrentFounder ? t('admin.selfFounderLock') : undefined}
-                          className={`select-compact min-w-[118px] max-w-[138px] ${(
-                            isCurrentFounder || isUpdatingThisUser
-                          ) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                        >
-                          {roleOptions.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
+                          <div className="min-w-[138px] max-w-[180px]">
+                            <SearchableSelect
+                              label={t('admin.rolesLabel', 'Role')}
+                              value={user.role}
+                              onChange={(option) => setRole(user.id, option.value)}
+                              disabled={isCurrentFounder || isUpdatingThisUser}
+                              options={roleOptions}
+                              placeholder={t('admin.rolesLabel', 'Role')}
+                              emptyLabel={t('admin.rolesLabel', 'Role')}
+                              emptySearchLabel={t('admin.rolesLabel', 'Role')}
+                              getOptionKey={(option) => option.value}
+                              getOptionLabel={(option) => option.label}
+                              showCount={false}
+                              compact
+                            />
+                          </div>
                       )}
                       <span className={`badge capitalize ${roleBadgeClass}`}>{roleLabel}</span>
                     </div>
@@ -1170,14 +1179,22 @@ export default function AdminPanel() {
             <p className="font-display font-600 text-white">{t('admin.aiTitle')}</p>
             <div className="min-w-[165px]">
               <label className="text-[11px] font-mono text-white/40 mb-1 block">{t('admin.autoMode')}</label>
-              <select
-                className={`select-compact w-full ${aiCfg.auto_mode ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-red-500/30 text-red-400 bg-red-500/10'}`}
+              <SearchableSelect
+                label={t('admin.autoMode')}
                 value={aiCfg.auto_mode ? 'auto' : 'manual'}
-                onChange={(e) => setAiCfg((prev) => ({ ...prev, auto_mode: e.target.value === 'auto' }))}
-              >
-                <option value="auto">{t('admin.autoModeEnabled')}</option>
-                <option value="manual">{t('admin.autoModeDisabled')}</option>
-              </select>
+                onChange={(option) => setAiCfg((prev) => ({ ...prev, auto_mode: option.value === 'auto' }))}
+                options={[
+                  { value: 'auto', label: t('admin.autoModeEnabled') },
+                  { value: 'manual', label: t('admin.autoModeDisabled') },
+                ]}
+                placeholder={t('admin.autoMode')}
+                emptyLabel={t('admin.autoMode')}
+                emptySearchLabel={t('admin.autoMode')}
+                getOptionKey={(option) => option.value}
+                getOptionLabel={(option) => option.label}
+                showCount={false}
+                compact
+              />
             </div>
           </div>
           <p className="text-xs text-white/45">
@@ -1193,11 +1210,18 @@ export default function AdminPanel() {
               value={providerSearch}
               onChange={(e) => setProviderSearch(e.target.value)}
             />
-            <select className="select-field" value={aiCfg.provider} onChange={(e) => handleProviderChange(e.target.value)}>
-              {visibleProviders.map((provider) => (
-                <option key={provider.id} value={provider.id}>{provider.label}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              label={t('admin.provider')}
+              value={aiCfg.provider}
+              onChange={(option) => handleProviderChange(option.id)}
+              options={visibleProviders}
+              placeholder={t('admin.provider')}
+              emptyLabel={t('admin.provider')}
+              emptySearchLabel={t('admin.provider')}
+              getOptionKey={(option) => option.id}
+              getOptionLabel={(option) => option.label}
+              showCount={false}
+            />
             {selectedProvider?.description && <p className="text-xs text-white/35 mt-1">{selectedProvider.description}</p>}
           </div>
 
@@ -1237,11 +1261,18 @@ export default function AdminPanel() {
               value={modelSearch}
               onChange={(e) => setModelSearch(e.target.value)}
             />
-            <select className="select-field" value={selectedModel?.id || aiCfg.model} onChange={(e) => setAiCfg((prev) => ({ ...prev, model: e.target.value }))}>
-              {visibleModels.map((model) => (
-                <option key={model.id} value={model.id}>{model.label}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              label={t('admin.model')}
+              value={selectedModel?.id || aiCfg.model}
+              onChange={(option) => setAiCfg((prev) => ({ ...prev, model: option.id }))}
+              options={visibleModels}
+              placeholder={t('admin.model')}
+              emptyLabel={t('admin.model')}
+              emptySearchLabel={t('admin.model')}
+              getOptionKey={(option) => option.id}
+              getOptionLabel={(option) => option.label}
+              showCount={false}
+            />
             <p className="text-xs text-white/35 mt-1">{selectedModel?.description || t('admin.modelHelp')}</p>
             {aiCfg.provider === 'gemini' && <p className="text-xs text-green-400/70 mt-1">{t('admin.freeTierOnly')}</p>}
             {selectedModel?.deprecated && <p className="text-xs text-amber-400/70 mt-1">{t('admin.deprecated')}</p>}

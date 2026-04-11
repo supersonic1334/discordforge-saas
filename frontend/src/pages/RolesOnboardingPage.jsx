@@ -6,6 +6,7 @@ import { botAPI, modulesAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useGuildStore } from '../stores'
 import { useI18n } from '../i18n'
+import SearchableSelect from '../components/ui/SearchableSelect'
 
 const TEXT_CHANNEL_TYPES = [0, 5, 11, 12, 15]
 const DELAY_OPTIONS = [
@@ -369,16 +370,18 @@ export default function RolesOnboardingPage() {
               />
             </label>
 
-            <select
-              className="select-field"
+            <SearchableSelect
+              label="Salon de bienvenue"
               value={welcomeForm.channel_id}
-              onChange={(event) => setWelcomeForm((current) => ({ ...current, channel_id: event.target.value }))}
-            >
-              <option value="">Choisir un salon texte</option>
-              {textChannels.map((channel) => (
-                <option key={channel.id} value={channel.id}>#{channel.name}</option>
-              ))}
-            </select>
+              onChange={(option) => setWelcomeForm((current) => ({ ...current, channel_id: option.id }))}
+              options={textChannels}
+              placeholder="Choisir un salon texte"
+              emptyLabel="Aucun salon texte"
+              emptySearchLabel="Aucun salon"
+              getOptionKey={(option) => option.id}
+              getOptionLabel={(option) => `#${option.name}`}
+              showCount={false}
+            />
 
             <textarea
               className="input-field min-h-[150px] resize-y"
@@ -529,15 +532,18 @@ export default function RolesOnboardingPage() {
               })}
             </div>
 
-            <select
-              className="select-field"
+            <SearchableSelect
+              label="Delai d'attribution"
               value={autoRoleForm.delay_ms}
-              onChange={(event) => setAutoRoleForm((current) => ({ ...current, delay_ms: Number(event.target.value) }))}
-            >
-              {DELAY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+              onChange={(option) => setAutoRoleForm((current) => ({ ...current, delay_ms: Number(option.value) }))}
+              options={DELAY_OPTIONS}
+              placeholder="Choisir un delai"
+              emptyLabel="Aucun delai"
+              emptySearchLabel="Aucun delai"
+              getOptionKey={(option) => option.value}
+              getOptionLabel={(option) => option.label}
+              showCount={false}
+            />
 
             <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-sm text-white/70">
               <span>Ignorer les bots</span>
