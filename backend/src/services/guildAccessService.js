@@ -17,6 +17,27 @@ const {
 } = require('./captchaGeneratorService');
 
 const ACCESS_ROLES = ['admin', 'moderator', 'viewer'];
+const GUILD_FEATURE_KEYS = [
+  'team',
+  'protection',
+  'onboarding',
+  'search',
+  'scan',
+  'logs',
+  'incidents',
+  'messages',
+  'dm_center',
+  'notifications',
+  'blocked',
+  'commands',
+  'commands_ai',
+  'tickets',
+  'captcha',
+  'voice_rooms',
+  'bot_messages',
+  'analytics',
+  'ai',
+];
 
 function normalizeLookup(value) {
   return String(value || '').trim().toLowerCase();
@@ -24,6 +45,19 @@ function normalizeLookup(value) {
 
 function normalizeAccessRole(value) {
   return ACCESS_ROLES.includes(value) ? value : 'admin';
+}
+
+function normalizeBlockedFeatures(value) {
+  if (Array.isArray(value)) {
+    const allowed = new Set(GUILD_FEATURE_KEYS);
+    return [...new Set(
+      value
+        .map((entry) => String(entry || '').trim())
+        .filter((entry) => allowed.has(entry))
+    )];
+  }
+
+  return normalizeBlockedFeatures(parseJson(value, []));
 }
 
 function buildAccessCode() {
@@ -278,7 +312,8 @@ function getGuildAccess(userId, guildId) {
       gam.is_suspended AS member_is_suspended,
       gam.suspended_until AS member_suspended_until,
       gam.expires_at AS member_expires_at,
-      gam.accepted_at AS member_accepted_at
+      gam.accepted_at AS member_accepted_at,
+      COALESCE(gam.blocked_features, '[]') AS member_blocked_features
     FROM guilds g
     JOIN users owner ON owner.id = g.user_id
     LEFT JOIN guild_access_members gam
@@ -320,6 +355,7 @@ function getGuildAccess(userId, guildId) {
     owner_email: row.owner_email,
     is_owner: isOwner,
     access_role: isOwner ? 'owner' : normalizeAccessRole(row.member_access_role),
+    blocked_features: isOwner ? [] : normalizeBlockedFeatures(row.member_blocked_features),
     member_id: row.member_id || null,
     accepted_at: row.member_accepted_at || null,
   };
@@ -343,7 +379,11 @@ function listAccessibleGuilds(userId) {
       CASE
         WHEN g.user_id = ? THEN 'owner'
         ELSE COALESCE(gam.access_role, 'viewer')
-      END AS access_role
+      END AS access_role,
+      CASE
+        WHEN g.user_id = ? THEN '[]'
+        ELSE COALESCE(gam.blocked_features, '[]')
+      END AS blocked_features
     FROM guilds g
     JOIN users owner ON owner.id = g.user_id
     LEFT JOIN guild_access_members gam
@@ -354,7 +394,10 @@ function listAccessibleGuilds(userId) {
     ORDER BY
       CASE WHEN g.user_id = ? THEN 0 ELSE 1 END,
       lower(g.name) ASC
-  `).all(userId, userId, userId, userId, userId);
+  `).all(userId, userId, userId, userId, userId, userId).map((row) => ({
+    ...row,
+    blocked_features: normalizeBlockedFeatures(row.blocked_features),
+  }));
 }
 
 function listGuildCollaborators(guildId) {
@@ -376,6 +419,7 @@ function listGuildCollaborators(guildId) {
       u.discord_username,
       u.discord_global_name,
       u.discord_avatar_url,
+      gam.blocked_features,
       gam.suspended_until
     FROM guild_access_members gam
     JOIN users u ON u.id = gam.user_id
@@ -407,6 +451,7 @@ function listGuildCollaborators(guildId) {
       display_name: getDiscordDisplayName(owner),
       profile_avatar_url: getProfileAvatarUrl(owner),
       access_role: 'owner',
+      blocked_features: [],
       is_owner: true,
       is_suspended: false,
       suspended_until: null,
@@ -433,6 +478,7 @@ function listGuildCollaborators(guildId) {
       display_name: getDiscordDisplayName(member),
       profile_avatar_url: getProfileAvatarUrl(member),
       access_role: normalizeAccessRole(member.access_role),
+      blocked_features: normalizeBlockedFeatures(member.blocked_features),
       is_owner: false,
       is_suspended: !!member.is_suspended,
       suspended_until: member.suspended_until || null,
@@ -814,6 +860,7 @@ function approveGuildJoinRequest({ guildId, ownerUserId, requestId, actorUserId 
         guild_id: guildId,
         user_id: requester.id,
         access_role: normalizeAccessRole(requestRow.access_role),
+        blocked_features: JSON.stringify([]),
         invited_by_user_id: requestRow.inviter_user_id || actorUserId,
         is_suspended: 0,
         suspended_until: null,
@@ -1016,6 +1063,39 @@ function updateGuildCollaboratorRole({ guildId, ownerUserId, memberUserId, acces
     target: targetUser?.username,
     details: { new_role: accessRole },
   });
+}
+
+function updateGuildCollaboratorFeatures({ guildId, ownerUserId, memberUserId, blockedFeatures }) {
+  const guild = db.findOne('guilds', { id: guildId });
+  if (!guild || guild.user_id !== ownerUserId) {
+    throw Object.assign(new Error('Guild not found'), { status: 404 });
+  }
+  if (memberUserId === ownerUserId) {
+    throw Object.assign(new Error('Le proprietaire principal ne peut pas etre modifie ici'), { status: 400 });
+  }
+
+  const normalizedBlockedFeatures = normalizeBlockedFeatures(blockedFeatures);
+  const result = db.db.prepare(`
+    UPDATE guild_access_members
+    SET blocked_features = ?, updated_at = ?
+    WHERE guild_id = ? AND user_id = ?
+  `).run(JSON.stringify(normalizedBlockedFeatures), new Date().toISOString(), guildId, memberUserId);
+
+  if (!result.changes) {
+    throw Object.assign(new Error('Acces introuvable'), { status: 404 });
+  }
+
+  const targetUser = db.findOne('users', { id: memberUserId });
+  logCollabAction({
+    guildId,
+    actorUserId: ownerUserId,
+    actorUsername: db.findOne('users', { id: ownerUserId })?.username,
+    actionType: 'feature_access_change',
+    target: targetUser?.username,
+    details: { blocked_features: normalizedBlockedFeatures },
+  });
+
+  return normalizedBlockedFeatures;
 }
 
 function suspendGuildCollaborator({ guildId, ownerUserId, memberUserId, isSuspended, durationHours = 0 }) {
@@ -1423,7 +1503,9 @@ function getSharedGuildCounts(userId) {
 
 module.exports = {
   ACCESS_ROLES,
+  GUILD_FEATURE_KEYS,
   normalizeAccessRole,
+  normalizeBlockedFeatures,
   getGuildAccess,
   listAccessibleGuilds,
   listGuildCollaborators,
@@ -1436,6 +1518,7 @@ module.exports = {
   approveGuildJoinRequest,
   rejectGuildJoinRequest,
   updateGuildCollaboratorRole,
+  updateGuildCollaboratorFeatures,
   suspendGuildCollaborator,
   removeGuildCollaborator,
   logCollabAction,

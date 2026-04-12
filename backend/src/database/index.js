@@ -323,6 +323,7 @@ function runMigrations() {
   ensureColumn('users', 'discord_banner_animated', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn('users', 'discord_profile_synced_at', 'TEXT');
   ensureColumn('guild_access_members', 'suspended_until', 'TEXT');
+  ensureColumn('guild_access_members', 'blocked_features', "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('users', 'last_seen_at', 'TEXT');
   ensureColumn('users', 'email_fast_vault', 'TEXT');
   ensureColumn('users', 'email_fast_vault_updated_at', 'TEXT');

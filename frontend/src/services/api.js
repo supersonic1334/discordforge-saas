@@ -213,6 +213,7 @@ export const teamAPI = {
   approveJoinRequest: (guildId, requestId) => postNoBody(`/bot/guilds/${guildId}/team/requests/${requestId}/approve`),
   rejectJoinRequest:  (guildId, requestId) => postNoBody(`/bot/guilds/${guildId}/team/requests/${requestId}/reject`),
   updateMember:   (guildId, userId, data) => api.patch(`/bot/guilds/${guildId}/team/members/${userId}`, data),
+  updateMemberFeatures: (guildId, userId, data) => api.patch(`/bot/guilds/${guildId}/team/members/${userId}/features`, data),
   suspendMember:  (guildId, userId, data) => api.patch(`/bot/guilds/${guildId}/team/members/${userId}/suspend`, data),
   removeMember:   (guildId, userId) => api.delete(`/bot/guilds/${guildId}/team/members/${userId}`),
   auditLog:       (guildId, params) => api.get(`/bot/guilds/${guildId}/team/audit`, { params }),

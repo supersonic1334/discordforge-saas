@@ -111,6 +111,14 @@ const botProfileSchema = z.object({
   presence_status: z.enum(['online', 'idle', 'dnd', 'invisible']).optional(),
   activity_type: z.enum(['playing', 'listening', 'watching', 'competing', 'streaming']).optional(),
   activity_text: z.string().trim().max(128).optional(),
+  avatar: z.string()
+    .trim()
+    .max(4_000_000)
+    .refine(
+      (value) => /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value),
+      'Invalid avatar image'
+    )
+    .optional(),
 }).refine((value) => Object.keys(value).length > 0, {
   message: 'At least one field is required',
 });
@@ -216,6 +224,30 @@ const guildAccessCodeRedeemSchema = z.object({
 
 const guildAccessRoleSchema = z.object({
   access_role: z.enum(['admin', 'moderator', 'viewer']),
+});
+
+const guildAccessFeatureSchema = z.object({
+  blocked_features: z.array(z.enum([
+    'team',
+    'protection',
+    'onboarding',
+    'search',
+    'scan',
+    'logs',
+    'incidents',
+    'messages',
+    'dm_center',
+    'notifications',
+    'blocked',
+    'commands',
+    'commands_ai',
+    'tickets',
+    'captcha',
+    'voice_rooms',
+    'bot_messages',
+    'analytics',
+    'ai',
+  ])).max(32).default([]),
 });
 
 const guildSnapshotCreateSchema = z.object({
@@ -635,6 +667,7 @@ module.exports = {
   guildAccessCodeCreateSchema,
   guildAccessCodeRedeemSchema,
   guildAccessRoleSchema,
+  guildAccessFeatureSchema,
   guildAccessSuspendSchema,
   guildSnapshotCreateSchema,
   guildBackupImportSchema,

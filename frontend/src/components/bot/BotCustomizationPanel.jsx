@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Bot, Eye, Gamepad2, Headphones, Radio, Save, Sparkles, Trophy } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Bot, Eye, Gamepad2, Headphones, ImagePlus, Radio, Save, Sparkles, Trophy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { botAPI } from '../../services/api'
 import BotStudioCard from './BotStudioCard'
@@ -47,6 +47,7 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
   const [initialProfile, setInitialProfile] = useState(DEFAULT_PROFILE)
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
+  const avatarInputRef = useRef(null)
 
   useEffect(() => {
     if (!canManageBot) return undefined
@@ -77,6 +78,33 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
     setProfile((current) => ({ ...current, [field]: value }))
   }
 
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    if (!String(file.type || '').startsWith('image/')) {
+      toast.error('Choisis une image valide')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image trop lourde (max 2 Mo)')
+      return
+    }
+
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = () => reject(new Error('read_failed'))
+        reader.readAsDataURL(file)
+      })
+      handleField('avatar_url', dataUrl)
+    } catch {
+      toast.error("Impossible de lire l'image")
+    }
+  }
+
   const handleSave = async () => {
     if (!canManageBot) return
 
@@ -86,6 +114,10 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
     if (profile.description !== initialProfile.description) payload.bio = profile.description.trim()
     if (profile.presence_status !== initialProfile.presence_status) payload.presence_status = profile.presence_status
     if (profile.activity_type !== initialProfile.activity_type) payload.activity_type = profile.activity_type
+    if (profile.activity_text !== initialProfile.activity_text) payload.activity_text = profile.activity_text.trim()
+    if (profile.avatar_url && profile.avatar_url !== initialProfile.avatar_url && profile.avatar_url.startsWith('data:image/')) {
+      payload.avatar = profile.avatar_url
+    }
 
     if (!Object.keys(payload).length) {
       toast.success('Aucune modification a enregistrer')
@@ -124,7 +156,7 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
   return (
     <BotStudioCard
       title="Personnalisation du bot"
-      subtitle="Statut, activite, pseudo et biographie modifies en direct sur Discord."
+      subtitle="Statut, activite, avatar, pseudo et biographie modifies en direct sur Discord."
       icon={Sparkles}
     >
       <div className="flex flex-col gap-5">
@@ -141,6 +173,23 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
             <p className="mt-1 text-sm text-white/45">
               {profile.is_running ? 'Modifications live actives' : 'Le bot est hors ligne, les reglages seront repris au prochain lancement'}
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-xl border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs font-mono text-neon-cyan transition-all hover:bg-neon-cyan/16"
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                Changer l'avatar
+              </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+            </div>
           </div>
         </div>
 
@@ -184,6 +233,17 @@ export default function BotCustomizationPanel({ canManageBot, onProfileUpdated }
               value={profile.username}
               onChange={(event) => handleField('username', event.target.value.slice(0, 32))}
               placeholder="Nexus"
+              className="w-full rounded-2xl border border-white/[0.08] bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-white/22 focus:border-neon-cyan/30"
+            />
+          </label>
+
+          <label className="space-y-2 md:col-span-2">
+            <span className="text-[11px] font-mono uppercase tracking-[0.22em] text-white/30">Texte affiche sur Discord</span>
+            <input
+              type="text"
+              value={profile.activity_text}
+              onChange={(event) => handleField('activity_text', event.target.value.slice(0, 128))}
+              placeholder="Joue a Roblox"
               className="w-full rounded-2xl border border-white/[0.08] bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-white/22 focus:border-neon-cyan/30"
             />
           </label>

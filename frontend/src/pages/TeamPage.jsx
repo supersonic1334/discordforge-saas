@@ -43,6 +43,7 @@ import { useAuthStore, useGuildStore } from '../stores'
 import { wsService } from '../services/websocket'
 import { openDiscordLinkPopup } from '../utils/discordLinkPopup'
 import SearchableSelect from '../components/ui/SearchableSelect'
+import { GUILD_FEATURE_OPTIONS, normalizeBlockedFeatures } from '../constants/guildFeatureAccess'
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -92,6 +93,12 @@ function initials(name) {
 
 function formatAuditValue(key, value) {
   if (value == null || value === '') return null
+  if (Array.isArray(value)) {
+    const labels = value
+      .map((entry) => GUILD_FEATURE_OPTIONS.find((option) => option.key === entry)?.label || String(entry || '').trim())
+      .filter(Boolean)
+    return labels.length > 0 ? labels.join(', ') : 'Aucune'
+  }
   if (typeof value === 'boolean') return value ? 'oui' : 'non'
   if (key === 'expires_in_hours' && Number(value) > 0) return `${value}h`
   if (key === 'suspended_until' || key === 'expires_at') return formatDate('fr-FR', value)
@@ -222,6 +229,7 @@ const AUDIT_ACTION_CONFIG = {
   snapshot_restore: { label: 'Sauvegarde restaurée',     icon: RotateCcw, bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   text: 'text-amber-400' },
   snapshot_delete:  { label: 'Sauvegarde supprimee',     icon: Trash2,    bg: 'bg-red-500/10',     border: 'border-red-500/20',     text: 'text-red-400' },
   site_action:      { label: 'Action synchronisee',      icon: Terminal,  bg: 'bg-neon-cyan/10',   border: 'border-neon-cyan/20',   text: 'text-neon-cyan' },
+  feature_access_change: { label: 'Accès sections mis à jour', icon: ShieldCheck, bg: 'bg-violet-500/10', border: 'border-violet-500/20', text: 'text-violet-300' },
 }
 
 // â”€â”€ Micro-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -696,6 +704,22 @@ export default function TeamPage() {
     }
   }
 
+  const handleMemberFeatures = async (memberUserId, blockedFeatures) => {
+    if (!selectedGuildId || !memberUserId) return
+    setSaving(`feature:${memberUserId}`)
+    try {
+      const response = await teamAPI.updateMemberFeatures(selectedGuildId, memberUserId, {
+        blocked_features: normalizeBlockedFeatures(blockedFeatures),
+      })
+      setOverview(response.data)
+      toast.success('Accès mis à jour')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSaving('')
+    }
+  }
+
   const handleCreateSnapshot = async () => {
     if (!selectedGuildId) return
     setSaving('snapshot:create')
@@ -893,6 +917,7 @@ export default function TeamPage() {
               onRejectJoinRequest={handleRejectJoinRequest}
               onSuspend={handleSuspend}
               onRemoveMember={handleRemoveMember}
+              onUpdateMemberFeatures={handleMemberFeatures}
             />
           </motion.div>
         )}
@@ -1726,6 +1751,80 @@ function CollaboratorDetailsPanel({ entry }) {
   )
 }
 
+function CollaboratorFeatureAccessPanel({ entry, saving, onUpdateMemberFeatures }) {
+  const blockedFeatures = normalizeBlockedFeatures(entry.blocked_features)
+  const blockedSet = new Set(blockedFeatures)
+  const activeCount = GUILD_FEATURE_OPTIONS.length - blockedFeatures.length
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8, height: 0 }}
+      animate={{ opacity: 1, y: 0, height: 'auto' }}
+      exit={{ opacity: 0, y: -4, height: 0 }}
+      transition={{ duration: 0.2, delay: 0.03 }}
+      className="overflow-hidden"
+    >
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/28">Accès par section</p>
+            <p className="mt-1 text-sm text-white/52">Chaque clic agit instantanément sur la sidebar du collaborateur.</p>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-xl border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-[11px] font-mono text-neon-cyan">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            {activeCount} section{activeCount > 1 ? 's' : ''} active{activeCount > 1 ? 's' : ''}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {GUILD_FEATURE_OPTIONS.map((option) => {
+            const blocked = blockedSet.has(option.key)
+            const pending = saving === `feature:${entry.user_id}`
+
+            return (
+              <button
+                key={`${entry.user_id}:${option.key}`}
+                type="button"
+                disabled={pending}
+                onClick={() => onUpdateMemberFeatures(
+                  entry.user_id,
+                  blocked
+                    ? blockedFeatures.filter((featureKey) => featureKey !== option.key)
+                    : [...blockedFeatures, option.key]
+                )}
+                className={`rounded-2xl border p-3 text-left transition-all disabled:opacity-50 ${
+                  blocked
+                    ? 'border-white/10 bg-white/[0.02] text-white/45 hover:border-red-400/20 hover:bg-red-500/[0.05]'
+                    : 'border-emerald-400/15 bg-emerald-500/[0.06] text-white hover:border-emerald-400/25 hover:bg-emerald-500/[0.10]'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-xl border ${
+                    blocked
+                      ? 'border-white/10 bg-white/[0.03] text-white/35'
+                      : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'
+                  }`}>
+                    {blocked ? <Lock className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                  </div>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-mono uppercase tracking-[0.16em] ${
+                    blocked
+                      ? 'border border-white/10 bg-white/[0.03] text-white/35'
+                      : 'border border-emerald-400/20 bg-emerald-500/10 text-emerald-200'
+                  }`}>
+                    {blocked ? 'bloqué' : 'actif'}
+                  </span>
+                </div>
+                <p className="mt-3 font-display text-sm font-700 leading-tight">{option.label}</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/42">{option.description}</p>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 function CollaboratorsTab({
   user,
   isOwner,
@@ -1745,6 +1844,7 @@ function CollaboratorsTab({
   onRejectJoinRequest,
   onSuspend,
   onRemoveMember,
+  onUpdateMemberFeatures,
 }) {
   const [expandedId, setExpandedId] = useState(null)
 
@@ -1798,7 +1898,11 @@ function CollaboratorsTab({
           />
         ) : (
           <div className="space-y-3">
-            {nonOwnerCollabs.map((entry, index) => (
+            {nonOwnerCollabs.map((entry, index) => {
+              const blockedFeatures = normalizeBlockedFeatures(entry.blocked_features)
+              const activeSections = GUILD_FEATURE_OPTIONS.length - blockedFeatures.length
+
+              return (
               <motion.div
                 key={entry.id}
                 initial={{ opacity: 0, y: 8 }}
@@ -1827,6 +1931,7 @@ function CollaboratorsTab({
                         {entry.discord_username && <span>@{entry.discord_username}</span>}
                         {entry.discord_id && <span>ID {entry.discord_id}</span>}
                         <span>Depuis {timeAgo(entry.accepted_at || entry.created_at)}</span>
+                        <span>{activeSections} section{activeSections > 1 ? 's' : ''} active{activeSections > 1 ? 's' : ''}</span>
                       </div>
                     </div>
                   </div>
@@ -1892,10 +1997,22 @@ function CollaboratorsTab({
                 </div>
 
                 <AnimatePresence initial={false}>
-                  {expandedId === entry.id && <CollaboratorDetailsPanel entry={entry} />}
+                  {expandedId === entry.id && (
+                    <div className="space-y-3 pt-1">
+                      <CollaboratorDetailsPanel entry={entry} />
+                      {isOwner && (
+                        <CollaboratorFeatureAccessPanel
+                          entry={entry}
+                          saving={saving}
+                          onUpdateMemberFeatures={onUpdateMemberFeatures}
+                        />
+                      )}
+                    </div>
+                  )}
                 </AnimatePresence>
               </motion.div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

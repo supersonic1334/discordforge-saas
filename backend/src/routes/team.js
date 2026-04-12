@@ -14,6 +14,7 @@ const {
 const {
   guildAccessCodeCreateSchema,
   guildAccessRoleSchema,
+  guildAccessFeatureSchema,
   guildAccessSuspendSchema,
   guildSnapshotCreateSchema,
   guildBackupImportSchema,
@@ -78,6 +79,7 @@ function buildOverview(req) {
     access: {
       is_owner: !!access?.is_owner,
       access_role: access?.access_role || 'viewer',
+      blocked_features: access?.blocked_features || [],
       owner_user_id: access?.owner_user_id || req.guild.user_id,
       owner_username: access?.owner_username || null,
       owner_avatar_url: access?.owner_avatar_url || null,
@@ -98,6 +100,7 @@ function buildOverview(req) {
       display_name: entry.display_name || entry.username,
       profile_avatar_url: entry.profile_avatar_url || entry.avatar_url || null,
       access_role: entry.access_role,
+      blocked_features: entry.blocked_features || [],
       is_owner: !!entry.is_owner,
       is_suspended: !!entry.is_suspended,
       suspended_until: entry.suspended_until || null,
@@ -252,6 +255,27 @@ router.patch('/members/:memberUserId', requireGuildPrimaryOwner, validate(guildA
 
     res.json({
       message: 'Role partage mis a jour',
+      ...buildOverview(req),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/members/:memberUserId/features', requireGuildPrimaryOwner, validate(guildAccessFeatureSchema), (req, res, next) => {
+  try {
+    guildAccessService.updateGuildCollaboratorFeatures({
+      guildId: req.guild.id,
+      ownerUserId: req.guild.user_id,
+      memberUserId: req.params.memberUserId,
+      blockedFeatures: req.body.blocked_features,
+    });
+
+    notifyProfileRefresh(req.params.memberUserId, 'guild_feature_access_updated');
+    notifyAllCollaborators(req.guild.id, 'team:updated', { guildId: req.guild.id }, req.user.id);
+
+    res.json({
+      message: 'Acces collaborateur mis a jour',
       ...buildOverview(req),
     });
   } catch (error) {

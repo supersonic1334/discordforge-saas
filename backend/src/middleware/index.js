@@ -134,12 +134,69 @@ function requireOsintAccess(req, res, next) {
   next();
 }
 
+function buildFeatureDeniedResponse(res, featureKeys = []) {
+  return res.status(403).json({
+    error: 'Section indisponible pour ce collaborateur',
+    code: 'FEATURE_ACCESS_DENIED',
+    blocked_features: featureKeys,
+  });
+}
+
+function getGuildFeatureCandidates(req) {
+  const baseUrl = String(req.baseUrl || '');
+  const path = String(req.path || '');
+  const moduleType = String(req.params?.type || req.query?.module_type || req.body?.module_type || '').trim().toUpperCase();
+  const moduleScope = String(req.query?.scope || req.body?.scope || '').trim().toLowerCase();
+
+  if (baseUrl.endsWith('/team')) return ['team'];
+  if (baseUrl.endsWith('/scan') || baseUrl.endsWith('/rassican')) return ['scan'];
+  if (baseUrl.endsWith('/logs')) return ['logs'];
+  if (baseUrl.endsWith('/moderation')) return ['incidents'];
+  if (baseUrl.endsWith('/blocked')) return ['blocked'];
+  if (baseUrl.endsWith('/tickets')) return ['tickets'];
+  if (baseUrl.endsWith('/captcha')) return ['captcha'];
+  if (baseUrl.endsWith('/voice-rooms')) return ['voice_rooms'];
+
+  if (baseUrl.endsWith('/messages')) {
+    if (path.startsWith('/channel')) return ['bot_messages'];
+    if (path.startsWith('/config')) return ['notifications', 'dm_center'];
+    if (path.startsWith('/search') || path.startsWith('/direct')) return ['messages', 'dm_center', 'search'];
+    return ['messages', 'dm_center', 'notifications', 'bot_messages', 'search'];
+  }
+
+  if (baseUrl.endsWith('/commands')) {
+    if (path.startsWith('/assistant')) return ['commands_ai'];
+    return ['commands', 'commands_ai'];
+  }
+
+  if (baseUrl.endsWith('/modules')) {
+    if (moduleType === 'WELCOME_MESSAGE' || moduleType === 'AUTO_ROLE') return ['onboarding'];
+    if (moduleType) return ['protection'];
+    if (moduleScope === 'onboarding') return ['onboarding'];
+    if (moduleScope === 'protection') return ['protection'];
+    return ['protection', 'onboarding'];
+  }
+
+  return [];
+}
+
+function hasGuildFeatureAccess(access, featureKey) {
+  if (!featureKey || access?.is_owner) return true;
+  const blocked = new Set(guildAccessService.normalizeBlockedFeatures(access?.blocked_features));
+  return !blocked.has(featureKey);
+}
+
 function requireGuildOwner(req, res, next) {
   const { guildId } = req.params;
   if (!guildId) return res.status(400).json({ error: 'Missing guildId param' });
 
   const access = guildAccessService.getGuildAccess(req.user.id, guildId);
   if (!access) return res.status(404).json({ error: 'Guild not found or access denied' });
+
+  const featureCandidates = getGuildFeatureCandidates(req);
+  if (featureCandidates.length > 0 && !featureCandidates.some((featureKey) => hasGuildFeatureAccess(access, featureKey))) {
+    return buildFeatureDeniedResponse(res, featureCandidates);
+  }
 
   req.guild = access.guild;
   req.guildAccess = access;

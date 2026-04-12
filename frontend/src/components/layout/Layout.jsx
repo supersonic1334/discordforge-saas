@@ -1,15 +1,16 @@
-import { memo, useState, useEffect, useRef } from 'react'
+import { memo, useState, useEffect, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Server, Shield, Terminal, BarChart3,
   LogOut, Settings, ChevronLeft, ChevronRight,
-  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket, ShieldCheck, Volume2, SlidersHorizontal, MessageSquareText
+  Bot, Crown, Menu, Unplug, KeyRound, LifeBuoy, Star, Ban, Send, Users, Search, ScrollText, BellRing, Fingerprint, Mail, ShieldAlert, UserPlus, Compass, Sparkles, Ticket, ShieldCheck, Volume2, SlidersHorizontal, MessageSquareText, Lock
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../../stores'
 import { wsService } from '../../services/websocket'
 import AuthSnowBackdrop from '../AuthSnowBackdrop'
 import { useI18n } from '../../i18n'
+import { getBlockedFeatureSet, getRouteFeatureKey } from '../../constants/guildFeatureAccess'
 
 const SIDEBAR_COLLAPSED_WIDTH = 64
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -76,6 +77,7 @@ const SidebarContent = memo(function SidebarContent({
   collapsed,
   selectedGuild,
   navItems,
+  blockedFeatureSet,
   isActive,
   selectedGuildId,
   canAccessAdminPanel,
@@ -95,9 +97,10 @@ const SidebarContent = memo(function SidebarContent({
   const brandAvatarSrc = bot?.avatarUrl || '/discordforger-icon.png'
   const brandAvatarAlt = bot?.username || 'DiscordForger'
 
-  const renderSidebarLink = ({ icon: Icon, label, path, needsGuild }) => {
+  const renderSidebarLink = ({ icon: Icon, label, path, needsGuild, featureKey }) => {
     const active = isActive(path)
-    const disabled = needsGuild && !selectedGuildId
+    const featureBlocked = Boolean(featureKey && blockedFeatureSet?.has(featureKey))
+    const disabled = (needsGuild && !selectedGuildId) || featureBlocked
 
     return (
       <motion.div
@@ -110,8 +113,8 @@ const SidebarContent = memo(function SidebarContent({
           to={path}
           onClick={(event) => handleNavClick(event, disabled)}
           aria-disabled={disabled}
-          className={`sidebar-nav-link ${active ? 'sidebar-nav-link-active' : ''} ${disabled ? 'sidebar-nav-link-disabled' : ''} ${collapsed ? 'justify-center' : ''}`}
-          title={collapsed ? label : undefined}
+          className={`sidebar-nav-link ${active ? 'sidebar-nav-link-active' : ''} ${disabled ? 'sidebar-nav-link-disabled' : ''} ${featureBlocked ? 'opacity-70 saturate-50' : ''} ${collapsed ? 'justify-center' : ''}`}
+          title={collapsed ? (featureBlocked ? `${label} verrouille` : label) : undefined}
         >
           <span className="sidebar-nav-link-glow" />
           <span className={`sidebar-nav-icon ${active ? 'sidebar-nav-icon-active' : ''}`}>
@@ -120,12 +123,18 @@ const SidebarContent = memo(function SidebarContent({
           {!collapsed && (
             <>
               <span className="sidebar-nav-label">{label}</span>
-              <motion.span
-                initial={false}
-                animate={active ? { opacity: 1, scale: 1, x: 0 } : { opacity: 0, scale: 0.7, x: -6 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="sidebar-nav-dot"
-              />
+              {featureBlocked ? (
+                <span className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/35">
+                  <Lock className="h-3.5 w-3.5" />
+                </span>
+              ) : (
+                <motion.span
+                  initial={false}
+                  animate={active ? { opacity: 1, scale: 1, x: 0 } : { opacity: 0, scale: 0.7, x: -6 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="sidebar-nav-dot"
+                />
+              )}
             </>
           )}
         </Link>
@@ -393,6 +402,11 @@ export default function Layout() {
   const shouldRenderSidebar = hasSelectedGuild || isEmailFastRoute || isOsintRoute || isBotCustomizationRoute
 
   const selectedGuild = guilds.find((g) => g.id === selectedGuildId)
+  const blockedFeaturesKey = Array.isArray(selectedGuild?.blocked_features) ? selectedGuild.blocked_features.join('|') : ''
+  const blockedFeatureSet = useMemo(
+    () => getBlockedFeatureSet(selectedGuild),
+    [selectedGuild?.id, blockedFeaturesKey]
+  )
   const navItems = [
     { icon: LayoutDashboard, label: t('layout.nav.dashboard'), path: '/dashboard' },
     { icon: Server, label: t('layout.nav.servers'), path: '/dashboard/servers' },
@@ -418,6 +432,34 @@ export default function Layout() {
     { icon: BarChart3, label: t('layout.nav.analytics'), path: '/dashboard/analytics', needsGuild: true },
     { icon: Bot, label: t('layout.nav.aiAssistant'), path: '/dashboard/ai' },
   ]
+  const navItemsWithFeatures = useMemo(() => {
+    const featureKeyByPath = {
+      '/dashboard/team': 'team',
+      '/dashboard/protection': 'protection',
+      '/dashboard/onboarding': 'onboarding',
+      '/dashboard/search': 'search',
+      '/dashboard/scan': 'scan',
+      '/dashboard/logs': 'logs',
+      '/dashboard/incidents': 'incidents',
+      '/dashboard/messages': 'messages',
+      '/dashboard/dm-center': 'dm_center',
+      '/dashboard/notifications': 'notifications',
+      '/dashboard/blocked': 'blocked',
+      '/dashboard/commands': 'commands',
+      '/dashboard/commands-ai': 'commands_ai',
+      '/dashboard/tickets': 'tickets',
+      '/dashboard/captcha': 'captcha',
+      '/dashboard/voice-rooms': 'voice_rooms',
+      '/dashboard/bot-messages': 'bot_messages',
+      '/dashboard/analytics': 'analytics',
+      '/dashboard/ai': 'ai',
+    }
+
+    return navItems.map((item) => ({
+      ...item,
+      featureKey: featureKeyByPath[item.path] || item.featureKey || null,
+    }))
+  }, [navItems])
   useEffect(() => {
     fetchStatus()
     const refreshInterval = setInterval(() => fetchStatus(), 15000)
@@ -528,6 +570,14 @@ export default function Layout() {
       navigate('/dashboard/servers', { replace: true })
     }
   }, [mustStayOnServers, navigate])
+
+  useEffect(() => {
+    if (!selectedGuildId) return
+    const routeFeatureKey = getRouteFeatureKey(location.pathname)
+    if (!routeFeatureKey || !blockedFeatureSet.has(routeFeatureKey)) return
+    setMobileOpen(false)
+    navigate('/dashboard', { replace: true })
+  }, [selectedGuildId, location.pathname, blockedFeatureSet, navigate])
 
   const handleLogout = () => {
     setStatus({
@@ -654,7 +704,8 @@ export default function Layout() {
             <SidebarContent
               collapsed={collapsed}
               selectedGuild={selectedGuild}
-              navItems={navItems}
+              navItems={navItemsWithFeatures}
+              blockedFeatureSet={blockedFeatureSet}
               isActive={isActive}
               selectedGuildId={selectedGuildId}
               canAccessAdminPanel={canAccessAdminPanel}
@@ -709,7 +760,8 @@ export default function Layout() {
                   <SidebarContent
                     collapsed={collapsed}
                     selectedGuild={selectedGuild}
-                    navItems={navItems}
+                    navItems={navItemsWithFeatures}
+                    blockedFeatureSet={blockedFeatureSet}
                     isActive={isActive}
                     selectedGuildId={selectedGuildId}
                     canAccessAdminPanel={canAccessAdminPanel}

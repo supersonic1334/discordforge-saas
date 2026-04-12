@@ -216,6 +216,7 @@ const SCHEMA = [
     guild_id        TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
     user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     access_role     TEXT NOT NULL DEFAULT 'admin' CHECK(access_role IN ('admin','moderator','viewer')),
+    blocked_features TEXT NOT NULL DEFAULT '[]',
     invited_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     is_suspended    INTEGER NOT NULL DEFAULT 0,
     suspended_until TEXT,

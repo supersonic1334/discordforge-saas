@@ -109,11 +109,17 @@ router.patch('/profile', requireAuth, requireBotToken, requireBotPrimaryOwner, v
     let currentUser = null;
     let currentApplication = null;
     let savedPresence = getBotProfileSettings(req.user.id);
+    const userPayload = {};
 
     if (typeof updates.username === 'string' && updates.username.trim()) {
-      currentUser = await discordService.modifyCurrentUser(token, {
-        username: updates.username.trim(),
-      });
+      userPayload.username = updates.username.trim();
+    }
+    if (typeof updates.avatar === 'string' && updates.avatar.trim()) {
+      userPayload.avatar = updates.avatar.trim();
+    }
+
+    if (Object.keys(userPayload).length > 0) {
+      currentUser = await discordService.modifyCurrentUser(token, userPayload);
 
       db.update('bot_tokens', {
         bot_username: currentUser.username,
@@ -214,6 +220,7 @@ router.get('/guilds', requireAuth, (req, res) => {
       is_owner: !!g.is_owner,
       is_shared: !g.is_owner,
       features: JSON.parse(g.features || '[]'),
+      blocked_features: guildAccessService.normalizeBlockedFeatures(g.blocked_features),
       iconUrl: g.guild_id && g.icon
         ? discordService.getGuildIconUrl(g.guild_id, g.icon)
         : null,
@@ -276,6 +283,7 @@ router.post('/guilds/sync', requireAuth, requireBotToken, async (req, res, next)
       guilds: guilds.map((g) => ({
         ...g,
         features: JSON.parse(g.features || '[]'),
+        blocked_features: [],
         iconUrl: g.guild_id && g.icon
           ? discordService.getGuildIconUrl(g.guild_id, g.icon)
           : null,
@@ -307,6 +315,7 @@ router.get('/guilds/:guildId', requireAuth, requireBotToken, requireGuildOwner, 
     access_role: req.guildAccess?.access_role || 'owner',
     owner_user_id: req.guildAccess?.owner_user_id || g.user_id,
     owner_username: req.guildAccess?.owner_username || null,
+    blocked_features: req.guildAccess?.blocked_features || [],
     features: JSON.parse(g.features || '[]'),
     iconUrl: g.guild_id && g.icon
       ? discordService.getGuildIconUrl(g.guild_id, g.icon)
