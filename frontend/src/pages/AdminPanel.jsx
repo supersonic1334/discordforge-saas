@@ -824,7 +824,7 @@ export default function AdminPanel() {
               : 'bg-white/5 text-white/40 border border-white/10'
 
             return (
-              <div key={user.id} className="depth-panel relative z-0 overflow-visible p-4 space-y-3">
+              <div key={user.id} className="depth-panel relative z-0 overflow-hidden rounded-[28px] p-4 space-y-3">
                 <div className="flex items-start gap-4 flex-wrap">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 flex items-center justify-center font-display font-700 shrink-0">
                     {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full rounded-full object-cover" alt="" /> : user.username[0]}
