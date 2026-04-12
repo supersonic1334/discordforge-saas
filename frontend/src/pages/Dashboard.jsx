@@ -138,6 +138,7 @@ export default function Dashboard() {
   const [actionLoading, setActionLoading] = useState(null)
   const [timeTick, setTimeTick] = useState(() => Date.now())
   const navigate = useNavigate()
+  const canAccessOsintTools = ['founder', 'osint'].includes(user?.role)
 
   const selectedGuild = guilds.find((guild) => guild.id === selectedGuildId) || null
 
@@ -259,13 +260,13 @@ export default function Dashboard() {
       path: '/dashboard/logs',
       tone: 'green',
     },
-    {
+    ...(canAccessOsintTools ? [{
       icon: Compass,
       title: 'OSINT',
       desc: 'Lance un tracker de pseudos et une geolocalisation d image sans quitter le cockpit.',
       path: '/dashboard/osint',
       tone: 'green',
-    },
+    }] : []),
     {
       icon: BellRing,
       title: 'Messages',
@@ -292,7 +293,7 @@ export default function Dashboard() {
   const cockpitLinks = [
     { label: 'Protection', path: '/dashboard/protection' },
     { label: 'Recherche', path: '/dashboard/search' },
-    { label: 'OSINT', path: '/dashboard/osint' },
+    ...(canAccessOsintTools ? [{ label: 'OSINT', path: '/dashboard/osint' }] : []),
     { label: 'Logs', path: '/dashboard/logs' },
     { label: 'Messages', path: '/dashboard/messages' },
   ]

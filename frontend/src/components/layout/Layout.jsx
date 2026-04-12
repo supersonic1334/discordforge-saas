@@ -415,7 +415,7 @@ export default function Layout() {
     { icon: UserPlus, label: t('layout.nav.onboarding', 'Accueil & rôles'), path: '/dashboard/onboarding', needsGuild: true },
     { icon: Search, label: t('layout.nav.search', 'Search'), path: '/dashboard/search', needsGuild: true },
     ...(canAccessOsintTools ? [{ icon: Fingerprint, label: t('layout.nav.scan', 'Scan'), path: '/dashboard/scan', needsGuild: true }] : []),
-    { icon: Compass, label: t('layout.nav.osint', 'OSINT'), path: '/dashboard/osint' },
+    ...(canAccessOsintTools ? [{ icon: Compass, label: t('layout.nav.osint', 'OSINT'), path: '/dashboard/osint' }] : []),
     { icon: ScrollText, label: t('layout.nav.logs', 'Logs'), path: '/dashboard/logs', needsGuild: true },
     { icon: ShieldAlert, label: t('layout.nav.incidents', 'Incidents'), path: '/dashboard/incidents', needsGuild: true },
     { icon: Send, label: t('layout.nav.messages', 'Messages'), path: '/dashboard/messages', needsGuild: true },
