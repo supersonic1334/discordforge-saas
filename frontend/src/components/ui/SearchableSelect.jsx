@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, Search, X } from 'lucide-react'
 
@@ -25,7 +26,10 @@ export default function SearchableSelect({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const rootRef = useRef(null)
+  const buttonRef = useRef(null)
+  const panelRef = useRef(null)
   const searchInputRef = useRef(null)
+  const [panelStyle, setPanelStyle] = useState(null)
 
   const selectedOption = useMemo(
     () => options.find((option) => String(getOptionKey(option)) === String(value)) || null,
@@ -48,6 +52,7 @@ export default function SearchableSelect({
 
     const handlePointerDown = (event) => {
       if (rootRef.current?.contains(event.target)) return
+      if (panelRef.current?.contains(event.target)) return
       setOpen(false)
     }
 
@@ -69,6 +74,7 @@ export default function SearchableSelect({
   useEffect(() => {
     if (!open) {
       setQuery('')
+      setPanelStyle(null)
       return
     }
 
@@ -79,9 +85,48 @@ export default function SearchableSelect({
     return () => window.clearTimeout(timerId)
   }, [open])
 
+  useEffect(() => {
+    if (!open) return undefined
+
+    const updatePosition = () => {
+      const anchor = buttonRef.current || rootRef.current
+      if (!anchor) return
+
+      const rect = anchor.getBoundingClientRect()
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      const desiredWidth = Math.max(rect.width, compact ? 220 : 260)
+      const maxWidth = Math.min(desiredWidth, viewportWidth - 16)
+      const estimatedHeight = Math.min(compact ? 320 : 380, viewportHeight - 24)
+      const canOpenDown = rect.bottom + 10 + estimatedHeight <= viewportHeight - 8
+      const canOpenUp = rect.top - 10 - estimatedHeight >= 8
+      const top = canOpenDown || !canOpenUp
+        ? Math.min(rect.bottom + 10, viewportHeight - estimatedHeight - 8)
+        : Math.max(8, rect.top - estimatedHeight - 10)
+      const left = Math.min(Math.max(8, rect.left), viewportWidth - maxWidth - 8)
+
+      setPanelStyle({
+        position: 'fixed',
+        top,
+        left,
+        width: maxWidth,
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [compact, open])
+
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => {
           if (disabled) return
@@ -113,13 +158,15 @@ export default function SearchableSelect({
       </button>
 
       <AnimatePresence>
-        {open && !disabled && (
+        {open && !disabled && panelStyle && createPortal(
           <motion.div
+            ref={panelRef}
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.985 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
-            className={`absolute left-0 right-0 top-[calc(100%+10px)] z-[80] overflow-hidden border border-white/[0.08] bg-[linear-gradient(180deg,rgba(8,12,24,0.98),rgba(5,9,19,0.99))] p-2 shadow-[0_28px_80px_rgba(0,0,0,0.46),0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-2xl ${compact ? 'rounded-2xl' : 'rounded-[24px]'} ${panelClassName}`}
+            style={panelStyle}
+            className={`z-[240] overflow-hidden border border-white/[0.08] bg-[linear-gradient(180deg,rgba(8,12,24,0.98),rgba(5,9,19,0.99))] p-2 shadow-[0_28px_80px_rgba(0,0,0,0.46),0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-2xl ${compact ? 'rounded-2xl' : 'rounded-[24px]'} ${panelClassName}`}
           >
             <div className="mb-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
               <div className="flex items-center gap-2">
@@ -181,7 +228,8 @@ export default function SearchableSelect({
                 })
               )}
             </div>
-          </motion.div>
+          </motion.div>,
+          document.body
         )}
       </AnimatePresence>
     </div>
