@@ -1,11 +1,13 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Compass,
+  Loader2,
   PlusCircle,
   RefreshCw,
   Rocket,
@@ -13,10 +15,13 @@ import {
   Search,
   Server,
   Shield,
+  Trash2,
   Unplug,
   Users,
+  X,
 } from 'lucide-react'
 import { useAuthStore, useGuildStore, useBotStore } from '../stores'
+import { botAPI } from '../services/api'
 import { wsService } from '../services/websocket'
 import { useI18n } from '../i18n'
 
@@ -35,7 +40,7 @@ function ServerSurface({ children, className = '', delay = 0, glow = 'cyan' }) {
       whileHover={{ y: -4, scale: 1.004 }}
       className={`glass-card relative overflow-hidden border border-white/[0.08] shadow-[0_18px_70px_rgba(4,8,20,0.24)] ${className}`}
     >
-      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${glowClasses[glow] || glowClasses.cyan}`} />
+      <div className={`pointer-events-none absolute inset-0 rounded-[inherit] bg-gradient-to-br ${glowClasses[glow] || glowClasses.cyan}`} />
       <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
       <div className="relative">{children}</div>
     </motion.div>
@@ -82,9 +87,12 @@ function MetricCard({ icon: Icon, label, value, meta, tone = 'cyan', delay = 0 }
 export default function ServersPage() {
   const { t, locale } = useI18n()
   const { user, hasOwnBotToken, sharedGuildCount } = useAuthStore()
-  const { guilds, selectedGuildId, selectGuild, clearSelectedGuild, fetchGuilds, syncGuilds, isLoading } = useGuildStore()
+  const { guilds, selectedGuildId, selectGuild, clearSelectedGuild, fetchGuilds, syncGuilds, removeGuild, isLoading } = useGuildStore()
   const { status, bot, fetchStatus } = useBotStore()
   const navigate = useNavigate()
+  const [pendingGuildRemoval, setPendingGuildRemoval] = useState(null)
+  const [isLeavingGuild, setIsLeavingGuild] = useState(false)
+  const [leaveGuildError, setLeaveGuildError] = useState('')
 
   const selectedGuild = guilds.find((guild) => guild.id === selectedGuildId) || null
   const inviteUrl = bot?.inviteUrl || null
@@ -125,11 +133,43 @@ export default function ServersPage() {
     navigate(route)
   }
 
+  const openRemoveGuildDialog = (guild) => {
+    setLeaveGuildError('')
+    setPendingGuildRemoval(guild)
+  }
+
+  const closeRemoveGuildDialog = () => {
+    if (isLeavingGuild) return
+    setLeaveGuildError('')
+    setPendingGuildRemoval(null)
+  }
+
+  const confirmRemoveGuild = async () => {
+    if (!pendingGuildRemoval || isLeavingGuild) return
+
+    setIsLeavingGuild(true)
+    setLeaveGuildError('')
+
+    try {
+      await botAPI.leaveGuild(pendingGuildRemoval.id)
+      removeGuild(pendingGuildRemoval.id)
+      setPendingGuildRemoval(null)
+      await Promise.allSettled([
+        fetchGuilds({ force: true }),
+        fetchStatus(),
+      ])
+    } catch (error) {
+      setLeaveGuildError(error?.response?.data?.error || 'Impossible de quitter ce serveur pour le moment.')
+    } finally {
+      setIsLeavingGuild(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-5 sm:px-5 sm:py-6">
       <ServerSurface glow="cyan" className="p-6 sm:p-7">
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,12,18,0.98),rgba(10,14,22,0.96)_48%,rgba(17,13,28,0.92))]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.045),transparent_18%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.1),transparent_34%)]" />
+        <div className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(135deg,rgba(8,12,18,0.98),rgba(10,14,22,0.96)_48%,rgba(17,13,28,0.92))]" />
+        <div className="absolute inset-0 rounded-[inherit] bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.045),transparent_18%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.1),transparent_34%)]" />
         <div className="relative">
           <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(9,14,20,0.9),rgba(7,10,16,0.72))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_22px_60px_rgba(2,6,14,0.28)] sm:p-6">
             <div className="pointer-events-none absolute -left-16 top-[-22%] h-56 w-56 rounded-full bg-neon-cyan/10 blur-3xl opacity-75" />
@@ -406,10 +446,95 @@ export default function ServersPage() {
                       Logs
                     </button>
                   </div>
+
+                  {!guild.is_shared && (
+                    <button
+                      type="button"
+                      onClick={() => openRemoveGuildDialog(guild)}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/20 bg-red-400/10 px-3 py-3 text-sm font-mono text-red-300 transition-all hover:-translate-y-0.5 hover:bg-red-400/16"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Supprimer du bot
+                    </button>
+                  )}
                 </div>
               </motion.article>
             ))}
           </div>
+        </div>
+      )}
+
+      {pendingGuildRemoval && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/72 px-4 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="danger-confirm-shell relative w-full max-w-xl overflow-hidden rounded-[30px] border border-red-400/18 bg-[linear-gradient(180deg,rgba(24,12,16,0.98),rgba(10,10,16,0.98))] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,91,91,0.14),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.1),transparent_38%)]" />
+            <button
+              type="button"
+              onClick={closeRemoveGuildDialog}
+              disabled={isLeavingGuild}
+              className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] text-white/60 transition-all hover:border-white/[0.14] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="relative space-y-5">
+              <div className="flex items-start gap-4">
+                <div className="danger-confirm-pulse flex h-14 w-14 items-center justify-center rounded-[20px] border border-red-400/24 bg-red-400/12 text-red-300">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-mono uppercase tracking-[0.26em] text-red-300/78">Confirmation</p>
+                  <h2 className="mt-2 font-display text-2xl font-800 text-white">Supprimer ce serveur du bot ?</h2>
+                  <p className="mt-2 text-sm leading-7 text-white/55">
+                    Le bot quittera <span className="font-700 text-white">{pendingGuildRemoval.name}</span> instantanement et le serveur disparaitra du panel.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.04] p-4">
+                <div className="flex items-center gap-3">
+                  <GuildAvatar guild={pendingGuildRemoval} className="h-12 w-12 rounded-[18px]" />
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-lg font-700 text-white">{pendingGuildRemoval.name}</p>
+                    <p className="mt-1 text-xs font-mono uppercase tracking-[0.22em] text-white/35">
+                      {numberFormatter.format(pendingGuildRemoval.member_count || 0)} membres
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {leaveGuildError && (
+                <div className="rounded-[22px] border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-6 text-red-200">
+                  {leaveGuildError}
+                </div>
+              )}
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeRemoveGuildDialog}
+                  disabled={isLeavingGuild}
+                  className="inline-flex items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm font-mono text-white/72 transition-all hover:border-white/[0.14] hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmRemoveGuild}
+                  disabled={isLeavingGuild}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-red-400/20 bg-red-400/12 px-5 py-3 text-sm font-mono text-red-200 transition-all hover:-translate-y-0.5 hover:bg-red-400/18 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isLeavingGuild ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {isLeavingGuild ? 'Suppression...' : 'Quitter et supprimer'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>
