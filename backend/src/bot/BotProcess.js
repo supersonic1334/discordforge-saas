@@ -97,6 +97,8 @@ const BotStatus = {
 const TICKET_GENERATOR_PREFIX = 'ticketgen';
 const TICKET_REASON_INPUT_ID = 'reason';
 const LEGACY_TICKET_DUPLICATE_FOOTER = 'Une seule demande active par categorie si la protection anti-doublon est active.';
+const LEGACY_TICKET_PANEL_DESCRIPTION = 'Choisis le bon motif dans le menu ci-dessous pour ouvrir un salon privé avec le staff adapté.';
+const DEFAULT_TICKET_PANEL_DESCRIPTION = 'Crée ton ticket depuis le menu ci-dessous.';
 const TICKET_DELETE_DELAY_MS = 2000;
 const MAX_TICKET_TRANSCRIPT_BYTES = 7_500_000;
 const MAX_TICKET_TRANSCRIPT_MESSAGES = 5000;
@@ -1612,6 +1614,14 @@ class BotProcess extends EventEmitter {
     return normalized === LEGACY_TICKET_DUPLICATE_FOOTER ? '' : normalized;
   }
 
+  _sanitizeTicketPanelDescription(value) {
+    const normalized = String(value || '').trim();
+    if (!normalized || normalized === LEGACY_TICKET_PANEL_DESCRIPTION) {
+      return DEFAULT_TICKET_PANEL_DESCRIPTION;
+    }
+    return normalized;
+  }
+
   async _resolveTextChannel(source, actionConfig = {}, optionName = 'channel') {
     const guild = source?.guild;
     if (!guild) return null;
@@ -2068,13 +2078,12 @@ class BotProcess extends EventEmitter {
     const assets = this._buildTicketGeneratorAssets(generator, `ticket-panel-${generator?.id || 'default'}`);
     const footerText = this._sanitizeTicketPanelFooter(generator?.panel_footer);
     const guildIconUrl = guild?.iconURL?.({ size: 128 }) || null;
-    const effectiveFooter = footerText || (generator?.prevent_duplicates ? LEGACY_TICKET_DUPLICATE_FOOTER : '');
     const mainEmbed = {
       title: String(generator.panel_title || 'Support & tickets').slice(0, 256),
-      description: String(generator.panel_description || 'Choisis le bon motif dans le menu ci-dessous pour ouvrir un salon privé avec le staff adapté.').slice(0, 4000),
+      description: this._sanitizeTicketPanelDescription(generator?.panel_description).slice(0, 4000),
       color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
-      footer: effectiveFooter
-        ? { text: effectiveFooter.slice(0, 2048) }
+      footer: footerText
+        ? { text: footerText.slice(0, 2048) }
         : undefined,
       timestamp: new Date().toISOString(),
     };

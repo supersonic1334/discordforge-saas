@@ -14,7 +14,8 @@ const LOCAL_DRAFT_PREFIX = 'ticket-generator-draft:'
 const MAX_TICKET_ASSET_LENGTH = 320000
 const MAX_TICKET_REQUEST_LENGTH = 850000
 const LEGACY_DUPLICATE_FOOTER = 'Une seule demande active par catégorie si la protection anti-doublon est activée.'
-const DEFAULT_PANEL_DESCRIPTION = 'Choisis le bon motif dans le menu ci-dessous pour ouvrir un salon privé avec le staff adapté.'
+const LEGACY_PANEL_DESCRIPTION = 'Choisis le bon motif dans le menu ci-dessous pour ouvrir un salon privé avec le staff adapté.'
+const DEFAULT_PANEL_DESCRIPTION = 'Crée ton ticket depuis le menu ci-dessous.'
 const DEFAULT_MENU_PLACEHOLDER = 'Sélectionne la demande à ouvrir'
 const DEFAULT_PARTNERSHIP_TEMPLATE = 'partenaire-{number}'
 
@@ -167,6 +168,11 @@ function normalizeLegacyPanelFooter(value) {
   return normalized === LEGACY_DUPLICATE_FOOTER ? '' : normalized
 }
 
+function normalizeLegacyPanelDescription(value) {
+  const normalized = String(value || '').trim()
+  return !normalized || normalized === LEGACY_PANEL_DESCRIPTION ? DEFAULT_PANEL_DESCRIPTION : normalized
+}
+
 function normalizeLegacyTicketTemplate(optionKey, value, fallback = '') {
   const normalized = String(value || fallback || '').trim()
   if (String(optionKey || '').trim() === 'partnership' && normalized === 'partner-{number}') {
@@ -293,7 +299,7 @@ function buildTicketSavePayload(value = {}) {
     panel_message_id: String(source.panel_message_id || '').trim(),
     transcript_channel_id: String(source.transcript_channel_id || '').trim(),
     panel_title: String(source.panel_title || DEFAULT_CONFIG.panel_title).trim(),
-    panel_description: String(source.panel_description || '').trim(),
+    panel_description: normalizeLegacyPanelDescription(source.panel_description),
     panel_footer: normalizeLegacyPanelFooter(String(source.panel_footer || DEFAULT_CONFIG.panel_footer).trim()),
     menu_placeholder: String(source.menu_placeholder || DEFAULT_CONFIG.menu_placeholder).trim(),
     panel_color: String(source.panel_color || DEFAULT_CONFIG.panel_color).trim(),
