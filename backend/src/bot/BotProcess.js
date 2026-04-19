@@ -2066,44 +2066,23 @@ class BotProcess extends EventEmitter {
 
   _buildTicketGeneratorPanelPayload(generator, guild = null) {
     const assets = this._buildTicketGeneratorAssets(generator, `ticket-panel-${generator?.id || 'default'}`);
-    const enabledOptions = (generator?.options || []).filter((option) => option.enabled).slice(0, 10);
     const footerText = this._sanitizeTicketPanelFooter(generator?.panel_footer);
     const guildIconUrl = guild?.iconURL?.({ size: 128 }) || null;
+    const effectiveFooter = footerText || (generator?.prevent_duplicates ? LEGACY_TICKET_DUPLICATE_FOOTER : '');
     const mainEmbed = {
-      author: {
-        name: guild?.name ? `${guild.name} • Centre support` : 'Centre support',
-        icon_url: guildIconUrl || undefined,
-      },
-      title: String(generator.panel_title || 'Ticket Generator').slice(0, 256),
-      description: String(generator.panel_description || 'Choisis une catégorie de ticket puis remplis le formulaire.').slice(0, 4000),
+      title: String(generator.panel_title || 'Support & tickets').slice(0, 256),
+      description: String(generator.panel_description || 'Choisis le bon motif dans le menu ci-dessous pour ouvrir un salon privé avec le staff adapté.').slice(0, 4000),
       color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
-      fields: [
-        {
-          name: 'Ouverture',
-          value: "Menu déroulant interactif avec création automatique d'un salon privé.",
-          inline: true,
-        },
-        {
-          name: 'Prise en charge',
-          value: 'Le staff configuré est notifié selon la catégorie choisie.',
-          inline: true,
-        },
-      ],
-      timestamp: new Date().toISOString(),
-    };
-    const detailEmbed = {
-      title: 'Demandes disponibles',
-      description: enabledOptions.length > 0
-        ? enabledOptions.map((option) => `${option.emoji ? `${option.emoji} ` : ''}**${String(option.label || 'Ticket').slice(0, 80)}**\n${String(option.description || 'Ouvre un ticket privé avec le staff.').slice(0, 140)}`).join('\n\n').slice(0, 4000)
-        : 'Aucun type de ticket actif.',
-      color: this._hexColorToInt(generator.panel_color, 0x7c3aed),
-      footer: footerText
-        ? { text: footerText.slice(0, 2048) }
+      footer: effectiveFooter
+        ? { text: effectiveFooter.slice(0, 2048) }
         : undefined,
+      timestamp: new Date().toISOString(),
     };
 
     if (assets.thumbnail?.url) {
       mainEmbed.thumbnail = { url: assets.thumbnail.url };
+    } else if (guildIconUrl) {
+      mainEmbed.thumbnail = { url: guildIconUrl };
     }
 
     if (assets.image?.url) {
@@ -2111,7 +2090,7 @@ class BotProcess extends EventEmitter {
     }
 
     return {
-      embeds: [mainEmbed, detailEmbed],
+      embeds: [mainEmbed],
       components: this._buildTicketGeneratorComponents(generator),
       files: assets.files,
     };
